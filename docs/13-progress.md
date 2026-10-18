@@ -128,6 +128,14 @@ merges still require explicit approval. No application code or tests changed in 
 workflow update. `git diff --check` passed; the full suite is repeated by hosted CI
 on the pushed documentation update. No live trading or M2 work was performed.
 
+## Completion handoff preference — 2026-10-18
+
+Recorded the user's standing instruction in AGENTS.md and DEC-028: finish each
+completed task with a concrete next step and a request for approval, or explicit
+manual instructions where user action is needed. PR #1 is still OPEN and unmerged;
+both CI runs on `5f0f029` passed. M2 has not been authorized. This update changes
+documentation only; `git diff --check` passed and CI repeats on push.
+
 ## Update protocol
 
 After each implementation milestone, append date, task/PR or commit SHA, files changed,

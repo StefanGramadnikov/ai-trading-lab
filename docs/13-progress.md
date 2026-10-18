@@ -4,7 +4,7 @@
 
 ## Current state
 
-- **Milestone:** M1 — foundation implemented and locally verified; hosted CI and review pending.
+- **Milestone:** M1 — foundation implemented; local and hosted CI checks pass; review/merge pending.
 - **Authorization:** User requested M1, required a plan first, then approved the presented
   plan with “yes, continue”. On 2026-10-18 the user additionally approved committing and pushing the feature branch
   to run hosted CI (“yes you can”). Merge, M2, paid APIs and live trading remain unauthorized.
@@ -13,7 +13,7 @@
   `gh repo view StefanGramadnikov/ai-trading-lab --json nameWithOwner,isPrivate,defaultBranchRef`
   verified `isPrivate: true` and default branch `main`.
 - **Baseline:** `a58d674` — `docs: initialize AI Trading Lab specifications`.
-- **Branch:** `feature/m1-project-foundation`. Commit/push authorized on 2026-10-18; preparing the first M1 commit. No merge.
+- **Branch:** `feature/m1-project-foundation`. Implementation commit `382a277` pushed on 2026-10-18; hosted CI passed. No merge.
 - **Live trading:** NOT AUTHORIZED. No trading/provider accounts, keys or orders used.
 
 ## M1 implementation — 2026-10-17
@@ -62,7 +62,7 @@ PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-tr
 | HTTP container smoke and DB stop/restart | PASS; live/ready 200, DB stopped → live 200 / ready 503, DB restarted → ready 200 |
 | `docker compose -p atl-m1-validation run --rm --no-deps -e ATL_EXECUTION_MODE=LIVE api /app/.venv/bin/python -c 'from ai_trading_lab.app import create_app; create_app()'` | Expected nonzero exit with validation error; PASS negative check |
 | `git diff --check` | PASS |
-| Hosted GitHub Actions | NOT RUN; branch has not been pushed |
+| Hosted GitHub Actions | PASS on `382a277`; run [39110146175](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39110146175), 2026-10-18 |
 | Trading e2e / cloud deployment / financial performance | NOT RUN; outside M1 scope |
 
 Tests cover configuration defaults, invalid mode/URL/timeouts, `.env` precedence,
@@ -85,16 +85,16 @@ migration tests against the same database.
 
 ## Remaining gates and next safe step
 
-1. Commit and push the feature branch under the user’s 2026-10-18 authorization.
-2. Run hosted GitHub Actions on the pushed branch and fix any observed failures.
-3. Review before merging; merge requires explicit user approval. M1 is not marked complete
-   until its required hosted CI gate passes.
+1. Review the feature branch: implementation `382a277` and hosted CI both pass.
+2. Verify CI again on the final documentation commit before any merge.
+3. Merge requires explicit user approval. M1 implementation/checks are complete;
+   review/merge remains pending.
 4. M2 and later require separate authorization. No market integrations, strategy/agent
    implementation, cloud purchases or funded trading are included in this change.
 
-Container image tags are version-pinned, not digest-pinned. Hosted Linux/amd64 CI,
-long-running operation, backup/restore and cloud readiness
-are not established by these local Mac checks.
+Container image tags are version-pinned, not digest-pinned. Hosted Linux/amd64 CI
+is now verified. Long-running operation, backup/restore and cloud readiness remain
+outside these foundation checks.
 
 ## Milestone history
 
@@ -104,9 +104,19 @@ are not established by these local Mac checks.
 | Architecture approval | COMPLETE | User: “I approve this architecture” |
 | M0 package draft | CREATED | Initial documentation package |
 | M0 committed | VERIFIED 2026-10-17 | Local commit `a58d674`; corrects initial handoff's unverified repo/commit state |
-| M1 Foundation | LOCAL CHECKS PASS; CI/REVIEW PENDING | Commands and results above; feature branch uncommitted |
+| M1 Foundation | IMPLEMENTED; LOCAL/CI PASS; REVIEW/MERGE PENDING | `382a277`, CI run `39110146175`; final documentation commit checked separately |
 | M2–M9 | NOT STARTED | No results |
 | M10 live | BLOCKED | Separate authorization required |
+
+## Hosted CI evidence — 2026-10-18
+
+Under the user’s commit/push authorization, committed and pushed `382a277` on
+`feature/m1-project-foundation`. `gh run view 39110146175 --json status,conclusion,jobs`
+reported `completed` / `success`. The hosted job passed locked dependency sync,
+`make check`, Compose validation, image build/startup, Alembic upgrade and HTTP
+liveness/readiness probes, then cleaned up its containers. No CI fixes were needed.
+This docs-only follow-up records the result; its own CI is checked after push.
+No merge, live trading or M2 work was performed.
 
 ## Update protocol
 

@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M1 foundation implemented locally; hosted CI and review pending.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M1 foundation implemented; local and hosted CI pass; review/merge pending.
 
 ## Rules for milestone execution
 
@@ -51,5 +51,5 @@ Compose services; unit/integration tests; Ruff/mypy/pre-commit and GitHub Action
 exact quality gate and observed progress updates. No strategies, agents, paid
 services, execution adapters or cloud deployment. See ADR-0005 for tool selections.
 
-Acceptance remains pending until hosted CI passes and the work is reviewed. Do not
+Hosted CI passed on implementation commit `382a277` (2026-10-18); review/merge remains pending. Do not
 start M2 or merge without user authorization. See progress log for local evidence.

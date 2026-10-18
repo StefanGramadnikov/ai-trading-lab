@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M2 read-only market data in progress; see document 18.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M2 read-only market data shipped in PR #3; merge pending. M3 requires approval.
 
 ## Rules for milestone execution
 

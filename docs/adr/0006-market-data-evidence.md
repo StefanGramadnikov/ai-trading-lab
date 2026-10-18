@@ -1,6 +1,6 @@
 # ADR-0006 — Bounded read-only market data and replay evidence
 
-- **Status:** Implemented under the approved M2 plan; local checks/review passed; shipping pending
+- **Status:** Implemented under the approved M2 plan; local checks/review passed; shipped in PR #3, merge pending
 - **Date:** 2026-10-18
 - **Authorization:** DEC-031; no earlier architectural decision is superseded.
 

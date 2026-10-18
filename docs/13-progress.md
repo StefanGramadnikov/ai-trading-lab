@@ -4,20 +4,27 @@
 
 ## Current state
 
-- **Milestone:** M2 read-only market data implemented and locally verified;
-  shipping/hosted CI pending. M1 merged PR #1 (`f9d0689`); workflow merged PR #2
+- **Milestone:** M2 read-only market data implemented and shipped in PR #3;
+  merge and M3 approval pending. Implementation push CI passed; final PR checks
+  are reported on the exact head in GitHub. M1 merged PR #1 (`f9d0689`); workflow merged PR #2
   (`aba5f5d`) as confirmed after the user's merge notification.
 - **Authorization:** User: “I approve. I also merged it already, you can continue
   to the next phase.” DEC-031 authorizes M2 implementation. `/ship` is required
-  before staging/commit/push/PR; M3 and merge remain separate approval gates.
+  before staging/commit/push/PR; the user subsequently explicitly invoked the
+  ship skill for M2. M3 and merge remain separate approval gates.
 - **Repository:** private `StefanGramadnikov/ai-trading-lab`, existing origin
   `https://github.com/StefanGramadnikov/ai-trading-lab.git`; no reinitialization.
 - **Branch:** `feature/m2-market-data`, based on merged `origin/main` (`aba5f5d`).
-  M2 changes remain local and uncommitted; no PR exists for this branch yet.
+  M2 implementation commit `625b5b0` is pushed in
+  [PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3).
+  This documentation follow-up records observed shipping evidence.
 - **Safety:** PAPER_ONLY. No wallets, financial credentials, paid APIs, order paths,
   strategies, AI runtime or new infrastructure. Provider descriptions are untrusted.
 
 ## M2 implementation and evidence — 2026-10-18
+
+Development snapshot before `/ship`; later shipping results below supersede the
+earlier test count and pending-shipping status in this section.
 
 Scope follows [the implementation plan](18-m2-market-data.md) written before code:
 
@@ -189,7 +196,7 @@ it does not establish M2 hosted CI or authorize later milestones.
 | M0 committed | VERIFIED 2026-10-17 | Local commit `a58d674`; corrects initial handoff's unverified repo/commit state |
 | M1 Foundation | COMPLETE / MERGED | PR #1; merge `f9d0689`; branch and PR CI passed on `5f0f029` |
 | Development workflow | MERGED | PR #2, merge `aba5f5d`; explicit ship/review/repair lifecycle |
-| M2 Market data | LOCAL VERIFIED / SHIPPING IN PROGRESS | 240 tests, 96.00% coverage after ship repair; hosted CI pending |
+| M2 Market data | SHIPPED / MERGE PENDING | PR #3; 240 tests, 96.00% coverage; implementation push CI passed; check final-head PR checks |
 | M3–M9 | NOT STARTED | Separate approval required |
 | M10 live | BLOCKED | Separate authorization required |
 
@@ -341,3 +348,37 @@ Final repaired production image build/startup passed; migration and HTTP health
 checks passed. Local links and diff whitespace checks passed. Intended changes
 are manually inspected before staging/commit; no dedicated secret/dependency
 scanner is configured and no security-audit result is claimed.
+
+
+## M2 shipping evidence — 2026-10-18
+
+Committed/pushed `625b5b08928d29270881abd8aca02f7399e832c9` and opened
+[PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3) into main.
+The staged scope matched all 41 reviewed working files, `git diff --cached --check`
+passed, and manual inspection found no unintended capture files/credentials.
+A limited token/private-key pattern check found no candidates; this is not a
+configured dedicated scanner or security audit. No unrelated changes were included.
+
+Observed `gh run list --branch feature/m2-market-data --commit 625b5b08928d29270881abd8aca02f7399e832c9`:
+push [run 39164729587](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39164729587)
+completed successfully. It passed locked dependency sync, the full quality gate,
+Compose validation, Linux production build/startup, migration and HTTP health
+checks. PR [run 39164743129](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39164743129)
+also completed successfully with all steps passing. The documentation follow-up
+triggers new runs; final-head
+status is verified in PR #3 before handoff, rather than inferred from this earlier
+implementation run. No CI repair was required for the observed successful run.
+
+The M2 source limitations remain: Polymarket public network_error, Solana
+largest-account throttling, unknown event-time PARTIAL states. No live execution,
+credentials, subscriptions, performance claim or deployment was introduced.
+This shipping invocation does not merge or authorize M3.
+
+Next manual step: review and squash-merge PR #3 after its exact-head checks pass.
+After merge, obtain approval to prepare the M3 deterministic paper-execution plan.
+
+
+The documentation-only shipping follow-up repeated `make check`: PASS, 240 tests,
+96.00% coverage, Ruff/mypy PASS. No application/test/CI logic changed after review.
+GitHub reported nonblocking runner/action deprecation notices; no CI dependency
+upgrades were included in M2. Validation service shutdown preserves the named volume.

@@ -73,3 +73,12 @@ The explicit subsequent ship invocation found and repaired excessive JSON nestin
 depth and returns handled validation failures; prior observations remain available.
 Post-repair full gate: 240 tests, 96.00% coverage, Ruff/mypy PASS. See document 13
 for shipping review/CI evidence and the distinct earlier development results.
+
+
+## Shipping handoff
+
+The user explicitly invoked the ship skill. Implementation `625b5b0` is pushed in
+[PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3); independent
+shipping repair re-review PASS and implementation push CI PASS. Earlier statements
+about uncommitted/pending shipping describe the development snapshot. Final-head
+checks and merge status belong to that PR; no merge or M3 approval is implied.

@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 2 — read-only market data implemented locally; local checks/review passed; shipping pending.
+> **Status:** Milestone 2 — read-only market data shipped in PR #3; merge pending.
 > **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

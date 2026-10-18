@@ -86,7 +86,7 @@ migration tests against the same database.
 ## Remaining gates and next safe step
 
 1. Review the feature branch: implementation `382a277` and hosted CI both pass.
-2. Verify CI again on the final documentation commit before any merge.
+2. Hosted CI also passed on `51add0f`: [run 39110272436](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39110272436). Verify the latest PR head before merging.
 3. Merge requires explicit user approval. M1 implementation/checks are complete;
    review/merge remains pending.
 4. M2 and later require separate authorization. No market integrations, strategy/agent
@@ -117,6 +117,16 @@ reported `completed` / `success`. The hosted job passed locked dependency sync,
 liveness/readiness probes, then cleaned up its containers. No CI fixes were needed.
 This docs-only follow-up records the result; its own CI is checked after push.
 No merge, live trading or M2 work was performed.
+
+## Pull-request workflow — 2026-10-18
+
+User requested an M1 PR and a standing rule to open PRs for future authorized
+feature/fix/experiment branches. Opened [PR #1](https://github.com/StefanGramadnikov/ai-trading-lab/pull/1)
+from `feature/m1-project-foundation` into `main`; recorded the workflow in AGENTS.md
+and DEC-027. Pushes needed to create/update those PRs are part of that authorization;
+merges still require explicit approval. No application code or tests changed in this
+workflow update. `git diff --check` passed; the full suite is repeated by hosted CI
+on the pushed documentation update. No live trading or M2 work was performed.
 
 ## Update protocol
 

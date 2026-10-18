@@ -40,6 +40,7 @@ For every change:
 
 - The repo is **private**. Before Git commands, check whether a repo/remote already exists. The user has created a repo and specifically wants an explicit instruction if `git init` is still required.
 - Work on a `feature/*`, `fix/*` or `experiment/*` branch when appropriate. Avoid force-push, history rewrites, destructive cleanup, or modifying unrelated changes without asking.
+- For each authorized `feature/*`, `fix/*` or `experiment/*` branch, commit/push the reviewable work and open a pull request against the appropriate base branch as part of the workflow; reuse an existing open PR for that branch. The user approved this standing workflow on 2026-10-18. Keep the PR description and CI evidence current. This authorizes the push needed to open/update the PR, but never a merge.
 - Never commit a change that has failed required tests. Report exact checks in commit/PR descriptions.
 - Prefer a review before merging into `main`; CI must pass. Do not push or merge unless the user asks or the workflow is explicitly authorized.
 

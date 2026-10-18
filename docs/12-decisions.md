@@ -32,6 +32,7 @@
 | DEC-024 | Repository documentation as durable source of truth; `AGENTS.md` for Codex | User requested and approved documentation milestone |
 | DEC-025 | 2026-10-17: M1 plan approved by user: “yes, continue” | Python 3.12/uv, mypy, async SQLAlchemy/psycopg, Alembic; API + PostgreSQL only; see ADR-0005. No push/merge authorization. |
 | DEC-026 | 2026-10-18: user approved committing and pushing the M1 feature branch (“yes you can”) | Run hosted CI and fix observed failures; merge and M2 still require separate approval. |
+| DEC-027 | 2026-10-18: open pull requests whenever authorized feature/fix/experiment branches are created | User: “open a pull request and whenever we create such branches, open pull-requests”. Commit/push reviewable work and create/update its PR without another prompt; merging still requires explicit approval. |
 
 ## Architecture Decision Records
 

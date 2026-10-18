@@ -1,7 +1,7 @@
 # AI Trading Lab
 
-> **Status:** Milestone 1 — foundation complete and merged in PR #1; M2 awaits approval.
-> **Document version:** 1.1, 2026-10-17.
+> **Status:** Milestone 2 — read-only market data implemented locally; local checks/review passed; shipping pending.
+> **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
 AI Trading Lab is a private, experimental platform for collecting market data, researching trading strategies, and comparing automated decision-making architectures. It initially targets **Solana memecoins** and **prediction markets** (Polymarket and potentially Kalshi). It is **not** a proven profitable trading strategy.
@@ -31,7 +31,7 @@ AI Trading Lab is a private, experimental platform for collecting market data, r
 
 ## Core safety rules
 
-- **No live orders, no wallet private keys, no trading account credentials in M0 or M1.** Paper-trading is the only permitted execution mode until the user explicitly authorizes a separate live-trading milestone.
+- **No live orders, wallet private keys or trading account credentials.** Paper-trading is the only permitted execution mode until the user explicitly authorizes a separate live-trading milestone.
 - AI output is **untrusted proposal data**, not an order. Deterministic code owns position sizing, risk checks, reconciliation, accounting and order routing.
 - Missing market data, ambiguous market identity or expired prices **block new entries** dependent on that data. Do not hallucinate replacements.
 - No auto-deployment of AI-generated strategies or risk-limit modifications.
@@ -89,12 +89,51 @@ volume removal is required for normal development.
 
 ## Scope boundary
 
-M1 contains the API, configuration, PostgreSQL connectivity, migration baseline,
-tests and CI definition. There are no market integrations, strategies, AI agents,
-execution adapters, workers or dashboard yet. Only `PAPER_ONLY` is accepted.
+M1 provides the foundation. M2 adds bounded public read-only DexScreener, Solana,
+Polymarket and Kalshi adapters, versioned evidence storage and offline replay.
+Strategies, AI agents, execution adapters, workers and dashboards remain deferred.
+Only `PAPER_ONLY` is accepted.
 The repository is initialized with an `origin` remote; do not run `git init` again.
 No financial credentials are needed. Local database example passwords are not
 suitable for public deployment. Cloud hosting remains a later milestone.
+
+## Read-only market data (M2)
+
+Apply migrations first. Host CLI uses `ATL_DATABASE_URL` from the environment or
+`.env`. No provider keys, wallets or subscriptions are needed for these public
+read attempts; availability is not guaranteed. Collection is explicit and bounded:
+
+```bash
+uv run --locked atl-data collect --source dexscreener --mint So11111111111111111111111111111111111111112 --limit 1 --capture-file data/dex-sample.json
+uv run --locked atl-data collect --source solana --mint So11111111111111111111111111111111111111112 --limit 1
+uv run --locked atl-data collect --source kalshi --limit 2 --max-pages 1
+uv run --locked atl-data collect --source polymarket --limit 2 --max-pages 1
+uv run --locked atl-data replay data/dex-sample.json
+```
+
+Create the `data/` directory yourself before using that example capture path;
+local captures are ignored by Git. Capture outputs refuse overwrite and are limited
+to 8 MB; each source response is limited to 2 MB. Defaults allow 30 attempted
+requests, up to 3 attempts per request, a 5-second request deadline and 60-second
+collection budget. CLI sampling is capped at 10 observations/mints and 3 pages;
+Solana emits separate supply/largest-account observations per mint.
+
+Exit 0 means collection finished without recorded source failures, 1 means failures
+were persisted (possibly alongside usable evidence), and 2 means invalid input or
+persistence/file failure. Inspect `status`, `mode` and `failure_codes`; zero exit
+is not trading readiness. Unknown source time yields PARTIAL; time older than 60s
+is STALE, more than 5s ahead is INVALID. Native units and provenance remain explicit.
+
+Replay uses only the archive and PostgreSQL, never public networking. It labels
+new evidence REPLAY and retains original receipt times and capture references;
+repeating it adds a run but no duplicate capture/snapshot. Archives contain raw
+untrusted source text. They are research data, never agent instructions.
+
+The local public smoke persisted DexScreener/Kalshi samples and partial Solana
+supply (largest accounts rate-limited). Polymarket returned a transport
+`network_error`; public compatibility is unverified here. All four adapters have
+offline contract tests. See [M2 plan](docs/18-m2-market-data.md),
+[source evidence](docs/16-source-register.md) and [progress](docs/13-progress.md).
 
 ## Development workflow
 

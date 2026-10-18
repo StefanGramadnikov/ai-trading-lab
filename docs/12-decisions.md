@@ -36,6 +36,7 @@
 | DEC-028 | 2026-10-18: end completed tasks with the recommended next step and an approval request | User requested explicit next-step approval, or clear manual instructions when their action is required. Existing task steps remain authorized; merge/milestone gates remain in effect. |
 | DEC-029 | 2026-10-18: use an explicit `/ship` gate for staging, commits, push and PR actions | User answered “use the /ship gate”. Supersedes DEC-027's automatic push timing: PR creation/update remains required when shipping. Ordinary plan/implementation approval does not ship. Separate explicit instructions authorize only the Git/PR action requested. Merge/deployment remain separately gated. |
 | DEC-030 | 2026-10-18: independent review and bounded repair are part of the development lifecycle | User approved standard substantive-change review and requested code → tests → fixes → retest with project-relevant skills. First step adds a reviewer role, manual ship skill, Python quality checklist and workflow docs. Maximum three automatic repair rounds; no permanent FE/design team, unattended monitor, external skill installation or M2 implementation in this step. |
+| DEC-031 | 2026-10-18: M2 market-data implementation authorized | User merged PR #2 and said “you can continue to the next phase”; implement the previously presented M2 plan on feature/m2-market-data. Public read-only adapters, validated storage, bounded CLI/replay and tests only; no execution, paid services or external skill installation. Commit/push/PR still require /ship. |
 
 ## Architecture Decision Records
 
@@ -45,6 +46,7 @@
 - [ADR-0004: Testing and Git quality gates](adr/0004-test-and-git-gates.md)
 
 - [ADR-0005: M1 foundation tooling](adr/0005-foundation-tooling.md)
+- [ADR-0006: M2 read-only market data and replay evidence](adr/0006-market-data-evidence.md)
 
 ## Proposed choices requiring later confirmation
 

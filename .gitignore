@@ -24,3 +24,6 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+
+# Local market captures (fixtures must be sanitized and intentionally versioned)
+data/

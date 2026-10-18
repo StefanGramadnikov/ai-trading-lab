@@ -70,3 +70,19 @@ Dashboard: net and gross returns, unresolved exposure, provider costs, health, s
   compatibility, market data quality or trading readiness; `trading_ready` is false.
 - `.env.example` contains local placeholders. No provider or financial keys are required.
 - Source installation and operating commands are in README; hosted deployment remains gated.
+
+
+## M2 local data operations — 2026-10-18
+
+M2 reuses API + PostgreSQL; no scheduler or extra service is added. Apply
+`uv run --locked alembic upgrade head` to the intended development database before
+`uv run --locked atl-data collect ...` or `replay ...`. Migration `0002_market_data`
+adds the evidence tables; `0001_foundation` remains unchanged. Host CLI uses
+`ATL_DATABASE_URL`; container commands use the Compose internal URL.
+
+Capture archives are opt-in local files, bounded to 8 MB and never overwritten.
+The optional `data/` path is Git-ignored; no retention daemon is configured.
+ObservationStore enforces append-only/idempotent writes; database owner access is
+not an immutable security boundary. Backup/retention and restrictive deployment
+roles still belong to deployment hardening. Public-source outages and rate limits
+are persisted as ingestion failures; no paid/authenticated fallback exists.

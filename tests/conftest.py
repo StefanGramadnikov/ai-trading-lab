@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 import pytest
 
 
@@ -6,3 +9,21 @@ def isolate_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # Developer configuration must not influence fixture-backed tests.
     for name in ("ATL_EXECUTION_MODE", "ATL_DATABASE_URL", "ATL_DATABASE_TIMEOUT_SECONDS"):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    from sqlalchemy.engine import make_url
+
+    url = os.environ.get("ATL_TEST_DATABASE_URL")
+    if not url:
+        pytest.fail("ATL_TEST_DATABASE_URL is required; use an isolated PostgreSQL test database")
+    parsed = make_url(url)
+    if parsed.database != "ai_trading_lab_test" or parsed.drivername != "postgresql+psycopg":
+        pytest.fail(
+            "Test database must be PostgreSQL named ai_trading_lab_test; refusing migrations"
+        )
+    env = {**os.environ, "ATL_DATABASE_URL": url, "ATL_EXECUTION_MODE": "PAPER_ONLY"}
+    for arguments in [("upgrade", "head"), ("downgrade", "base"), ("upgrade", "head")]:
+        subprocess.run(["alembic", *arguments], env=env, check=True, capture_output=True)
+    return url

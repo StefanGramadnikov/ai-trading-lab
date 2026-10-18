@@ -4,7 +4,7 @@
 
 ## Current state
 
-- **Milestone:** M1 — foundation implemented; local and hosted CI checks pass; review/merge pending.
+- **Milestone:** M1 — foundation complete and merged in PR #1; M2 planning/implementation approval pending.
 - **Authorization:** User requested M1, required a plan first, then approved the presented
   plan with “yes, continue”. On 2026-10-18 the user additionally approved committing and pushing the feature branch
   to run hosted CI (“yes you can”). Merge, M2, paid APIs and live trading remain unauthorized.
@@ -13,7 +13,8 @@
   `gh repo view StefanGramadnikov/ai-trading-lab --json nameWithOwner,isPrivate,defaultBranchRef`
   verified `isPrivate: true` and default branch `main`.
 - **Baseline:** `a58d674` — `docs: initialize AI Trading Lab specifications`.
-- **Branch:** `feature/m1-project-foundation`. Implementation commit `382a277` pushed on 2026-10-18; hosted CI passed. No merge.
+- **Branch:** `feature/task-handoff-approval` (based on merged `origin/main`). M1 merged by the user in PR #1 on 2026-10-18, merge commit `f9d0689`.
+  Workflow preference follow-up is on `feature/task-handoff-approval`.
 - **Live trading:** NOT AUTHORIZED. No trading/provider accounts, keys or orders used.
 
 ## M1 implementation — 2026-10-17
@@ -85,12 +86,10 @@ migration tests against the same database.
 
 ## Remaining gates and next safe step
 
-1. Review the feature branch: implementation `382a277` and hosted CI both pass.
-2. Hosted CI also passed on `51add0f`: [run 39110272436](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39110272436). Verify the latest PR head before merging.
-3. Merge requires explicit user approval. M1 implementation/checks are complete;
-   review/merge remains pending.
-4. M2 and later require separate authorization. No market integrations, strategy/agent
-   implementation, cloud purchases or funded trading are included in this change.
+1. Review/merge the documentation-only handoff-preference PR after CI passes.
+2. User approval is required to start M2 planning/implementation. Proposed next step:
+   prepare a concrete read-only market-data plan for approval before changing application code.
+3. No manual credentials or purchases are needed to begin planning.
 
 Container image tags are version-pinned, not digest-pinned. Hosted Linux/amd64 CI
 is now verified. Long-running operation, backup/restore and cloud readiness remain
@@ -104,7 +103,7 @@ outside these foundation checks.
 | Architecture approval | COMPLETE | User: “I approve this architecture” |
 | M0 package draft | CREATED | Initial documentation package |
 | M0 committed | VERIFIED 2026-10-17 | Local commit `a58d674`; corrects initial handoff's unverified repo/commit state |
-| M1 Foundation | IMPLEMENTED; LOCAL/CI PASS; REVIEW/MERGE PENDING | `382a277`, CI run `39110146175`; final documentation commit checked separately |
+| M1 Foundation | COMPLETE / MERGED | PR #1; merge `f9d0689`; branch and PR CI passed on `5f0f029` |
 | M2–M9 | NOT STARTED | No results |
 | M10 live | BLOCKED | Separate authorization required |
 
@@ -132,8 +131,8 @@ on the pushed documentation update. No live trading or M2 work was performed.
 
 Recorded the user's standing instruction in AGENTS.md and DEC-028: finish each
 completed task with a concrete next step and a request for approval, or explicit
-manual instructions where user action is needed. PR #1 is still OPEN and unmerged;
-both CI runs on `5f0f029` passed. M2 has not been authorized. This update changes
+manual instructions where user action is needed. PR #1 was initially observed OPEN; the user merged it during this task
+(merge `f9d0689`, 2026-10-18). Both CI runs on `5f0f029` passed. M2 has not been authorized. This update changes
 documentation only; `git diff --check` passed and CI repeats on push.
 
 ## Update protocol

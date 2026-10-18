@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 1 — foundation implemented; local and hosted CI checks pass; review/merge pending.
+> **Status:** Milestone 1 — foundation complete and merged in PR #1; M2 awaits approval.
 > **Document version:** 1.1, 2026-10-17.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 1 — foundation implemented; local and hosted CI checks pass; review/merge pending.
+> **Status:** Milestone 1 — foundation complete and merged in PR #1; M2 awaits approval.
 > **Document version:** 1.1, 2026-10-17.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
@@ -95,6 +95,21 @@ execution adapters, workers or dashboard yet. Only `PAPER_ONLY` is accepted.
 The repository is initialized with an `origin` remote; do not run `git init` again.
 No financial credentials are needed. Local database example passwords are not
 suitable for public deployment. Cloud hosting remains a later milestone.
+
+## Development workflow
+
+Implement approved work with tests, relevant integration/contract checks, and the
+full quality gate. Confirmed test/review failures enter a bounded fix-and-retest
+loop. Substantive work gets an independent AI code review before shipping.
+
+Send `/ship` when the current work is ready to commit, push and open/update its PR.
+Until then changes remain local and uncommitted. Selecting the `ship` skill
+explicitly is equivalent; `/ship` is a project convention, not a newly installed
+native CLI command. Merge/deployment still require separate approval.
+
+See [development workflow](docs/17-development-workflow.md) for roles, authority,
+review evidence and repair limits. Python work uses the repository `python-quality`
+skill; permanent frontend/design roles are deferred until dashboard work.
 
 ## Document conventions
 

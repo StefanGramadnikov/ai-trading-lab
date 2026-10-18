@@ -33,6 +33,9 @@
 | DEC-025 | 2026-10-17: M1 plan approved by user: “yes, continue” | Python 3.12/uv, mypy, async SQLAlchemy/psycopg, Alembic; API + PostgreSQL only; see ADR-0005. No push/merge authorization. |
 | DEC-026 | 2026-10-18: user approved committing and pushing the M1 feature branch (“yes you can”) | Run hosted CI and fix observed failures; merge and M2 still require separate approval. |
 | DEC-027 | 2026-10-18: open pull requests whenever authorized feature/fix/experiment branches are created | User: “open a pull request and whenever we create such branches, open pull-requests”. Commit/push reviewable work and create/update its PR without another prompt; merging still requires explicit approval. |
+| DEC-028 | 2026-10-18: end completed tasks with the recommended next step and an approval request | User requested explicit next-step approval, or clear manual instructions when their action is required. Existing task steps remain authorized; merge/milestone gates remain in effect. |
+| DEC-029 | 2026-10-18: use an explicit `/ship` gate for staging, commits, push and PR actions | User answered “use the /ship gate”. Supersedes DEC-027's automatic push timing: PR creation/update remains required when shipping. Ordinary plan/implementation approval does not ship. Separate explicit instructions authorize only the Git/PR action requested. Merge/deployment remain separately gated. |
+| DEC-030 | 2026-10-18: independent review and bounded repair are part of the development lifecycle | User approved standard substantive-change review and requested code → tests → fixes → retest with project-relevant skills. First step adds a reviewer role, manual ship skill, Python quality checklist and workflow docs. Maximum three automatic repair rounds; no permanent FE/design team, unattended monitor, external skill installation or M2 implementation in this step. |
 
 ## Architecture Decision Records
 

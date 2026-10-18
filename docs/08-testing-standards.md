@@ -110,3 +110,26 @@ Pre-commit runs Ruff and mypy using the locked environment; install via
 `uv run --locked pre-commit install`. CI repeats `make check` with a dedicated
 PostgreSQL service, validates Compose, builds/starts the production image, runs its migration and probes both health endpoints. Hosted CI
 must pass before merge; local success is not evidence of a hosted run.
+
+## Review, repair and ship gate — 2026-10-18
+
+Follow [the development workflow](17-development-workflow.md). Relevant integration
+and contract tests run during development of those boundaries; QA starts with
+acceptance cases. Focused or documentation checks do not replace `make check` before the change
+is declared ready.
+
+Independent review is required for substantive runtime/test logic, migrations,
+dependencies, CI, permissions and workflow changes. It evaluates the actual full
+change set and reports findings separately from automated test evidence. A review
+PASS is not a test PASS; missing review evidence is INCOMPLETE.
+
+Repair failed checks and confirmed findings within approved scope, with regression
+coverage as appropriate. Rerun affected checks and the full required gate; re-review
+material fixes. Stop after three automatic repair rounds per task or ship invocation
+and ask for direction. Do not weaken tests or policies to achieve a pass.
+
+The user invokes `/ship` for staging, commit, push and PR creation/update. After
+material post-review changes, earlier review/check evidence is stale for those
+changes. Hosted CI must pass on the actual final head before merging. No unattended
+monitor, security scanner, frontend framework or dependency change is introduced
+by this workflow-only update.

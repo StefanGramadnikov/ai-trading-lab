@@ -1,0 +1,356 @@
+"""Bounded public-data transport; external content never selects destinations."""
+
+from __future__ import annotations
+
+import asyncio
+import copy
+import math
+import re
+import time
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from types import MappingProxyType
+from typing import Literal
+
+import httpx2
+from pydantic import JsonValue
+
+from ai_trading_lab.market_data.models import Capture, DataMode, Source, TransportError
+
+_BASE58 = r"[1-9A-HJ-NP-Za-km-z]{32,44}"
+_TICKER = r"[A-Za-z0-9_-]{1,200}"
+
+
+def validate_request(
+    source: Source,
+    method: Literal["GET", "POST"],
+    path: str,
+    *,
+    params: dict[str, str] | None = None,
+    json_body: dict[str, JsonValue] | None = None,
+) -> str:
+    """Return a built-in URL only after validating the complete read-only request."""
+
+    def deny() -> None:
+        raise TransportError(source, "request_not_allowed")
+
+    if not isinstance(source, Source) or any(c in path for c in ("?", "#", "%", "\\", ":", "..")):
+        deny()
+    query = params or {}
+    allowed: set[str] = set()
+    origin = ""
+    permitted = False
+    if source == Source.DEXSCREENER:
+        origin = "https://api.dexscreener.com"
+        permitted = method == "GET" and (
+            path == "/token-profiles/latest/v1"
+            or re.fullmatch(r"/token-pairs/v1/solana/" + _BASE58, path) is not None
+        )
+    elif source == Source.SOLANA:
+        origin = "https://api.mainnet.solana.com"
+        permitted = method == "POST" and path == "/" and json_body is not None
+        if json_body is not None:
+            rpc_params = json_body.get("params")
+            permitted = permitted and (
+                set(json_body) <= {"jsonrpc", "id", "method", "params"}
+                and json_body.get("jsonrpc") == "2.0"
+                and (
+                    (
+                        isinstance(json_body.get("id"), int)
+                        and not isinstance(json_body.get("id"), bool)
+                    )
+                    or json_body.get("id") == json_body.get("method")
+                )
+                and json_body.get("method") in ("getTokenSupply", "getTokenLargestAccounts")
+                and isinstance(rpc_params, list)
+                and 1 <= len(rpc_params) <= 2
+                and isinstance(rpc_params[0], str)
+                and re.fullmatch(_BASE58, rpc_params[0]) is not None
+            )
+            if isinstance(rpc_params, list) and len(rpc_params) == 2:
+                options = rpc_params[1]
+                permitted = permitted and isinstance(options, dict)
+                if isinstance(options, dict):
+                    permitted = (
+                        permitted
+                        and set(options) <= {"commitment"}
+                        and options.get("commitment", "finalized")
+                        in ("processed", "confirmed", "finalized")
+                    )
+    elif source == Source.POLYMARKET:
+        permitted = method == "GET" and path in ("/markets", "/book")
+        origin = (
+            "https://gamma-api.polymarket.com"
+            if path == "/markets"
+            else "https://clob.polymarket.com"
+        )
+        allowed = (
+            {"limit", "offset", "active", "closed", "id", "condition_ids"}
+            if path == "/markets"
+            else {"token_id"}
+        )
+        if path == "/book" and not re.fullmatch(r"[0-9]{1,100}", query.get("token_id", "")):
+            deny()
+    elif source == Source.KALSHI:
+        origin = "https://external-api.kalshi.com/trade-api/v2"
+        permitted = method == "GET" and (
+            path == "/markets"
+            or re.fullmatch(r"/markets/" + _TICKER + "/orderbook", path) is not None
+        )
+        allowed = {"limit", "cursor", "status"} if path == "/markets" else {"depth"}
+    if not permitted or set(query) - allowed or (method != "POST" and json_body is not None):
+        deny()
+    for key, value in query.items():
+        if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_,.=-]{1,1000}", value):
+            deny()
+        if key in {"limit", "offset", "depth"} and not re.fullmatch(r"[0-9]{1,6}", value):
+            deny()
+        if key in {"active", "closed"} and value not in {"true", "false"}:
+            deny()
+    return origin + path
+
+
+@dataclass(frozen=True)
+class TransportLimits:
+    max_requests: int = 30
+    timeout_seconds: float = 5
+    total_seconds: float = 60
+    max_response_bytes: int = 2_000_000
+    max_attempts: int = 3
+    concurrency: int = 2
+    min_interval_seconds: float = 0.25
+    backoff_seconds: float = 0.5
+
+    def __post_init__(self) -> None:
+        for value in (
+            self.max_requests,
+            self.max_response_bytes,
+            self.max_attempts,
+            self.concurrency,
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError("Transport count limits must be positive integers")
+        for seconds in (self.timeout_seconds, self.total_seconds):
+            if not math.isfinite(seconds) or seconds <= 0:
+                raise ValueError("Transport time limits must be positive and finite")
+        for seconds in (self.min_interval_seconds, self.backoff_seconds):
+            if not math.isfinite(seconds) or seconds < 0:
+                raise ValueError("Transport delays must be nonnegative and finite")
+
+
+@dataclass(frozen=True)
+class SourceHealth:
+    status: str = "unknown"
+    last_code: str | None = None
+    requests: int = 0
+    rate_limited_until: float | None = None
+
+
+class HttpTransport:
+    def __init__(
+        self,
+        client: httpx2.AsyncClient | None = None,
+        *,
+        limits: TransportLimits | None = None,
+        data_mode: DataMode = DataMode.OBSERVED,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._client = (
+            client
+            if client is not None
+            else httpx2.AsyncClient(
+                follow_redirects=False,
+                trust_env=False,
+                headers={"User-Agent": "AI-Trading-Lab/0.1 public-market-research"},
+            )
+        )
+        self._owned = client is None
+        self._limits = limits or TransportLimits()
+        self._mode, self._clock, self._sleep, self._monotonic = data_mode, clock, sleep, monotonic
+        self._deadline = monotonic() + self._limits.total_seconds
+        self._semaphore = asyncio.Semaphore(self._limits.concurrency)
+        self._source_locks = {source: asyncio.Lock() for source in Source}
+        self._last_request: dict[Source, float] = {}
+        self._health = dict.fromkeys(Source, SourceHealth())
+        self._request_count = 0
+
+    @property
+    def request_count(self) -> int:
+        return self._request_count
+
+    @property
+    def health(self) -> Mapping[Source, SourceHealth]:
+        return MappingProxyType(self._health.copy())
+
+    async def __aenter__(self) -> HttpTransport:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        if self._owned:
+            await self._client.aclose()
+
+    def _remaining(self, source: Source) -> float:
+        remaining = self._deadline - self._monotonic()
+        if remaining <= 0:
+            raise TransportError(source, "time_budget_exhausted")
+        return remaining
+
+    async def _pause(self, source: Source, delay: float) -> None:
+        if delay >= self._remaining(source):
+            raise TransportError(source, "time_budget_exhausted")
+        if delay > 0:
+            await self._sleep(delay)
+        self._remaining(source)
+
+    async def request(
+        self,
+        source: Source,
+        method: Literal["GET", "POST"],
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        json_body: dict[str, JsonValue] | None = None,
+    ) -> Capture:
+        params = copy.deepcopy(params)
+        json_body = copy.deepcopy(json_body)
+        url = validate_request(source, method, path, params=params, json_body=json_body)
+        if (
+            self._client.auth is not None
+            or self._client.cookies
+            or any(
+                key.lower() in {"authorization", "proxy-authorization", "cookie", "x-api-key"}
+                for key in self._client.headers
+            )
+            or self._client.params
+        ):
+            raise TransportError(source, "client_credentials_not_allowed")
+        # Whole-call timeout includes waiting for concurrency and per-source rate slots.
+        try:
+            async with asyncio.timeout(self._remaining(source)):
+                async with self._semaphore, self._source_locks[source]:
+                    return await self._request(source, method, path, url, params, json_body)
+        except TimeoutError:
+            self._record(source, "time_budget_exhausted")
+            raise TransportError(source, "time_budget_exhausted") from None
+        except TransportError as error:
+            self._record(source, error.code)
+            raise
+
+    def _record(self, source: Source, code: str | None) -> None:
+        old = self._health[source]
+        self._health[source] = SourceHealth(
+            "healthy" if code is None else "degraded",
+            code,
+            old.requests,
+            old.rate_limited_until,
+        )
+
+    async def _request(
+        self,
+        source: Source,
+        method: Literal["GET", "POST"],
+        path: str,
+        url: str,
+        params: dict[str, str] | None,
+        json_body: dict[str, JsonValue] | None,
+    ) -> Capture:
+        for attempt in range(self._limits.max_attempts):
+            blocked_until = self._health[source].rate_limited_until
+            if blocked_until is not None:
+                await self._pause(source, max(0, blocked_until - self._monotonic()))
+            last = self._last_request.get(source)
+            if last is not None:
+                await self._pause(
+                    source, max(0, last + self._limits.min_interval_seconds - self._monotonic())
+                )
+            if self._request_count >= self._limits.max_requests:
+                raise TransportError(source, "request_budget_exhausted")
+            timeout = min(self._limits.timeout_seconds, self._remaining(source))
+            self._request_count += 1
+            self._last_request[source] = self._monotonic()
+            old = self._health[source]
+            self._health[source] = SourceHealth(
+                old.status, old.last_code, old.requests + 1, old.rate_limited_until
+            )
+            capture: Capture | None = None
+            retry_after: str | None = None
+            try:
+                async with asyncio.timeout(timeout):
+                    async with self._client.stream(
+                        method,
+                        url,
+                        params=params,
+                        json=json_body,
+                        timeout=timeout,
+                        follow_redirects=False,
+                        auth=None,
+                    ) as response:
+                        raw = bytearray()
+                        async for chunk in response.aiter_bytes(chunk_size=65_536):
+                            if len(raw) + len(chunk) > self._limits.max_response_bytes:
+                                raise TransportError(source, "response_too_large")
+                            raw.extend(chunk)
+                        try:
+                            body = raw.decode("utf-8", errors="strict")
+                        except UnicodeDecodeError:
+                            raise TransportError(source, "invalid_encoding") from None
+                        capture = Capture(
+                            source=source,
+                            method=method,
+                            path=path,
+                            params=params or {},
+                            request_body=json_body,
+                            body=body,
+                            status_code=response.status_code,
+                            received_at_utc=self._clock(),
+                            data_mode=self._mode,
+                        )
+                        retry_after = response.headers.get("Retry-After")
+            except httpx2.DecodingError:
+                raise TransportError(source, "invalid_content_encoding") from None
+            except (httpx2.TimeoutException, TimeoutError):
+                code = "timeout"
+            except httpx2.TransportError:
+                code = "network_error"
+            else:
+                if 200 <= capture.status_code < 300:
+                    try:
+                        capture.payload()
+                    except (ValueError, RecursionError):
+                        raise TransportError(source, "invalid_json", capture) from None
+                    self._record(source, None)
+                    return capture
+                if capture.status_code == 429:
+                    code = "rate_limited"
+                elif 500 <= capture.status_code < 600:
+                    code = "upstream_error"
+                else:
+                    raise TransportError(source, "http_status_rejected", capture)
+            self._record(source, code)
+            delay = self._limits.backoff_seconds * (2**attempt)
+            if retry_after is not None:
+                try:
+                    delay = float(retry_after)
+                except ValueError:
+                    try:
+                        delay = (parsedate_to_datetime(retry_after) - self._clock()).total_seconds()
+                    except (ValueError, TypeError, OverflowError):
+                        raise TransportError(source, "invalid_retry_after", capture) from None
+                if not math.isfinite(delay) or delay < 0:
+                    raise TransportError(source, "invalid_retry_after", capture)
+            if code == "rate_limited":
+                old = self._health[source]
+                self._health[source] = SourceHealth(
+                    old.status, old.last_code, old.requests, self._monotonic() + delay
+                )
+            if attempt + 1 >= self._limits.max_attempts:
+                raise TransportError(source, code, capture)
+            await self._pause(source, delay)
+        raise AssertionError("positive attempts enforced")

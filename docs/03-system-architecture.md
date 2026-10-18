@@ -91,3 +91,16 @@ Mac local 2–4-day unattended smoke test; then pinned image/code commit to VPS 
 - Duplicate orders after timeouts, lost accounting state on restart, leaked credentials, unforeseen API costs.
 
 See [risk](06-risk-management.md), [experiment design](07-experiment-design.md), [testing](08-testing-standards.md).
+
+
+## Implemented M2 boundary — 2026-10-18
+
+[Document 18](18-m2-market-data.md) and [ADR-0006](adr/0006-market-data-evidence.md)
+record concrete source interfaces. `Transport.request(...) -> Capture` is injected
+into four adapters, each returning `Batch(captures, observations, failures)`.
+`HttpTransport.health` exposes per-source degraded/rate-limit state for the bounded
+invocation; it is not a background monitor or trading-readiness endpoint.
+`ObservationStore.save(source, batch)` atomically persists versioned `markets`,
+`raw_source_events`, `market_snapshots` and `ingestion_runs`. The CLI is the only
+collection entry point. FastAPI health endpoints retain their M1 contracts.
+Future strategy/risk/accounting interfaces above remain proposed, unimplemented.

@@ -5,10 +5,11 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ai_trading_lab.config import Settings
+from ai_trading_lab.market_data.storage import metadata
 
 
 def run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=None)
+    context.configure(connection=connection, target_metadata=metadata)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -26,7 +27,7 @@ async def run_online() -> None:
 
 if context.is_offline_mode():
     context.configure(
-        url=Settings().database_url.get_secret_value(), target_metadata=None, literal_binds=True
+        url=Settings().database_url.get_secret_value(), target_metadata=metadata, literal_binds=True
     )
     with context.begin_transaction():
         context.run_migrations()

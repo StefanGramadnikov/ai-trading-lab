@@ -89,7 +89,7 @@ uv run --locked pytest --cov=ai_trading_lab --cov-report=term-missing
 
 Export `ATL_TEST_DATABASE_URL` pointing to an isolated PostgreSQL database named
 `ai_trading_lab_test` before running. Missing configuration fails the full suite;
-wrong database names are rejected before migrations. The module fixture exercises
+wrong database names are rejected before migrations. The session fixture exercises
 upgrade → downgrade → upgrade, then verifies readiness and transaction rollback.
 Tests must not run concurrently against this same database. Application config
 variables are isolated in tests; the test URL is retained explicitly.
@@ -133,3 +133,27 @@ material post-review changes, earlier review/check evidence is stale for those
 changes. Hosted CI must pass on the actual final head before merging. No unattended
 monitor, security scanner, frontend framework or dependency change is introduced
 by this workflow-only update.
+
+
+## M2 data verification — 2026-10-18
+
+The same full `make check` gate includes four source contract suites and real
+PostgreSQL market-data tests. Contract payloads are **synthetic fixtures**, not
+claimed provider recordings: test names and assertions exercise native identity,
+units, schema drift/malformed bodies, 429/5xx/decode failures, request budgets,
+replay ordering and source-time quality. Public smoke evidence is separate in
+[the source register](16-source-register.md); it never runs in deterministic CI.
+
+Database tests exercise migration upgrade → downgrade → upgrade once per session,
+exact NUMERIC/Decimal and JSON round trips, immutable capture/snapshot collisions,
+metadata versioning, distinct polls versus duplicate delivery, atomic rollback,
+source failure persistence through the CLI and offline replay. Tests refuse the
+wrong database name. Do not run two test sessions on the same disposable database.
+No execution/strategy/AI e2e test is implied by data-pipeline coverage.
+
+
+Untrusted source JSON and JSON-encoded outcome/token arrays are bounded to 64
+containers in depth. Regression cases include parser recursion failures, the exact
+depth boundary, preserved Decimal precision and prior evidence retained through
+both collection and offline replay. Excessive nesting is a recorded validation
+failure, never an unhandled collection abort.

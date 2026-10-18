@@ -4,22 +4,115 @@
 
 ## Current state
 
-- **Milestone:** M1 — foundation complete and merged in PR #1; M2 planning/implementation approval pending.
-- **Authorization:** User requested M1, required a plan first, then approved the presented
-  plan with “yes, continue”. On 2026-10-18 the user additionally approved committing and pushing the feature branch
-  to run hosted CI (“yes you can”). Merge, M2, paid APIs and live trading remain unauthorized.
-- **Repository:** `/Users/gramadnikov/Development/Research/AI Trading Lab/ai-trading-lab`;
-  origin `https://github.com/StefanGramadnikov/ai-trading-lab.git`.
-  `gh repo view StefanGramadnikov/ai-trading-lab --json nameWithOwner,isPrivate,defaultBranchRef`
-  verified `isPrivate: true` and default branch `main`.
-- **Baseline:** `a58d674` — `docs: initialize AI Trading Lab specifications`.
-- **Branch:** `feature/task-handoff-approval` (based on merged `origin/main`). M1 merged by the user in PR #1 on 2026-10-18, merge commit `f9d0689`.
-  Workflow preference follow-up is on `feature/task-handoff-approval`.
-- **Live trading:** NOT AUTHORIZED. No trading/provider accounts, keys or orders used.
-- **Current workflow task:** user approved `/ship`, substantive independent review
-  and a bounded fix/retest lifecycle. The user explicitly invoked the `ship` skill on 2026-10-18; final checks and
-  independent AI review authorize shipping only this workflow step. No external
-  skill installation, CI monitor, M2 implementation or merge is included. See DEC-029/030 and document 17.
+- **Milestone:** M2 read-only market data implemented and shipped in PR #3;
+  merge and M3 approval pending. Implementation push CI passed; final PR checks
+  are reported on the exact head in GitHub. M1 merged PR #1 (`f9d0689`); workflow merged PR #2
+  (`aba5f5d`) as confirmed after the user's merge notification.
+- **Authorization:** User: “I approve. I also merged it already, you can continue
+  to the next phase.” DEC-031 authorizes M2 implementation. `/ship` is required
+  before staging/commit/push/PR; the user subsequently explicitly invoked the
+  ship skill for M2. M3 and merge remain separate approval gates.
+- **Repository:** private `StefanGramadnikov/ai-trading-lab`, existing origin
+  `https://github.com/StefanGramadnikov/ai-trading-lab.git`; no reinitialization.
+- **Branch:** `feature/m2-market-data`, based on merged `origin/main` (`aba5f5d`).
+  M2 implementation commit `625b5b0` is pushed in
+  [PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3).
+  This documentation follow-up records observed shipping evidence.
+- **Safety:** PAPER_ONLY. No wallets, financial credentials, paid APIs, order paths,
+  strategies, AI runtime or new infrastructure. Provider descriptions are untrusted.
+
+## M2 implementation and evidence — 2026-10-18
+
+Development snapshot before `/ship`; later shipping results below supersede the
+earlier test count and pending-shipping status in this section.
+
+Scope follows [the implementation plan](18-m2-market-data.md) written before code:
+
+- `market_data/models.py`, `transport.py`, `adapters/`: typed recursively immutable
+  captures/instruments/observations, Decimal values/units, separate UTC timestamps,
+  explicit freshness, bounded hardcoded public read allowlist, retries/rate-limit/
+  degraded state and four source adapters. Native identities are validated.
+- `storage.py`, `replay.py`, `collector.py`, `cli.py`: atomic append-only writes,
+  definition versioning, duplicate receipt versus distinct poll, sanitized failure
+  runs, explicit bounded collection and strict offline replay without HTTP fallback.
+- Migration `0002_market_data`, Alembic metadata and matching indexes; old migration
+  remains unchanged. Added four tables. Existing locked httpx2 moved from dev to
+  runtime; `atl-data` console entry added. No new dependency package/version needed.
+- 216 new tests across models, transport, four synthetic source contracts, CLI,
+  replay and real PostgreSQL persistence. Shared test session migrates only the
+  exact disposable `ai_trading_lab_test`; existing assertions now expect M2 head.
+- README, architecture/testing/infrastructure, roadmap, decision/source register,
+  ADR-0006, this log and AGENTS reflect M2. Local optional `data/` captures ignored.
+
+Full required local command (disposable credentials only):
+
+```bash
+PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test make check
+```
+
+| Check | Observed result |
+| --- | --- |
+| `uv sync --locked` | PASS; 53 resolved packages, existing httpx2 promoted to runtime |
+| `uv run --locked ruff format --check .` | PASS |
+| `uv run --locked ruff check .` | PASS |
+| `uv run --locked mypy` | PASS; 34 source/test/migration files |
+| `uv run --locked pytest --cov=ai_trading_lab --cov-report=term-missing` | PASS; 234 tests, 95.80% statement/branch coverage, no warnings |
+| Test migrations | PASS; upgrade → downgrade → upgrade, exact Decimal round trips, collision rollback, replay and failed CLI run persistence |
+| `ATL_POSTGRES_PORT=55432 ATL_API_PORT=58000 docker compose -p atl-m1-validation build api` | PASS; runtime httpx2 and console entry packaged |
+| `ATL_POSTGRES_PORT=55432 ATL_API_PORT=58000 docker compose -p atl-m1-validation up -d --wait api` | PASS; API + PostgreSQL healthy |
+| `docker compose -p atl-m1-validation exec -T api /app/.venv/bin/alembic upgrade head` | PASS |
+| `curl --fail --silent --max-time 5 http://127.0.0.1:58000/health/live` and `/health/ready` | PASS; 200; PAPER_ONLY, trading_ready false |
+| `ATL_DATABASE_URL=<dedicated smoke URL> .venv/bin/alembic check` | PASS; no new upgrade operations detected |
+| Public reads + offline replay | See results below; successes and failures persisted distinctly |
+| Independent AI review | Initial FAIL, three P2 findings; repair round 1 fixed all, affected and final full-scope re-review PASS |
+| Hosted CI for M2 | NOT RUN; local uncommitted work awaits /ship |
+| Dedicated dependency/secret scans, trading e2e, deployment/performance | NOT RUN; no configured scanner or trading implementation; no such success claimed |
+
+Public smoke used `ATL_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_m2_smoke`
+and `.venv/bin/atl-data collect --source <source> --limit <n> --capture-file <tmp-path>`.
+DexScreener/Solana explicitly seeded wrapped SOL mint
+`So11111111111111111111111111111111111111112`, limit 1. Prediction samples used
+limit 2, max-pages 1. Actual results, not provider uptime guarantees:
+
+- DexScreener: 1 capture + 1 observation, no source failure, PARTIAL unknown event time.
+- Solana: 2 captures + 1 supply observation, largest-account read rate_limited (429),
+  exit 1; preceding evidence retained. No claim of holder coverage.
+- Kalshi: 2 captures + 2 outcome observations, no failure, PARTIAL unknown event time.
+- Polymarket: network_error, 0 captures/observations, failed run and exit 1.
+  Cause not established; no restriction bypass or credentials requested.
+- `atl-data replay /private/tmp/atl-m2-dex-verified.json` persisted REPLAY evidence;
+  repeat inserted zero captures/snapshots. Kalshi archive also replayed successfully.
+  Temporary captures are untracked and outside the repo. Deterministic source
+  contract tests are synthetic and do not establish successful public compatibility.
+
+Review repair round 1: malformed compressed HTTP bodies previously escaped the
+transport failure boundary; extreme finite Polymarket timestamps escaped Decimal
+error handling; nested JSON dictionaries/lists were mutable despite frozen models.
+All were fixed with regression tests, including malformed compression through CLI
+into PostgreSQL. The fresh-context AI reviewer independently probed the affected
+behaviors and returned PASS without writing files or calling external services.
+Final full-scope review also returned PASS after documentation and metadata index
+alignment. Parent reran the full gate and production build for the final code.
+Parent verification supplies the full gate and smoke evidence. Custom role
+restrictions are behavioral; no separate read-only sandbox is claimed.
+
+Environment incident: the local OrbStack runtime reported Running while Docker
+and database reads timed out during initial smoke setup. Those initial CLI runs
+exited 2; they are not successes. Runtime later responded, migration and explicit
+smokes above passed or recorded source failures. No unrelated service was restarted
+or data deleted. Validation still uses separate ports 55432/58000; existing port
+5432 services were untouched. No extra service or unattended job was introduced. Final container CLI `atl-data --help`
+also passed. Dedicated API/database validation services were stopped after checks;
+the named volume, test/smoke databases and built image are preserved.
+
+Limitations: public Polymarket compatibility unverified; free RPC throttled;
+source-time gaps are PARTIAL rather than current quotes. Archive/database retention,
+continuous collection, backup/restore, realistic fills/fees, accounting, strategies
+and AI remain deferred. No performance/profit/legal-eligibility claim is made.
+
+Next gate: user invokes `/ship` to verify final scope, commit/push, open the M2 PR
+and inspect hosted CI on its exact head. Merge and M3 require separate approval.
+No manual credentials, subscriptions or financial account setup are needed.
 
 ## M1 implementation — 2026-10-17
 
@@ -90,14 +183,8 @@ migration tests against the same database.
 
 ## Remaining gates and next safe step
 
-1. Review/merge the documentation-only handoff-preference PR after CI passes.
-2. User approval is required to start M2 planning/implementation. Proposed next step:
-   prepare a concrete read-only market-data plan for approval before changing application code.
-3. No manual credentials or purchases are needed to begin planning.
-
-Container image tags are version-pinned, not digest-pinned. Hosted Linux/amd64 CI
-is now verified. Long-running operation, backup/restore and cloud readiness remain
-outside these foundation checks.
+Current M2 gates are recorded above. M1 evidence below is preserved as history;
+it does not establish M2 hosted CI or authorize later milestones.
 
 ## Milestone history
 
@@ -108,7 +195,9 @@ outside these foundation checks.
 | M0 package draft | CREATED | Initial documentation package |
 | M0 committed | VERIFIED 2026-10-17 | Local commit `a58d674`; corrects initial handoff's unverified repo/commit state |
 | M1 Foundation | COMPLETE / MERGED | PR #1; merge `f9d0689`; branch and PR CI passed on `5f0f029` |
-| M2–M9 | NOT STARTED | No results |
+| Development workflow | MERGED | PR #2, merge `aba5f5d`; explicit ship/review/repair lifecycle |
+| M2 Market data | SHIPPED / MERGE PENDING | PR #3; 240 tests, 96.00% coverage; implementation push CI passed; check final-head PR checks |
+| M3–M9 | NOT STARTED | Separate approval required |
 | M10 live | BLOCKED | Separate authorization required |
 
 ## Hosted CI evidence — 2026-10-18
@@ -225,3 +314,71 @@ After each implementation milestone, append date, task/PR or commit SHA, files c
 exact checks/results, observed performance where applicable, risks, decisions, blockers
 and next approved step. Preserve incident history. Resume from the current verified
 state; do not infer hosted CI success, trading capability or live authorization.
+
+## M2 ship invocation — 2026-10-18
+
+The user explicitly selected `.agents/skills/ship/SKILL.md`, authorizing shipping
+of the approved M2 scope only. Branch `feature/m2-market-data`, base `aba5f5d`;
+remote main remains at that base. No unrelated local changes or existing M2 PR
+were found; the remote repository is private.
+
+Shipping repeated `make check`: PASS, 234 tests, 95.80% statement/branch coverage,
+Ruff format/lint and strict mypy (34 files). Markdown local links and
+`git diff --check` passed. Production image build and healthy startup passed.
+Final migration/HTTP probes and fresh independent shipping review are recorded
+in the PR handoff when complete. Hosted CI has not run before this push.
+No paid API, credentials, live trading, deployment or merge is authorized.
+
+
+Shipping repair round 1: the fresh reviewer found that excessive JSON nesting in
+raw captures or Polymarket encoded arrays raised uncaught RecursionError, aborting
+collection before failure persistence. Centralized exact JSON parsing now maps
+parser recursion errors to validation errors and limits object/array nesting to
+64 containers. Added six cases for depth bounds/precision, nested outcome/token
+strings, preserved prior observations/captures and the offline replay path.
+Focused 59 tests passed; repeated full `make check` PASS: **240 tests, 96.00%**
+statement/branch coverage, Ruff format/lint and strict mypy. Earlier 234-test
+figures above are development/pre-repair evidence, not the final shipping count.
+
+
+Independent shipping re-review returned PASS after repair round 1. The reviewer
+inspected the repair/tests and reproduced the depth/precision and partial-evidence
+behaviors offline without edits, database/network access or write-producing tests.
+Final repaired production image build/startup passed; migration and HTTP health
+checks passed. Local links and diff whitespace checks passed. Intended changes
+are manually inspected before staging/commit; no dedicated secret/dependency
+scanner is configured and no security-audit result is claimed.
+
+
+## M2 shipping evidence — 2026-10-18
+
+Committed/pushed `625b5b08928d29270881abd8aca02f7399e832c9` and opened
+[PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3) into main.
+The staged scope matched all 41 reviewed working files, `git diff --cached --check`
+passed, and manual inspection found no unintended capture files/credentials.
+A limited token/private-key pattern check found no candidates; this is not a
+configured dedicated scanner or security audit. No unrelated changes were included.
+
+Observed `gh run list --branch feature/m2-market-data --commit 625b5b08928d29270881abd8aca02f7399e832c9`:
+push [run 39164729587](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39164729587)
+completed successfully. It passed locked dependency sync, the full quality gate,
+Compose validation, Linux production build/startup, migration and HTTP health
+checks. PR [run 39164743129](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39164743129)
+also completed successfully with all steps passing. The documentation follow-up
+triggers new runs; final-head
+status is verified in PR #3 before handoff, rather than inferred from this earlier
+implementation run. No CI repair was required for the observed successful run.
+
+The M2 source limitations remain: Polymarket public network_error, Solana
+largest-account throttling, unknown event-time PARTIAL states. No live execution,
+credentials, subscriptions, performance claim or deployment was introduced.
+This shipping invocation does not merge or authorize M3.
+
+Next manual step: review and squash-merge PR #3 after its exact-head checks pass.
+After merge, obtain approval to prepare the M3 deterministic paper-execution plan.
+
+
+The documentation-only shipping follow-up repeated `make check`: PASS, 240 tests,
+96.00% coverage, Ruff/mypy PASS. No application/test/CI logic changed after review.
+GitHub reported nonblocking runner/action deprecation notices; no CI dependency
+upgrades were included in M2. Validation service shutdown preserves the named volume.

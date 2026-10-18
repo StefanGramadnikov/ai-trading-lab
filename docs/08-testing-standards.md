@@ -1,6 +1,6 @@
 # 08 — Testing and code quality standards
 
-**Status:** The user's requirement for tests on **every development cycle** is APPROVED. Tooling and commands become exact when M1 scaffolding is approved. **Date:** 2026-10-17.
+**Status:** The user's requirement for tests on **every development cycle** is APPROVED. M1 tooling and commands below were approved on 2026-10-17. **Date:** 2026-10-17.
 
 ## Definition of done for every code change
 
@@ -17,9 +17,9 @@
 
 If a tool cannot run, report `NOT RUN` with a reason. Never claim `PASS` based on expectation.
 
-## Proposed tools (M1 validates versions)
+## M1 tools
 
-`pytest`, `pytest-asyncio`, `pytest-cov`, `Ruff` (format + lint), `mypy` or `Pyright` (select and pin one), `pre-commit`, and GitHub Actions. For DB integration tests use disposable PostgreSQL fixtures/containers; API contract tests use recorded sanitized responses and schema snapshots. Avoid hitting paid live APIs in CI.
+`pytest`, `pytest-asyncio`, `pytest-cov`, `Ruff` (format + lint), `mypy` (strict mode with Pydantic plugin), `pre-commit`, and GitHub Actions. For DB integration tests use disposable PostgreSQL fixtures/containers; API contract tests use recorded sanitized responses and schema snapshots. Avoid hitting paid live APIs in CI.
 
 ## Test pyramid
 
@@ -60,7 +60,7 @@ If a tool cannot run, report `NOT RUN` with a reason. Never claim `PASS` based o
 
 ## Commands and CI gate
 
-M1 will define a single **developer quality command** (e.g., `make check` or `uv run ...`) that runs formatting check, lint, typing and all required tests; it must run locally and in GitHub Actions. Do **not** assume illustrative commands exist prior to M1.
+`make check` is the M1 developer quality command; see the executable gate below.
 
 Every Codex task should end with a concise checklist:
 
@@ -74,3 +74,39 @@ Unit/integration/e2e: PASS/FAIL/NOT RUN (commands + counts)
 Known limitations: ...
 Decision/progress docs: ...
 ```
+
+## M1 executable quality gate — 2026-10-17
+
+Python 3.12.13; uv 0.11.7; exact dependency versions in `uv.lock`.
+Install with `uv sync --locked`. `make check` runs, in order:
+
+```bash
+uv run --locked ruff format --check .
+uv run --locked ruff check .
+uv run --locked mypy
+uv run --locked pytest --cov=ai_trading_lab --cov-report=term-missing
+```
+
+Export `ATL_TEST_DATABASE_URL` pointing to an isolated PostgreSQL database named
+`ai_trading_lab_test` before running. Missing configuration fails the full suite;
+wrong database names are rejected before migrations. The module fixture exercises
+upgrade → downgrade → upgrade, then verifies readiness and transaction rollback.
+Tests must not run concurrently against this same database. Application config
+variables are isolated in tests; the test URL is retained explicitly.
+
+Unit tests: `uv run --locked pytest tests/unit`. This alone is not the full gate.
+Configuration tests cover defaults, invalid mode/timeout/URL, `.env` precedence,
+and secret redaction. Health tests cover success/unavailable responses, no database
+call for liveness, probe deadlines, error handling and engine cleanup. Integration
+also verifies a real refused connection leaves liveness available and readiness 503.
+
+M1 baseline is 100% statement/branch coverage for the small application package.
+The 90% minimum guards against untested additions; it does not prove trading safety.
+Domain financial invariants will require dedicated tests when those domains exist.
+Migrations are checked by mypy and real PostgreSQL round trips, outside this coverage
+percentage. No trading e2e tests exist because trading implementation is out of scope.
+
+Pre-commit runs Ruff and mypy using the locked environment; install via
+`uv run --locked pre-commit install`. CI repeats `make check` with a dedicated
+PostgreSQL service, validates Compose, builds/starts the production image, runs its migration and probes both health endpoints. Hosted CI
+must pass before merge; local success is not evidence of a hosted run.

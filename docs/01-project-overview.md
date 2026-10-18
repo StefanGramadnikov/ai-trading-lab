@@ -40,7 +40,7 @@ Build an automated, AI-assisted trading **research and paper-trading platform**,
 - Personal ChatGPT Plus; Codex being installed on Mac.
 - Company-managed Claude Pro, **not to be used** for a personal side project.
 - No personal xAI/Grok API, OpenAI API or Anthropic API configured yet.
-- Private Git repository created (actual local path/remote unknown).
+- Private Git repository created; local clone and configured remote verified on 2026-10-17 (see progress log).
 
 ## System-wide principles
 

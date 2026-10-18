@@ -78,7 +78,7 @@ Required keys/invariants:
 
 ## Local / cloud topology
 
-**M1 proposed Compose services:** app/API, worker/scheduler, PostgreSQL, dashboard. Start with one Python package and only split worker processes where needed. Backend read-only dashboard access by default; remote dashboard requires authentication/HTTPS, no publicly exposed database ports.
+**M1 implemented Compose services:** app/API and PostgreSQL. Worker/scheduler and dashboard remain deferred until their milestones, per approved M1 plan. Start with one Python package and only split worker processes where needed. Backend read-only dashboard access by default; remote dashboard requires authentication/HTTPS, no publicly exposed database ports.
 
 Mac local 2–4-day unattended smoke test; then pinned image/code commit to VPS for up to ~30-day cloud evaluation. Do not count development-only pre-comparison trades in a paired architecture comparison.
 

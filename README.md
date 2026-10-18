@@ -1,7 +1,7 @@
 # AI Trading Lab
 
-> **Status:** Milestone 0 — documentation approved as the initial project baseline; implementation not started.  
-> **Document version:** 1.0-draft, 2026-10-17.  
+> **Status:** Milestone 1 — foundation implemented and locally verified; hosted CI and merge review pending.
+> **Document version:** 1.1, 2026-10-17.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
 AI Trading Lab is a private, experimental platform for collecting market data, researching trading strategies, and comparing automated decision-making architectures. It initially targets **Solana memecoins** and **prediction markets** (Polymarket and potentially Kalshi). It is **not** a proven profitable trading strategy.
@@ -37,22 +37,64 @@ AI Trading Lab is a private, experimental platform for collecting market data, r
 - No auto-deployment of AI-generated strategies or risk-limit modifications.
 - Financial performance claims require observed evidence and an explicit accounting definition. **No profit is guaranteed.**
 
-## Repo status and first Git steps
+## Local development
 
-The user reports having **created the repository**. Do **not** run `git init` in an existing initialized clone, and do not overwrite its files. Check first:
+Requires Docker with Compose, `make`, and [uv 0.11.7](https://docs.astral.sh/uv/getting-started/installation/).
+Python 3.12.13 is pinned in `.python-version`; `uv.lock` pins dependencies.
 
 ```bash
-cd /path/to/ai-trading-lab
-git rev-parse --is-inside-work-tree
+uv python install
+uv sync --locked
+cp .env.example .env
+# Inspect the example before using it; it contains local development values only.
+docker compose up -d --wait db
+uv run --locked alembic upgrade head
+docker compose up -d --build --wait api
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/ready
 ```
 
-If this returns `true`, Git is initialized. If it fails and this is the intended new project directory, run `git init`, as the user specifically requested to be told when Git initialization is needed. Then copy this package into the repo, inspect `git status`, and commit the M0 documentation **after review**.
+`/health/live` reports process liveness. `/health/ready` returns 200 when PostgreSQL
+is reachable and 503 otherwise. It always reports `trading_ready: false`; source
+freshness, schema compatibility and trading readiness are outside M1.
+Migrations run explicitly, never automatically at API startup.
+To run the API directly: `uv run --locked uvicorn ai_trading_lab.app:create_app --factory --reload`.
 
-The repo is intended to be **private**. Keep `.env`, API keys, session tokens, mnemonic phrases, wallet keys, and personal account exports out of version control.
+For checks, create a separate disposable test database and export its URL:
+
+```bash
+docker compose exec -T db createdb -U ai_trading_lab ai_trading_lab_test
+export ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@localhost:5432/ai_trading_lab_test
+make check
+uv run --locked pre-commit install
+uv run --locked pre-commit run --all-files
+```
+
+Run `createdb` once for a new volume. Integration tests migrate **only** a database
+named `ai_trading_lab_test`; never use a database containing valuable data.
+`make check` does not silently skip integration tests when configuration is missing.
+A `.env` file configures the application and Compose; pytest requires the test URL
+exported in its process environment. See [testing details](docs/08-testing-standards.md).
+
+Defaults bind API port 8000 and PostgreSQL port 5432 to loopback. If occupied, set
+`ATL_API_PORT` and `ATL_POSTGRES_PORT` in the shell or `.env`, and adjust the host
+URLs accordingly. Compose builds its internal database URL using `POSTGRES_*`;
+host Python commands use `ATL_DATABASE_URL`. Percent-encode URL-special characters
+in passwords used in connection URLs. Changing `POSTGRES_*` does not change an
+already initialized database volume.
+
+`docker compose stop` stops services while preserving data. `docker compose down`
+also removes containers/network while retaining the named volume. No destructive
+volume removal is required for normal development.
 
 ## Scope boundary
 
-M0 delivers **documentation only**. M1 will initialize tooling, CI, a health endpoint and a testable application skeleton. The presence of this documentation does **not** mean the infrastructure, APIs, cost tracking, backtests or trading bot have been implemented or verified.
+M1 contains the API, configuration, PostgreSQL connectivity, migration baseline,
+tests and CI definition. There are no market integrations, strategies, AI agents,
+execution adapters, workers or dashboard yet. Only `PAPER_ONLY` is accepted.
+The repository is initialized with an `origin` remote; do not run `git init` again.
+No financial credentials are needed. Local database example passwords are not
+suitable for public deployment. Cloud hosting remains a later milestone.
 
 ## Document conventions
 

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-trading-lab"
+version = "0.1.0"
+description = "Paper-only trading research platform foundation"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "pydantic-settings>=2.8,<3",
+  "sqlalchemy[asyncio]>=2.0,<2.1", "psycopg[binary]>=3.2,<4", "alembic>=1.15,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<10", "pytest-asyncio>=0.26,<2", "pytest-cov>=6,<8",
+  "httpx2>=2,<3", "ruff>=0.11,<1", "mypy>=1.15,<2", "pre-commit>=4,<5",
+]
+
+[tool.uv]
+required-version = "==0.11.7"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests", "migrations"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers"
+markers = ["integration: requires an isolated PostgreSQL test database"]
+
+[tool.coverage.run]
+branch = true
+source = ["ai_trading_lab"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90

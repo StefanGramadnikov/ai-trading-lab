@@ -7,7 +7,7 @@
 ### Local Mac (M1–M8 development)
 
 - Private Git repo and Codex IDE/CLI; Python pinned in project metadata; Docker Desktop or a supported Docker-compatible runtime.
-- Compose services **proposed:** FastAPI app, background worker/scheduler, PostgreSQL, Streamlit dashboard. No message broker initially.
+- M1 Compose services: FastAPI API and PostgreSQL 17.9. Worker/scheduler and dashboard are deferred until needed, per approved M1 plan. No message broker initially.
 - Local `.env` created from committed `.env.example`, credentials **not committed**.
 - DB migrations versioned from inception; seed fixtures sanitized and deterministic.
 - Health endpoint should distinguish process alive, data quality and trading readiness; a running web server does **not** imply market data is healthy.
@@ -56,3 +56,17 @@ Dashboard: net and gross returns, unresolved exposure, provider costs, health, s
 3. Restore connectivity/storage; replay deduplicated data and reconcile ledger.
 4. Verify invariants and data freshness before reactivating entries.
 5. Log incident, affected experiments, any accounting correction and follow-up test.
+
+## M1 implementation details
+
+- Python 3.12.13 and uv 0.11.7; dependencies locked; production container runs as UID 10001.
+- Compose exposes API/database only on loopback, stores PostgreSQL in a named volume,
+  waits for database health, and probes API readiness. No broker or remote services.
+- SQLAlchemy async engine + psycopg; bounded readiness probe and engine disposal on shutdown.
+- Alembic baseline `0001_foundation` initializes migration tracking without speculative
+  domain tables. Run `uv run --locked alembic upgrade head` on the host or
+  `docker compose exec -T api /app/.venv/bin/alembic upgrade head` in the container.
+- Liveness proves process health only. Readiness checks connectivity, not migration
+  compatibility, market data quality or trading readiness; `trading_ready` is false.
+- `.env.example` contains local placeholders. No provider or financial keys are required.
+- Source installation and operating commands are in README; hosted deployment remains gated.

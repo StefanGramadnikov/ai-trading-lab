@@ -30,6 +30,9 @@
 | DEC-022 | Deterministic risk sizing/execution and fail-closed new entries; no live without explicit approval | Approved architecture review |
 | DEC-023 | Python, Postgres, Compose, FastAPI and lightweight UI **as preferred proposed stack** | Architecture approved conceptually; final package/tool versions M1 |
 | DEC-024 | Repository documentation as durable source of truth; `AGENTS.md` for Codex | User requested and approved documentation milestone |
+| DEC-025 | 2026-10-17: M1 plan approved by user: “yes, continue” | Python 3.12/uv, mypy, async SQLAlchemy/psycopg, Alembic; API + PostgreSQL only; see ADR-0005. No push/merge authorization. |
+| DEC-026 | 2026-10-18: user approved committing and pushing the M1 feature branch (“yes you can”) | Run hosted CI and fix observed failures; merge and M2 still require separate approval. |
+| DEC-027 | 2026-10-18: open pull requests whenever authorized feature/fix/experiment branches are created | User: “open a pull request and whenever we create such branches, open pull-requests”. Commit/push reviewable work and create/update its PR without another prompt; merging still requires explicit approval. |
 
 ## Architecture Decision Records
 
@@ -38,9 +41,11 @@
 - [ADR-0003: Reproducible, staged comparison of AI configurations](adr/0003-experiment-integrity.md)
 - [ADR-0004: Testing and Git quality gates](adr/0004-test-and-git-gates.md)
 
+- [ADR-0005: M1 foundation tooling](adr/0005-foundation-tooling.md)
+
 ## Proposed choices requiring later confirmation
 
-- Exact Python version, package/dependency manager, type checker, migrations, UI library and CI commands.
+- UI library remains open; M1 Python, dependency manager, type checker, migrations and quality commands are resolved in ADR-0005.
 - Numerical risk limits (the earlier profile percentage table is illustrative).
 - Precise AI periodic interval and experimental concurrency.
 - Dataset retention, VPS vendor, alerting credentials and shared-cost attribution.
@@ -49,7 +54,7 @@
 
 ## Known unknowns / blockers
 
-1. The private Git remote and local clone location were **not shared**; do not claim these files were committed.
+1. RESOLVED 2026-10-17: local clone and origin verified; M0 commit `a58d674` observed. `gh repo view` verified the remote is private with default branch `main`.
 2. The source document's performance claims and the FOMO execution route remain **unverified**.
 3. Free market data may not reproduce realistic fills or an exhaustive Solana launch universe.
 4. Kalshi/Polymarket access, local compliance/taxes and funding requirements for future live activity must be checked independently before authorization.

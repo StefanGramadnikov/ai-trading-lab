@@ -1,3 +1,6 @@
+> Historical M0 import/kickoff instructions. M1 was authorized on 2026-10-17;
+> use README and the progress log for the current verified state.
+
 # 14 — Codex kickoff and Git import instructions
 
 **M0 documentation only.** Do not run these as if application implementation were already approved. User reported creating a private repo; inspect its existing files first.

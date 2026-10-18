@@ -1,0 +1,42 @@
+name: Foundation checks
+on:
+  pull_request:
+  push:
+    branches: [main, 'feature/**', 'fix/**', 'experiment/**']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.9-bookworm
+        env:
+          POSTGRES_USER: ai_trading_lab
+          POSTGRES_PASSWORD: ci_example_only
+          POSTGRES_DB: ai_trading_lab_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ai_trading_lab -d ai_trading_lab_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      ATL_POSTGRES_PORT: "55432"
+      ATL_API_PORT: "58000"
+      ATL_TEST_DATABASE_URL: postgresql+psycopg://ai_trading_lab:ci_example_only@localhost:5432/ai_trading_lab_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.7'
+      - run: uv python install
+      - run: uv sync --locked
+      - run: make check
+      - run: docker compose config --quiet
+      - run: docker compose -p atl-ci up -d --build --wait
+      - run: docker compose -p atl-ci exec -T api /app/.venv/bin/alembic upgrade head
+      - run: |
+          curl --fail --silent http://127.0.0.1:58000/health/live
+          curl --fail --silent http://127.0.0.1:58000/health/ready
+      - if: always()
+        run: docker compose -p atl-ci down

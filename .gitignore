@@ -17,3 +17,10 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+
+# Build and check outputs
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/

@@ -49,7 +49,7 @@
 
 ## Proposed, not yet approved as exact specification
 
-- Python 3.12+, PostgreSQL, FastAPI, Docker Compose, Streamlit, pytest, Ruff, mypy, GitHub Actions; review at M1.
+- M1 foundation tool selections are resolved in ADR-0005: Python 3.12.13, PostgreSQL, FastAPI, Compose, pytest, Ruff, mypy and GitHub Actions. UI library (including the earlier Streamlit proposal) remains OPEN for M7.
 - Five-minute continuous-AI cadence: **placeholder**, not an optimized interval.
 - Conservative/moderate/aggressive example exposure limits from prior conversation: **illustrations**, not binding financial policy. Calibrate from simulations and document explicit approval.
 - A €5–15 monthly VPS cost and separate provider budgets: **estimates**, must be priced and reviewed before purchase.
@@ -63,7 +63,7 @@
 
 ## Unresolved requirements
 
-1. Exact local repo path, remote URL and whether Git was initialized by the user.
+1. RESOLVED 2026-10-17: initialized local clone and origin verified; see progress log.
 2. Which initial data sources are usable without authentication, and what discovery coverage they offer.
 3. Whether to include unresolved 30+ day prediction-market contracts in the main evaluation or a separate longer cohort.
 4. Maximum AI expense **per day**, number of concurrent experiment cells, and acceptable CPU/storage load on Mac/VPS.

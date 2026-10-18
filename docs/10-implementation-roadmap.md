@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M0 documentation creation.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M1 foundation implemented; local and hosted CI pass; review/merge pending.
 
 ## Rules for milestone execution
 
@@ -41,3 +41,15 @@
 ## Codex handoff
 
 Use [14-codex-kickoff.md](14-codex-kickoff.md) when M0 is committed and user authorizes M1.
+
+## Approved M1 implementation plan — 2026-10-17
+
+User approved the plan in chat with “yes, continue”: dedicated feature branch;
+Python 3.12 + uv lockfile; typed FastAPI/configuration; paper-only startup validation;
+liveness and PostgreSQL readiness; SQLAlchemy/psycopg/Alembic baseline; API + database
+Compose services; unit/integration tests; Ruff/mypy/pre-commit and GitHub Actions;
+exact quality gate and observed progress updates. No strategies, agents, paid
+services, execution adapters or cloud deployment. See ADR-0005 for tool selections.
+
+Hosted CI passed on implementation commit `382a277` (2026-10-18); review/merge remains pending. Do not
+start M2 or merge without user authorization. See progress log for local evidence.

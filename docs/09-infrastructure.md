@@ -86,3 +86,19 @@ ObservationStore enforces append-only/idempotent writes; database owner access i
 not an immutable security boundary. Backup/retention and restrictive deployment
 roles still belong to deployment hardening. Public-source outages and rate limits
 are persisted as ingestion failures; no paid/authenticated fallback exists.
+
+
+## M3 fixture operations — 2026-10-19
+
+M3 uses the same API/PostgreSQL services and `ATL_DATABASE_URL`; no additional
+credentials or environment variables. Explicitly apply migration head, then run
+`uv run --locked atl-paper run tests/fixtures/paper_scenario.json` on the host.
+Production images package the CLI, not test fixtures. For a controlled container
+smoke use `docker compose exec -T api /app/.venv/bin/atl-paper run /dev/stdin < tests/fixtures/paper_scenario.json`.
+The input remains bounded and FIXTURE-only; no volume or network service is added.
+
+Run ID/portfolio/command keys are explicit: repeated identical scenarios return
+durable results rather than creating new funding/fills. The bounded command replay
+checks all projections before further execution; corruption blocks operation and
+requires investigation, never silent correction. The initial 1000-command history
+limit is for engineering scenarios and does not establish production scale.

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "data_mode": "FIXTURE",
+  "portfolio_id": "00000000-0000-4000-8000-000000000003",
+  "cash_unit": "USD",
+  "cash_step": "0.01",
+  "initial_cash": "1000",
+  "policy": {
+    "version": "NONOPERATIONAL-synthetic-test-only-v1",
+    "fee_bps": "10",
+    "latency_ms": 0,
+    "max_age_seconds": 60,
+    "future_skew_seconds": 0,
+    "max_order_notional": "100",
+    "max_position_notional": "200",
+    "max_total_exposure": "300",
+    "max_cost_bps": "100"
+  },
+  "operations": [
+    {
+      "kind": "order",
+      "at": "2026-10-18T12:00:00Z",
+      "intent": {
+        "portfolio_id": "00000000-0000-4000-8000-000000000003",
+        "idempotency_key": "synthetic-buy-1",
+        "instrument": {
+          "source": "solana",
+          "venue": "synthetic-solana-spot",
+          "native_id": "native:SOL",
+          "kind": "spot",
+          "base_unit": "SOL",
+          "cash_unit": "USD",
+          "tick_size": "0.01",
+          "quantity_step": "0.01",
+          "cash_step": "0.01"
+        },
+        "side": "buy",
+        "quantity": "1",
+        "limit_price": "10.10",
+        "created_at_utc": "2026-10-18T12:00:00Z",
+        "expires_at_utc": "2026-10-18T12:01:00Z"
+      },
+      "quote": {
+        "snapshot_id": "00000000-0000-4000-8000-000000000004",
+        "instrument": {
+          "source": "solana",
+          "venue": "synthetic-solana-spot",
+          "native_id": "native:SOL",
+          "kind": "spot",
+          "base_unit": "SOL",
+          "cash_unit": "USD",
+          "tick_size": "0.01",
+          "quantity_step": "0.01",
+          "cash_step": "0.01"
+        },
+        "event_time_utc": "2026-10-18T12:00:00Z",
+        "received_at_utc": "2026-10-18T12:00:00Z",
+        "quality": "VALID",
+        "data_mode": "FIXTURE",
+        "spot_price": "10",
+        "spot_capacity": "2",
+        "impact_bps": "10"
+      }
+    },
+    {
+      "kind": "reconcile"
+    }
+  ]
+}

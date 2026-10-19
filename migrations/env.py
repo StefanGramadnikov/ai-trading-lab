@@ -5,7 +5,9 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ai_trading_lab.config import Settings
-from ai_trading_lab.market_data.storage import metadata
+from ai_trading_lab.paper_execution.store import portfolios
+
+metadata = portfolios.metadata
 
 
 def run_migrations(connection: Connection) -> None:

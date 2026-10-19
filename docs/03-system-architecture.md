@@ -104,3 +104,14 @@ invocation; it is not a background monitor or trading-readiness endpoint.
 `raw_source_events`, `market_snapshots` and `ingestion_runs`. The CLI is the only
 collection entry point. FastAPI health endpoints retain their M1 contracts.
 Future strategy/risk/accounting interfaces above remain proposed, unimplemented.
+
+
+## M3 paper boundary — locally verified
+
+The offline fixture runner submits immutable intents/quotes to `PaperStore`.
+`History` replays durable commands through deterministic admission, simulation and
+accounting to verify all projections before another operation. PostgreSQL portfolio
+locks serialize spending/selling and idempotent results. Accepted/reserved/fill/
+release events commit atomically; IOC leaves no resting orders. No network client
+or venue execution adapter is introduced. [ADR-0007](adr/0007-paper-execution-accounting.md)
+records explicit cost-basis, rounding, fixture-only and bounded recovery semantics.

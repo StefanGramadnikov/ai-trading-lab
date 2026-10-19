@@ -157,3 +157,19 @@ containers in depth. Regression cases include parser recursion failures, the exa
 depth boundary, preserved Decimal precision and prior evidence retained through
 both collection and offline replay. Excessive nesting is a recorded validation
 failure, never an unhandled collection abort.
+
+
+## M3 paper acceptance cases
+
+Pure model/simulator/accounting tests cover exact numeric/time boundaries, units,
+weighted cost basis, gross P&L versus fees, quantity/cash/price rounding, actual cost
+caps, source/clock availability, expiry, pause, depth reuse and explicit settlement.
+Command replay must reproduce both economic and control projections.
+
+Real PostgreSQL scenarios must verify concurrent spending/selling, duplicate keys,
+transaction rollback, lost-response retry/restart, immutable policy/definitions,
+source mode refusal, win/loss/void settlement, CLI repeatability, deleted orders/
+fills/commands/events, altered pause/state and reset spot/prediction consumption.
+An unavailable Docker/database is a blocker, never grounds to skip integration or
+call mocked tests a database pass. The same mandatory `make check` and shipping
+rules apply. No timing sleeps or public financial requests are required by tests.

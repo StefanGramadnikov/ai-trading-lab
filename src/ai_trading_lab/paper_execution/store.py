@@ -1,4 +1,4 @@
-"""Transactional fixture-only paper portfolios; no venue execution capability."""
+"""Transactional offline paper portfolios; no venue execution capability."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from ai_trading_lab.paper_execution.models import (
     SimulationPolicy,
     decimal_amount,
 )
+from ai_trading_lab.paper_execution.replay import ReplayManifest
 
 portfolios = Table(
     "paper_portfolios",
@@ -250,6 +251,8 @@ class PaperStore:
         cash_step: Decimal,
         initial_cash: Decimal,
         policy: SimulationPolicy,
+        *,
+        replay_manifest: ReplayManifest | None = None,
     ) -> PortfolioState:
         state, _ = open_portfolio(portfolio_id, cash_unit, cash_step, initial_cash)
         config: dict[str, object] = dict(
@@ -258,6 +261,10 @@ class PaperStore:
             initial_cash=str(initial_cash),
             policy=policy.model_dump(mode="json"),
         )
+        if replay_manifest is not None:
+            config["replay_manifest"] = ReplayManifest.model_validate(
+                replay_manifest.model_dump(mode="json")
+            ).model_dump(mode="json")
         async with self.engine.begin() as connection:
             added = await connection.scalar(
                 insert(portfolios)
@@ -398,7 +405,9 @@ class PaperStore:
     ) -> Effect:
         at = clock(at)
         async with self.engine.begin() as connection:
-            history, _ = await self._load(connection, portfolio_id)
+            history, config = await self._load(connection, portfolio_id)
+            if "research_run_id" in config:
+                raise ValueError("Research portfolio is immutable")
             command_id = uuid5(portfolio_id, kind + ":" + key)
             old = history.effects.get(command_id)
             if old is not None:
@@ -416,7 +425,9 @@ class PaperStore:
     ) -> OrderReceipt:
         # Duplicate detection/result selection occur under the same portfolio lock.
         async with self.engine.begin() as connection:
-            history, _ = await self._load(connection, intent.portfolio_id)
+            history, config = await self._load(connection, intent.portfolio_id)
+            if "research_run_id" in config:
+                raise ValueError("Research portfolio is immutable")
             command_id = uuid5(intent.portfolio_id, "order:" + intent.idempotency_key)
             old = history.effects.get(command_id)
             if old is not None:

@@ -115,3 +115,12 @@ locks serialize spending/selling and idempotent results. Accepted/reserved/fill/
 release events commit atomically; IOC leaves no resting orders. No network client
 or venue execution adapter is introduced. [ADR-0007](adr/0007-paper-execution-accounting.md)
 records explicit cost-basis, rounding, fixture-only and bounded recovery semantics.
+
+
+## M4 offline research boundary
+
+Versioned rules produce proposals/abstentions from immutable chronological tapes;
+a separate runner owns deterministic sizing and routes every intent through the
+existing M3 History engine. ResearchStore atomically persists the entire run and
+ledger. Default paper scenarios stay FIXTURE-only; ADR-0008 describes the bounded,
+raw-capture-derived REPLAY extension. No AI, worker or live adapter is introduced.

@@ -15,6 +15,7 @@ dependencies = [
 [project.scripts]
 atl-data = "ai_trading_lab.market_data.cli:main"
 atl-paper = "ai_trading_lab.paper_execution.cli:main"
+atl-backtest = "ai_trading_lab.backtesting.cli:main"
 
 [dependency-groups]
 dev = [

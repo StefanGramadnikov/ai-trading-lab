@@ -4,14 +4,18 @@
 
 ## Current state
 
-- **Milestone:** M3 deterministic paper execution implemented and locally verified;
-  shipping/hosted CI pending. The Docker blocker resolved after the user suggested
-  retrying following possible laptop sleep. M2 merged PR #3 as `d52da05`.
+- **Milestone:** M3 deterministic paper execution shipped in PR #4; merge/M4
+  approval pending. Implementation push and PR CI passed on `d5ea8d3`; final
+  documentation-head checks are verified in PR #4 before handoff. The earlier
+  Docker blocker resolved after retrying. M2 merged PR #3 as `d52da05`.
 - **Authorization:** user “execute the next phase” approved the presented M3 plan.
   DEC-032 and document 19 record scope. `/ship` is still required for staging,
-  commits, pushes and PR changes; merge/M4/live activity remain separate gates.
+  commits, pushes and PR changes; the user subsequently invoked ship for M3.
+  Merge/M4/live activity remain separate gates.
 - **Branch:** `feature/m3-paper-execution`, from merged `origin/main` (`d52da05`).
-  All M3 changes are local/uncommitted. No PR opened or external setting changed.
+  Implementation `d5ea8d3` is pushed in
+  [PR #4](https://github.com/StefanGramadnikov/ai-trading-lab/pull/4).
+  No merge, M4 work or external repository setting change was performed.
 - **Safety:** PAPER_ONLY, FIXTURE scenarios only, no financial credentials, orders
   to venues, wallets, paid APIs, strategies, AI runtime or new infrastructure.
 
@@ -89,6 +93,8 @@ Historical M2 records below retain their original verification dates and do not
 establish M3 test success.
 
 ## M3 local verification completion — 2026-10-19
+
+Development handoff before the later explicit ship invocation recorded below.
 
 After the user suggested retrying following possible laptop sleep, Docker's Unix
 socket `_ping` returned OK and the dedicated validation PostgreSQL became healthy.
@@ -315,7 +321,7 @@ it does not establish M2 hosted CI or authorize later milestones.
 | M1 Foundation | COMPLETE / MERGED | PR #1; merge `f9d0689`; branch and PR CI passed on `5f0f029` |
 | Development workflow | MERGED | PR #2, merge `aba5f5d`; explicit ship/review/repair lifecycle |
 | M2 Market data | MERGED | PR #3, merge d52da05; final head d4ff5a5 passed push/PR CI |
-| M3 Paper execution | LOCAL VERIFIED / SHIPPING PENDING | 410 tests, 95.57% coverage; PostgreSQL/container/fixture checks pass; hosted CI pending |
+| M3 Paper execution | SHIPPED / MERGE PENDING | PR #4; 410 tests, 95.57% coverage; implementation push/PR CI passed; verify exact final head in PR |
 | M4–M9 | NOT STARTED | Separate approval required |
 | M10 live | BLOCKED | Separate authorization required |
 
@@ -525,3 +531,43 @@ implementation repair and Docker incident remain recorded as history.
 This entry is prepared for the authorized commit/push/PR. Hosted CI is not claimed
 before observing the pushed head; its actual result is recorded in the PR handoff.
 No merge, deployment, live trading, credentials or M4 work is authorized.
+
+
+## M3 shipping evidence — 2026-10-19
+
+Committed/pushed `d5ea8d36036ca040e8922c50e66ded50927a5760` and opened
+[PR #4](https://github.com/StefanGramadnikov/ai-trading-lab/pull/4) into main.
+The 28 staged files matched the independently reviewed working files and
+`git diff --cached --check` passed. Manual intended-diff inspection and a limited
+redacted token/private-key pattern check found no credentials or unrelated files.
+No dedicated scanner/security-audit result is claimed.
+
+Observed hosted CI for that exact implementation head:
+
+- [Push run 39229139756](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39229139756): completed SUCCESS.
+- [PR run 39229176936](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39229176936): completed SUCCESS.
+
+Both ran locked dependency sync, `make check`, Compose validation, Linux production
+build/startup, migration and HTTP health checks. No shipping code/CI repair was
+required. The documentation-only follow-up triggers new runs; final-head status
+is verified on PR #4 before handoff, not inferred from these earlier runs.
+
+Shipping also repeated a fresh-portfolio variant of the synthetic CLI fixture twice
+inside the production container: both exit 0, reconciled true, unchanged final
+balances, holdings and sequence. Validation services were stopped with volumes and
+fixture data preserved. No real-market execution or performance result is claimed.
+
+The fresh independent shipping review returned PASS without blocking findings;
+it did not rerun parent-owned automated checks. Accounting/model bounds, fixture-only
+quotes, per-unit cash/asset separation and unapproved operational risk profiles
+remain as documented in ADR-0007. No paid API, credentials, live execution, strategy,
+AI runtime, deployment, repository-setting change or merge was introduced.
+
+Next manual step: review and squash-merge PR #4 after exact-head checks pass.
+After merge, obtain approval to prepare the M4 strategies/benchmarks plan.
+
+
+The documentation-only shipping follow-up repeated the full local `make check`:
+PASS, 410 tests, 95.57% coverage, Ruff/mypy PASS. No application/test/CI logic
+changed after independent shipping review. Nonblocking GitHub runner/action
+deprecation notices were observed; no CI upgrade was included in M3.

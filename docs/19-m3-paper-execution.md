@@ -61,7 +61,7 @@ prices are rejected, not upgraded to executable quotes. Fully qualified syntheti
 fixtures validate engineering behavior; no fill realism/profitability is claimed.
 
 
-## Review repair and current verification
+## Review repair and development verification
 
 Independent review round 1 found nominal cost checks missing rounded/depth costs,
 and incomplete recovery checks for missing orders/control state/consumption.
@@ -72,3 +72,12 @@ runtime. Final full gate: 410 tests, 95.57% coverage, Ruff/mypy PASS. Migration
 round trips/schema consistency, production container/health and twice-run fixture
 CLI checks PASS. Document 13 records exact commands and historical incident.
 Hosted CI remains pending explicit /ship; no commit/push/PR or M4 work is authorized.
+
+
+## Shipping handoff
+
+The user explicitly invoked the ship skill. Implementation `d5ea8d3` is pushed in
+[PR #4](https://github.com/StefanGramadnikov/ai-trading-lab/pull/4), with independent
+shipping review PASS and implementation push/PR CI SUCCESS. Earlier statements
+about uncommitted/pending shipping describe development snapshots. The final PR
+head is checked separately before handoff; merge and M4 require separate approval.

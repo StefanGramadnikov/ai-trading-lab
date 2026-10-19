@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 3 — deterministic paper execution locally verified; shipping pending.
+> **Status:** Milestone 3 — deterministic paper execution shipped in PR #4; merge pending.
 > **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

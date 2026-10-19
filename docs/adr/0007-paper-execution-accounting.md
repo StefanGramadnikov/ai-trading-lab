@@ -1,6 +1,6 @@
 # ADR-0007 — Deterministic fixture execution and recoverable paper accounting
 
-- **Status:** Implemented under approved M3 plan; local verification passed, shipping pending
+- **Status:** Implemented under approved M3 plan; local verification passed; shipped in PR #4, merge pending
 - **Date:** 2026-10-19
 - **Authorization:** DEC-032; no approved architectural decision is superseded.
 

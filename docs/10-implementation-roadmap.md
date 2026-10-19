@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M2 read-only market data shipped in PR #3; merge pending. M3 requires approval.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M2 merged PR #3 (`d52da05`); M3 shipped in PR #4; merge and M4 approval pending.
 
 ## Rules for milestone execution
 
@@ -58,3 +58,11 @@ start M2 without user authorization. See progress log for local evidence.
 
 [Document 18](18-m2-market-data.md) records the scope, contract, ownership and acceptance
 cases before implementation. No new services or trading capability are authorized.
+
+
+## M3 execution plan — approved
+
+User approved the presented M3 plan with “execute the next phase”.
+[Document 19](19-m3-paper-execution.md) records the contracts, increments and
+acceptance gates before application changes. M4, shipping and live execution are
+not included in this approval.

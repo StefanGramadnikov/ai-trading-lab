@@ -38,6 +38,8 @@
 | DEC-030 | 2026-10-18: independent review and bounded repair are part of the development lifecycle | User approved standard substantive-change review and requested code → tests → fixes → retest with project-relevant skills. First step adds a reviewer role, manual ship skill, Python quality checklist and workflow docs. Maximum three automatic repair rounds; no permanent FE/design team, unattended monitor, external skill installation or M2 implementation in this step. |
 | DEC-031 | 2026-10-18: M2 market-data implementation authorized | User merged PR #2 and said “you can continue to the next phase”; implement the previously presented M2 plan on feature/m2-market-data. Public read-only adapters, validated storage, bounded CLI/replay and tests only; no execution, paid services or external skill installation. Commit/push/PR still require /ship. |
 
+| DEC-032 | M3 paper-execution implementation authorized | User: “execute the next phase”, following the presented M3 plan. Deterministic virtual accounting, IOC simulation, recovery, explicit fixture settlement and tests only. No live execution, strategies, AI, operational risk-profile activation or shipping authorization. See document 19. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -47,6 +49,7 @@
 
 - [ADR-0005: M1 foundation tooling](adr/0005-foundation-tooling.md)
 - [ADR-0006: M2 read-only market data and replay evidence](adr/0006-market-data-evidence.md)
+- [ADR-0007: M3 paper accounting and recovery](adr/0007-paper-execution-accounting.md)
 
 ## Proposed choices requiring later confirmation
 

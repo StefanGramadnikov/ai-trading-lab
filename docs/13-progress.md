@@ -1,25 +1,149 @@
 # 13 — Project progress and recovery log
 
-**Last updated:** 2026-10-18. Observed results only.
+**Last updated:** 2026-10-19. Observed results only.
 
 ## Current state
 
-- **Milestone:** M2 read-only market data implemented and shipped in PR #3;
-  merge and M3 approval pending. Implementation push CI passed; final PR checks
-  are reported on the exact head in GitHub. M1 merged PR #1 (`f9d0689`); workflow merged PR #2
-  (`aba5f5d`) as confirmed after the user's merge notification.
-- **Authorization:** User: “I approve. I also merged it already, you can continue
-  to the next phase.” DEC-031 authorizes M2 implementation. `/ship` is required
-  before staging/commit/push/PR; the user subsequently explicitly invoked the
-  ship skill for M2. M3 and merge remain separate approval gates.
-- **Repository:** private `StefanGramadnikov/ai-trading-lab`, existing origin
-  `https://github.com/StefanGramadnikov/ai-trading-lab.git`; no reinitialization.
-- **Branch:** `feature/m2-market-data`, based on merged `origin/main` (`aba5f5d`).
-  M2 implementation commit `625b5b0` is pushed in
-  [PR #3](https://github.com/StefanGramadnikov/ai-trading-lab/pull/3).
-  This documentation follow-up records observed shipping evidence.
-- **Safety:** PAPER_ONLY. No wallets, financial credentials, paid APIs, order paths,
-  strategies, AI runtime or new infrastructure. Provider descriptions are untrusted.
+- **Milestone:** M3 deterministic paper execution shipped in PR #4; merge/M4
+  approval pending. Implementation push and PR CI passed on `d5ea8d3`; final
+  documentation-head checks are verified in PR #4 before handoff. The earlier
+  Docker blocker resolved after retrying. M2 merged PR #3 as `d52da05`.
+- **Authorization:** user “execute the next phase” approved the presented M3 plan.
+  DEC-032 and document 19 record scope. `/ship` is still required for staging,
+  commits, pushes and PR changes; the user subsequently invoked ship for M3.
+  Merge/M4/live activity remain separate gates.
+- **Branch:** `feature/m3-paper-execution`, from merged `origin/main` (`d52da05`).
+  Implementation `d5ea8d3` is pushed in
+  [PR #4](https://github.com/StefanGramadnikov/ai-trading-lab/pull/4).
+  No merge, M4 work or external repository setting change was performed.
+- **Safety:** PAPER_ONLY, FIXTURE scenarios only, no financial credentials, orders
+  to venues, wallets, paid APIs, strategies, AI runtime or new infrastructure.
+
+## M3 implementation and initial verification — 2026-10-19
+
+Snapshot before runtime recovery. The blocked/not-run statuses in this section
+are historical; the completion entry below records the later observed results.
+
+Implemented the approved increments in `paper_execution/`:
+
+- Immutable bounded models, UTC/Decimal validation, canonical identities, explicit
+  policy and price/quantity/cash quanta. Binary floats/nonfinite amounts reject.
+- Pure IOC depth/spot simulation, conservative rounding, actual rounded-cost gate,
+  finite shared spot/per-side book capacity, latency/expiry/freshness checks.
+- Balanced per-unit journals, available-cash admission, weighted cost basis,
+  gross P&L/fees separated, position limits, pause and per-outcome win/loss/void.
+- Authoritative command replay reconstructs economics, controls and provenance;
+  all order/fill, journal, event, liquidity/instrument and portfolio projections
+  must match before another command. PostgreSQL portfolio locks and atomic writes
+  implement duplicate/conflict protection; this database behavior is not yet tested.
+- New migration `0003_paper_execution` adds eight tables; old migrations unchanged.
+  Alembic target metadata includes them. Existing head assertion advanced to M3.
+- Bounded `atl-paper run ...` CLI and explicit nonoperational JSON fixture. Existing
+  database configuration reused; no new dependency or service. Each command commits
+  independently. Missing/stale/partial M2 data never becomes qualified execution.
+- 170 additional collected cases: 151 unit cases plus 19 PostgreSQL integration
+  cases, including concurrency, rollback, restart, projection deletion/corruption,
+  consumption reset and scenario repeatability. Integration cases are NOT RUN.
+
+Observed checks (final local code):
+
+| Command/check | Result |
+| --- | --- |
+| `UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache /private/tmp/ai-trading-lab-tools/bin/uv sync --locked --offline` | PASS; existing package rebuilt with atl-paper entry, no dependency addition |
+| `.venv/bin/ruff format --check .` | PASS; 79 files |
+| `.venv/bin/ruff check .` | PASS |
+| `.venv/bin/mypy` | PASS; 48 files |
+| `.venv/bin/pytest tests/unit tests/contract -q` | PASS; 381 tests |
+| `.venv/bin/pytest --collect-only -q` | 410 collected; collection is not execution evidence |
+| `.venv/bin/alembic upgrade head --sql > /private/tmp/atl-m3-migration.sql` | PASS offline SQL generation only; no PostgreSQL migration claim |
+| `.venv/bin/atl-paper --help` | PASS; packaged offline command |
+| Pure supplied fixture through History/projections | PASS; synthetic 1-unit holding, basis 10.01 USD, fees 0.02 USD, remaining cash 989.97 USD; not a market or profit result |
+| Local Markdown link targets; `git diff --check` | PASS |
+| Independent code review after repair round 1 | PASS; code-only, not required-runtime/test certification |
+| `make check` / all PostgreSQL tests / migration round trip / schema drift | BLOCKED / NOT RUN; local Docker health endpoint times out |
+| Production image/startup/CLI/HTTP health | BLOCKED / NOT RUN for M3; same runtime issue |
+| Hosted CI / dedicated scanners / trading performance | NOT RUN; no ship invocation, no dedicated scanner or performance experiment |
+
+Independent initial review found three P1 defects: nominal cost admission missed
+rounded fees/depth costs; recovery accepted missing order/fill records or changed
+pause state; liquidity counters were not reconciled against history. Repair round
+1 added effective post-rounding cost checks and authoritative command replay. New
+regression cases cover tiny fees/deep books and missing/corrupt order, control,
+settlement, event and capacity projections. Independent in-memory probes accepted
+intact history and blocked those corruptions, then returned code-review PASS.
+Reviewer made no edits or external calls and ran no write-producing tests. No
+separate enforced read-only sandbox or full-gate pass is claimed.
+
+Runtime blocker: `orbctl status` says Running, but Docker `_ping` over the configured
+OrbStack Unix socket repeatedly times out after five seconds. The dedicated
+`docker compose -p atl-m1-validation up -d --wait db` request has not completed.
+The user was asked to check/resume OrbStack. No global runtime restart, unrelated
+container/service change, database deletion, replacement infrastructure or weakened
+integration gate was used. Test port remains 55432; existing 5432 services untouched.
+
+Remaining authorized work after Docker recovers: real PostgreSQL focused tests and
+full `make check`; fix genuine failures within the three-round repair limit;
+re-review material fixes; migration/metadata and container/CLI/HTTP probes; update
+this log with actual results and stop validation services preserving volumes.
+M3 is not complete or ready to ship until those gates pass. No `/ship` requested
+while the required runtime checks remain blocked. No financial/manual account setup
+is needed; only local container runtime recovery is required.
+
+Historical M2 records below retain their original verification dates and do not
+establish M3 test success.
+
+## M3 local verification completion — 2026-10-19
+
+Development handoff before the later explicit ship invocation recorded below.
+
+After the user suggested retrying following possible laptop sleep, Docker's Unix
+socket `_ping` returned OK and the dedicated validation PostgreSQL became healthy.
+No global runtime restart, new infrastructure, credentials or destructive operation
+was needed. No application/test changes were needed after recovery.
+
+Full command:
+
+```bash
+ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache make check
+```
+
+| Check | Observed final result |
+| --- | --- |
+| `uv run --locked ruff format --check .` | PASS; 79 files |
+| `uv run --locked ruff check .` | PASS |
+| `uv run --locked mypy` | PASS; 48 files |
+| `uv run --locked pytest --cov=ai_trading_lab --cov-report=term-missing` | PASS; 410 tests, 95.57% statement/branch coverage, no warnings |
+| All 19 M3 PostgreSQL integration cases | PASS; concurrent spend/sell, duplicates, rollback, restart, settlement, corruption/deleted rows, depth reset and CLI repeatability |
+| Isolated migration upgrade → downgrade → upgrade | PASS in full suite, head `0003_paper_execution` |
+| `ATL_POSTGRES_PORT=55432 ATL_API_PORT=58000 docker compose -p atl-m1-validation build api` | PASS |
+| `ATL_POSTGRES_PORT=55432 ATL_API_PORT=58000 docker compose -p atl-m1-validation up -d --wait api` | PASS; API/PostgreSQL healthy |
+| `docker compose -p atl-m1-validation exec -T api /app/.venv/bin/alembic upgrade head` | PASS |
+| `docker compose -p atl-m1-validation exec -T api /app/.venv/bin/alembic check` | PASS; no new upgrade operations detected |
+| HTTP `/health/live` and `/health/ready` on 127.0.0.1:58000 | PASS; 200, PAPER_ONLY, trading_ready false |
+| `docker compose -p atl-m1-validation exec -T api /app/.venv/bin/atl-paper run /dev/stdin < tests/fixtures/paper_scenario.json` twice | PASS; both exit 0, reconciled true, identical final state/sequence; no duplicate fill |
+| Markdown local targets and `git diff --check` | PASS |
+| Independent review | Code repair round 1 and final full-scope review PASS; no subsequent runtime/test logic changes |
+| Hosted CI and dedicated scanners | NOT RUN; M3 is uncommitted, no /ship invocation, no configured dedicated scanner |
+
+The container scenario is synthetic: opening 1000 virtual USD, one-unit holding,
+10.01 cost basis, 0.02 trading fees, 989.97 remaining cash. This is an engineering
+fixture, not a market price or performance observation. All observed/replayed
+market execution quotes remain refused by this M3 fixture harness. No live venue
+execution, provider credentials, funded wallets, paid APIs, operational risk-profile
+activation or strategies were introduced.
+
+Dedicated validation API/database services were stopped after checks; the named
+volume, existing test/application data and built image are preserved.
+
+Updated README, architecture/testing/roadmap/decisions, document 19 and ADR-0007
+with explicit accounting, bounded replay and nonoperational assumptions. Earlier
+runtime incident and initial failed review are preserved above. Final full-scope read-only review returned PASS with no blocking findings or scope
+expansion. The reviewer did not independently rerun the parent-owned automated
+checks. The final handoff uses the full actual gate, not the earlier unit-only result.
+
+Next authorized boundary: wait for a fresh user `/ship` invocation before staging,
+committing/pushing and opening the M3 PR; inspect hosted CI then. Merge/M4 require
+separate approval. No manual Docker/account/credential setup remains necessary.
 
 ## M2 implementation and evidence — 2026-10-18
 
@@ -196,8 +320,9 @@ it does not establish M2 hosted CI or authorize later milestones.
 | M0 committed | VERIFIED 2026-10-17 | Local commit `a58d674`; corrects initial handoff's unverified repo/commit state |
 | M1 Foundation | COMPLETE / MERGED | PR #1; merge `f9d0689`; branch and PR CI passed on `5f0f029` |
 | Development workflow | MERGED | PR #2, merge `aba5f5d`; explicit ship/review/repair lifecycle |
-| M2 Market data | SHIPPED / MERGE PENDING | PR #3; 240 tests, 96.00% coverage; implementation push CI passed; check final-head PR checks |
-| M3–M9 | NOT STARTED | Separate approval required |
+| M2 Market data | MERGED | PR #3, merge d52da05; final head d4ff5a5 passed push/PR CI |
+| M3 Paper execution | SHIPPED / MERGE PENDING | PR #4; 410 tests, 95.57% coverage; implementation push/PR CI passed; verify exact final head in PR |
+| M4–M9 | NOT STARTED | Separate approval required |
 | M10 live | BLOCKED | Separate authorization required |
 
 ## Hosted CI evidence — 2026-10-18
@@ -382,3 +507,67 @@ The documentation-only shipping follow-up repeated `make check`: PASS, 240 tests
 96.00% coverage, Ruff/mypy PASS. No application/test/CI logic changed after review.
 GitHub reported nonblocking runner/action deprecation notices; no CI dependency
 upgrades were included in M2. Validation service shutdown preserves the named volume.
+
+## M3 ship invocation — 2026-10-19
+
+The user explicitly selected the project ship skill. Approved scope is M3 only,
+branch `feature/m3-paper-execution`, base/head before shipping `d52da05`.
+Remote main remains at that baseline and no open M3 PR was found. No unrelated
+local changes were included in the reviewed scope.
+
+Shipping reran the complete `make check`: PASS, 410 tests, 95.57% statement/branch
+coverage, Ruff format/lint and strict mypy (48 files). Production build/startup,
+container Alembic upgrade/schema-drift check and HTTP health all passed. A fresh
+portfolio variant of the supplied synthetic fixture ran twice through the
+container CLI with identical final balances/holdings/sequence and reconciled true.
+Local Markdown targets and diff whitespace checks passed.
+
+A fresh independent AI shipping reviewer examined the complete tracked/untracked
+change set and returned PASS with no actionable blockers. No shipping repair was
+needed. Reviewer evidence is separate from the parent's automated checks, and no
+enforced separate read-only sandbox or dedicated scanner is claimed. The previous
+implementation repair and Docker incident remain recorded as history.
+
+This entry is prepared for the authorized commit/push/PR. Hosted CI is not claimed
+before observing the pushed head; its actual result is recorded in the PR handoff.
+No merge, deployment, live trading, credentials or M4 work is authorized.
+
+
+## M3 shipping evidence — 2026-10-19
+
+Committed/pushed `d5ea8d36036ca040e8922c50e66ded50927a5760` and opened
+[PR #4](https://github.com/StefanGramadnikov/ai-trading-lab/pull/4) into main.
+The 28 staged files matched the independently reviewed working files and
+`git diff --cached --check` passed. Manual intended-diff inspection and a limited
+redacted token/private-key pattern check found no credentials or unrelated files.
+No dedicated scanner/security-audit result is claimed.
+
+Observed hosted CI for that exact implementation head:
+
+- [Push run 39229139756](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39229139756): completed SUCCESS.
+- [PR run 39229176936](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39229176936): completed SUCCESS.
+
+Both ran locked dependency sync, `make check`, Compose validation, Linux production
+build/startup, migration and HTTP health checks. No shipping code/CI repair was
+required. The documentation-only follow-up triggers new runs; final-head status
+is verified on PR #4 before handoff, not inferred from these earlier runs.
+
+Shipping also repeated a fresh-portfolio variant of the synthetic CLI fixture twice
+inside the production container: both exit 0, reconciled true, unchanged final
+balances, holdings and sequence. Validation services were stopped with volumes and
+fixture data preserved. No real-market execution or performance result is claimed.
+
+The fresh independent shipping review returned PASS without blocking findings;
+it did not rerun parent-owned automated checks. Accounting/model bounds, fixture-only
+quotes, per-unit cash/asset separation and unapproved operational risk profiles
+remain as documented in ADR-0007. No paid API, credentials, live execution, strategy,
+AI runtime, deployment, repository-setting change or merge was introduced.
+
+Next manual step: review and squash-merge PR #4 after exact-head checks pass.
+After merge, obtain approval to prepare the M4 strategies/benchmarks plan.
+
+
+The documentation-only shipping follow-up repeated the full local `make check`:
+PASS, 410 tests, 95.57% coverage, Ruff/mypy PASS. No application/test/CI logic
+changed after independent shipping review. Nonblocking GitHub runner/action
+deprecation notices were observed; no CI upgrade was included in M3.

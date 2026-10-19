@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 2 — read-only market data shipped in PR #3; merge pending.
+> **Status:** Milestone 3 — deterministic paper execution shipped in PR #4; merge pending.
 > **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
@@ -134,6 +134,40 @@ supply (largest accounts rate-limited). Polymarket returned a transport
 `network_error`; public compatibility is unverified here. All four adapters have
 offline contract tests. See [M2 plan](docs/18-m2-market-data.md),
 [source evidence](docs/16-source-register.md) and [progress](docs/13-progress.md).
+
+## Paper execution fixtures (M3)
+
+M3 is an offline engineering harness; no venue orders or financial credentials.
+Apply `uv run --locked alembic upgrade head` to your local development database,
+then run the explicit synthetic scenario:
+
+```bash
+uv run --locked atl-paper run tests/fixtures/paper_scenario.json
+```
+
+It uses the existing `ATL_DATABASE_URL`/PAPER_ONLY configuration. No extra environment
+variables or Compose services are needed. The example defines test-only virtual
+capital, units, risk caps, fees, capacity and impact; those values are not approved
+operational risk profiles or real prices. Only FIXTURE quotes are accepted.
+
+Orders are long-only IOC limits, with deterministic rounding, fees, reservations,
+partial fills and cancellation of remaining quantity. Unknown/stale/future quotes,
+wrong identities/units and failed admission block fills. Each portfolio/snapshot
+consumes finite modeled capacity. Duplicate keys return durable results; changing
+an existing intent under the same key rejects. Commands commit independently; a
+later scenario failure does not erase earlier committed operations.
+
+The runner reads at most 1 MB/100 operations and always reconciles the final
+portfolio. Exit 0 means operations/reconciliation completed, 1 reports expected
+order rejection/expiry or unsuccessful reconciliation, and 2 reports invalid input
+or persistence failure. For a fresh independent scenario, use a new portfolio ID
+and update its intents consistently. Repeating the supplied unchanged scenario
+uses its existing portfolio and idempotency keys without adding fills.
+
+[The M3 plan](docs/19-m3-paper-execution.md) and
+[ADR-0007](docs/adr/0007-paper-execution-accounting.md) describe accounting, cost and
+recovery assumptions. M2 observations do not become executable merely by existing;
+realistic execution qualification and operational profile activation remain open.
 
 ## Development workflow
 

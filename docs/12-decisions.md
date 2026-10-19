@@ -40,6 +40,8 @@
 
 | DEC-032 | M3 paper-execution implementation authorized | User: “execute the next phase”, following the presented M3 plan. Deterministic virtual accounting, IOC simulation, recovery, explicit fixture settlement and tests only. No live execution, strategies, AI, operational risk-profile activation or shipping authorization. See document 19. |
 
+| DEC-033 | M4 strategy/backtesting implementation approved | User approved the presented M4 plan, including controlled qualified archived REPLAY without provenance relabeling. Rules-only baselines, immutable research runs, offline sizing/execution and benchmarks only. No live observed execution, paid data, AI, operational profile activation or shipping authorization. See document 20. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)

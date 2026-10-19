@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 3 — deterministic paper execution shipped in PR #4; merge pending.
+> **Status:** Milestone 4 — rules-only strategies and offline research verified locally; shipping for review.
 > **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
@@ -91,7 +91,7 @@ volume removal is required for normal development.
 
 M1 provides the foundation. M2 adds bounded public read-only DexScreener, Solana,
 Polymarket and Kalshi adapters, versioned evidence storage and offline replay.
-Strategies, AI agents, execution adapters, workers and dashboards remain deferred.
+M3 adds paper execution; M4 adds rules-only offline research. AI agents, live execution, workers and dashboards remain deferred.
 Only `PAPER_ONLY` is accepted.
 The repository is initialized with an `origin` remote; do not run `git init` again.
 No financial credentials are needed. Local database example passwords are not
@@ -168,6 +168,39 @@ uses its existing portfolio and idempotency keys without adding fills.
 [ADR-0007](docs/adr/0007-paper-execution-accounting.md) describe accounting, cost and
 recovery assumptions. M2 observations do not become executable merely by existing;
 realistic execution qualification and operational profile activation remain open.
+
+## Offline strategy research (M4)
+
+Apply migrations, then run an explicitly synthetic research tape:
+
+```bash
+uv run --locked atl-backtest run tests/fixtures/research_probability.json
+uv run --locked atl-backtest run tests/fixtures/research_momentum.json
+```
+
+These scenarios validate engineering, not market performance. They use the same
+`ATL_DATABASE_URL` and PAPER_ONLY configuration; no new environment variables,
+services or credentials are needed. Each run stores its complete tape, strategy,
+policy, decisions and M3 ledger atomically. Repeating unchanged input returns the
+verified result; use a new run ID and strategy version for a changed hypothesis.
+`code_version` is a declared source commit; `engine_hash` fingerprints the actual
+installed Python files, including local changes. Exit 0 means evaluation persisted,
+including expected abstentions/rejections; exit 2 means invalid input or persistence
+failure. Input is bounded to 2 MB/100 chronological frames.
+
+Reports compare cash on the same funding/window and separate gross realized P&L,
+fees and open holdings. NAV/ROI requires qualified full modeled liquidation;
+unavailable marks yield null. Operating costs and all-expenses profit are null.
+No runtime AI, parameter search or empirical investment result is implemented.
+
+Qualified archived REPLAY requires original source metadata/book captures and exact
+native identity, resolution description, times, depth and units. Only Polymarket
+books currently meet the structural parser requirements, with explicit generic
+`polymarket:unspecified_collateral` units; these are never interpreted as USD/EUR.
+This validates archive consistency, not authenticity or calibrated fills. Other M2
+sources remain ineligible where time/depth is missing. Ordinary `atl-paper` stays
+FIXTURE-only. See [M4 contracts](docs/20-m4-strategies-backtesting.md) and
+[ADR-0008](docs/adr/0008-offline-strategy-research.md).
 
 ## Development workflow
 

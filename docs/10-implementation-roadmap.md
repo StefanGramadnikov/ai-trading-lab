@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M2 merged PR #3 (`d52da05`); M3 shipped in PR #4; merge and M4 approval pending.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 plan approved and implementation underway.
 
 ## Rules for milestone execution
 
@@ -66,3 +66,10 @@ User approved the presented M3 plan with “execute the next phase”.
 [Document 19](19-m3-paper-execution.md) records the contracts, increments and
 acceptance gates before application changes. M4, shipping and live execution are
 not included in this approval.
+
+
+## M4 execution plan — approved 2026-10-19
+
+User approved [document 20](20-m4-strategies-backtesting.md), including qualified
+offline REPLAY through deterministic paper controls. Shipping, M5, deployment and
+live execution remain separately gated.

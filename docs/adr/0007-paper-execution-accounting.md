@@ -1,13 +1,13 @@
 # ADR-0007 — Deterministic fixture execution and recoverable paper accounting
 
-- **Status:** Implemented under approved M3 plan; local verification passed; shipped in PR #4, merge pending
+- **Status:** Implemented under approved M3 plan; local verification passed; PR #4 merged as `686f942`
 - **Date:** 2026-10-19
 - **Authorization:** DEC-032; no approved architectural decision is superseded.
 
 ## Decision
 
 Reuse Python/PostgreSQL without another service. The bounded offline `atl-paper`
-runner accepts explicitly labeled FIXTURE scenarios only. The paper service also
+runner accepts explicitly labeled FIXTURE scenarios only. At the M3 baseline, the paper service also
 rejects OBSERVED/REPLAY execution quotes: M2 samples are research evidence, not
 qualified execution inputs. No network client, credentials or venue-order interface
 exists in this package. Strategies and unattended operation remain later work.
@@ -74,3 +74,8 @@ inference is implemented; real contract payout/void semantics are not establishe
 Tests validate engineering invariants, not achievable fills, market access, legal
 eligibility or profitability. Real PostgreSQL/container results must be observed
 before declaring M3 complete. Shipping and merge remain separately authorized.
+
+
+M4 extension: [ADR-0008](0008-offline-strategy-research.md) permits immutable,
+qualified offline REPLAY registration. Ordinary fixture scenarios/default portfolios
+retain this ADR’s restriction; OBSERVED execution and live activity stay disabled.

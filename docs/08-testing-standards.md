@@ -173,3 +173,16 @@ fills/commands/events, altered pause/state and reset spot/prediction consumption
 An unavailable Docker/database is a blocker, never grounds to skip integration or
 call mocked tests a database pass. The same mandatory `make check` and shipping
 rules apply. No timing sleeps or public financial requests are required by tests.
+
+
+## M4 strategy/research acceptance cases
+
+The same full gate includes versioned strategy threshold/failure cases, chronological
+availability, exact outcome/resolution/units, raw replay qualification, no source-event
+depth refresh, deterministic sizing through M3 and explicit failed exits. Real
+PostgreSQL verifies atomic research+ledger writes, concurrent/restarted idempotency,
+version/input/code conflicts and corruption. Completed research portfolios refuse
+ordinary paper mutations; a coherently appended command also blocks repeat output.
+Reports require qualified full liquidation for NAV/ROI and retain unresolved holdings.
+Synthetic examples demonstrate engineering only; no provider authenticity,
+calibration or investment edge is established by a green test.

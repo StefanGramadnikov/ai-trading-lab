@@ -51,3 +51,13 @@ The guide cites Polymarket Gamma and Kalshi market metadata and gives sample val
 4. Add hybrid and multi-agent decision layers with matched-input ablation comparisons.
 
 No strategy can be called profitable until its actual, held-out net results and uncertainty support that statement.
+
+
+## M4 implementation
+
+The approved baseline families now have typed momentum/volume-exhaustion, supplied
+probability and cash implementations. All thresholds, ownership-screen choice and
+forecast provenance are explicit. Supplied calibration references are not verified
+calibration. Prediction resolution-description hashes must match exactly. See
+[the M4 contract](20-m4-strategies-backtesting.md) and ADR-0008; real-history
+validation and operational parameter selection remain pending.

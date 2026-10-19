@@ -28,6 +28,7 @@ from ai_trading_lab.paper_execution.models import (
     SimulationResult,
     decimal_amount,
 )
+from ai_trading_lab.paper_execution.replay import ReplayManifest
 from ai_trading_lab.paper_execution.simulation import simulate
 
 
@@ -79,6 +80,11 @@ class Effect:
 class History:
     def __init__(self, portfolio_id: UUID, config: dict[str, object]) -> None:
         self.policy = SimulationPolicy.model_validate(config["policy"])
+        self.replay_manifest = (
+            ReplayManifest.model_validate(config["replay_manifest"])
+            if "replay_manifest" in config
+            else None
+        )
         self.state, self.funding = open_portfolio(
             portfolio_id,
             str(config["cash_unit"]),
@@ -163,7 +169,9 @@ class History:
         native = identity(instrument)
         definition = self.definitions.get(native)
         reason = admit(self.state, intent, self.policy)
-        if quote.data_mode != DataMode.FIXTURE:
+        if quote.data_mode != DataMode.FIXTURE and not (
+            self.replay_manifest is not None and self.replay_manifest.allows(quote)
+        ):
             reason = "fixture_mode_required"
         if definition is not None:
             if definition[0] != instrument:

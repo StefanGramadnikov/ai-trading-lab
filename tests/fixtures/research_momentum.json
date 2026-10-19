@@ -1,0 +1,143 @@
+{
+  "schema_version": "1",
+  "run_id": "80000000-0000-4000-8000-000000000002",
+  "code_version": "686f94273dca730994ee2f37c73282a59036eecb",
+  "strategy": {
+    "kind": "momentum",
+    "version": "synthetic-momentum-v1",
+    "max_age_seconds": 60,
+    "lookback_seconds": 60,
+    "min_momentum_bps": "100",
+    "min_volume_ratio": "1",
+    "max_pool_age_seconds": 3600,
+    "min_liquidity": "100",
+    "max_owner_share": null,
+    "exit_volume_ratio": "0.2"
+  },
+  "simulation": {
+    "version": "NONOPERATIONAL-fixture-v1",
+    "fee_bps": "25",
+    "latency_ms": 0,
+    "max_age_seconds": 60,
+    "future_skew_seconds": 0,
+    "max_order_notional": "1000",
+    "max_position_notional": "1000",
+    "max_total_exposure": "1000",
+    "max_cost_bps": "10000"
+  },
+  "cash_unit": "USD",
+  "cash_step": "0.01",
+  "initial_cash": "100",
+  "order_notional": "10",
+  "order_ttl_seconds": 30,
+  "start_at_utc": "2026-10-19T00:00:00Z",
+  "end_at_utc": "2026-10-19T00:00:01Z",
+  "data_mode": "FIXTURE",
+  "frames": [
+    {
+      "quote": {
+        "snapshot_id": "80000000-0000-4000-8000-000000000021",
+        "instrument": {
+          "source": "solana",
+          "venue": "fixture",
+          "native_id": "token",
+          "kind": "spot",
+          "base_unit": "token:fixture",
+          "cash_unit": "USD",
+          "market_id": null,
+          "outcome": null,
+          "tick_size": "0.01",
+          "quantity_step": "0.01",
+          "cash_step": "0.01"
+        },
+        "event_time_utc": "2026-10-19T00:00:00Z",
+        "received_at_utc": "2026-10-19T00:00:00Z",
+        "quality": "VALID",
+        "data_mode": "FIXTURE",
+        "bids": [],
+        "asks": [],
+        "spot_price": "10",
+        "spot_capacity": "100",
+        "impact_bps": "0"
+      },
+      "at_utc": "2026-10-19T00:00:00Z",
+      "history": [
+        {
+          "instrument_key": "4f62f29fae6a4153262174e34a4bd9900123c9172842899bf243720256da24c0",
+          "data_mode": "FIXTURE",
+          "event_time_utc": "2026-10-18T23:59:00Z",
+          "available_at_utc": "2026-10-18T23:59:00Z",
+          "price": "9"
+        }
+      ],
+      "momentum": {
+        "instrument_key": "4f62f29fae6a4153262174e34a4bd9900123c9172842899bf243720256da24c0",
+        "data_mode": "FIXTURE",
+        "event_time_utc": "2026-10-19T00:00:00Z",
+        "available_at_utc": "2026-10-19T00:00:00Z",
+        "volume_6h": "100",
+        "volume_24h": "100",
+        "pool_created_at_utc": "2026-10-18T23:58:00Z",
+        "liquidity": "1000",
+        "liquidity_unit": "USD",
+        "verified_owner_share": null,
+        "ownership_basis": null
+      },
+      "forecast": null,
+      "resolution_terms_hash": null
+    },
+    {
+      "quote": {
+        "snapshot_id": "80000000-0000-4000-8000-000000000022",
+        "instrument": {
+          "source": "solana",
+          "venue": "fixture",
+          "native_id": "token",
+          "kind": "spot",
+          "base_unit": "token:fixture",
+          "cash_unit": "USD",
+          "market_id": null,
+          "outcome": null,
+          "tick_size": "0.01",
+          "quantity_step": "0.01",
+          "cash_step": "0.01"
+        },
+        "event_time_utc": "2026-10-19T00:00:01Z",
+        "received_at_utc": "2026-10-19T00:00:01Z",
+        "quality": "VALID",
+        "data_mode": "FIXTURE",
+        "bids": [],
+        "asks": [],
+        "spot_price": "11",
+        "spot_capacity": "100",
+        "impact_bps": "0"
+      },
+      "at_utc": "2026-10-19T00:00:01Z",
+      "history": [
+        {
+          "instrument_key": "4f62f29fae6a4153262174e34a4bd9900123c9172842899bf243720256da24c0",
+          "data_mode": "FIXTURE",
+          "event_time_utc": "2026-10-18T23:59:00Z",
+          "available_at_utc": "2026-10-18T23:59:00Z",
+          "price": "9"
+        }
+      ],
+      "momentum": {
+        "instrument_key": "4f62f29fae6a4153262174e34a4bd9900123c9172842899bf243720256da24c0",
+        "data_mode": "FIXTURE",
+        "event_time_utc": "2026-10-19T00:00:01Z",
+        "available_at_utc": "2026-10-19T00:00:01Z",
+        "volume_6h": "1",
+        "volume_24h": "100",
+        "pool_created_at_utc": "2026-10-18T23:58:00Z",
+        "liquidity": "1000",
+        "liquidity_unit": "USD",
+        "verified_owner_share": null,
+        "ownership_basis": null
+      },
+      "forecast": null,
+      "resolution_terms_hash": null
+    }
+  ],
+  "replay_manifest": null
+}

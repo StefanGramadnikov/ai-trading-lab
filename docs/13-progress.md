@@ -4,13 +4,13 @@
 
 ## Current state
 
-- **Milestone:** M4 rules-only strategies and offline research implemented locally;
-  independent re-review PASS. M3 merged as `686f942` (PR #4).
+- **Milestone:** M4 rules-only strategies and offline research shipped in PR #5;
+  merge/M5 approval pending. M3 merged as `686f942` (PR #4).
 - **Authorization:** user approved the presented M4 plan with “approve”. DEC-033
   and document 20 record scope including qualified offline REPLAY. The user subsequently invoked `/ship`, authorizing M4 final checks,
   commit/push/PR and CI; M5, merge and deployment remain separately gated.
 - **Branch:** `feature/m4-strategies-backtesting`, from merged main `686f942`.
-  M4 shipping is authorized and underway; see the shipping evidence below.
+  Implementation `bc7568f` is pushed in PR #5; shipping evidence follows below.
 - **Verification:** full `make check` PASS, 528 tests, 96.29% statement/branch
   coverage; production build/CLI/migration/drift/health PASS. Review initially
   found two correctness defects; repaired with regressions, re-review PASS.
@@ -699,3 +699,36 @@ without edits, tests, network or Git mutations. Review is separate from the pare
 checks above; no enforced separate read-only sandbox is claimed. No shipping repair
 was required. Commit/PR and hosted CI evidence follow after those actions complete. No merge,
 deployment, paid service, live execution or M5 work is authorized.
+
+
+## M4 shipping evidence — 2026-10-19
+
+Committed/pushed `bc7568f0b07d0a8780cc5f2c601e6b442b64e926` and opened
+[PR #5](https://github.com/StefanGramadnikov/ai-trading-lab/pull/5) into main.
+The 37 staged files exactly matched the independently reviewed intended files;
+indexed contents matched the verified working tree and `git diff --cached --check`
+passed. Manual intended-diff inspection and limited token/private-key patterns found
+no candidates. No dedicated scanner/security-audit result is claimed.
+
+Observed hosted CI for that exact implementation head:
+
+- [Push run 39263357586](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39263357586): completed SUCCESS.
+- [PR run 39263364229](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39263364229): completed SUCCESS.
+
+Both passed locked install, `make check`, Compose validation, Linux production
+build/startup, migration and HTTP health. No shipping/CI repair was required.
+The documentation-only follow-up triggers new runs; exact final-head CI status
+is checked on PR #5 before handoff rather than inferred from these earlier runs.
+Nonblocking GitHub Node/action and runner-image migration notices were observed;
+no CI/tooling upgrades were added to M4.
+
+The final documentation evidence update repeats `make check` before its commit.
+No application/test/migration logic changed after independent review. Dedicated
+validation services are stopped after checks, preserving their volumes/data.
+Engineering checks do not establish historical profitability, archive authenticity,
+calibrated forecasts/fills, operational risk profiles or an approved collateral FX
+mapping. No AI runtime, paid services, live execution, deployment or merge occurred.
+
+Next manual step: review and squash-merge PR #5 after exact-head checks pass.
+After merge, obtain approval to prepare the M5 AI/provider/agent implementation plan;
+no financial credentials or paid provider calls are required by this M4 handoff.

@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 4 — rules-only strategies and offline research verified locally; shipping for review.
+> **Status:** Milestone 4 — rules-only strategies and offline research shipped in PR #5; merge pending.
 > **Document version:** 1.2, 2026-10-18.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

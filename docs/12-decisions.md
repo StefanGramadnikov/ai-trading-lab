@@ -52,6 +52,7 @@
 - [ADR-0005: M1 foundation tooling](adr/0005-foundation-tooling.md)
 - [ADR-0006: M2 read-only market data and replay evidence](adr/0006-market-data-evidence.md)
 - [ADR-0007: M3 paper accounting and recovery](adr/0007-paper-execution-accounting.md)
+- [ADR-0008: M4 offline strategy research and qualified replay](adr/0008-offline-strategy-research.md)
 
 ## Proposed choices requiring later confirmation
 

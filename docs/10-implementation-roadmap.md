@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 plan approved and implementation underway.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 shipped in PR #5; merge and M5 approval pending.
 
 ## Rules for milestone execution
 

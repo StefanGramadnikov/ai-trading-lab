@@ -81,3 +81,12 @@ M4 local gate: 528 tests and 96.29% coverage, Ruff/mypy PASS. Container producti
 build, schema/head/drift, health and twice-repeated synthetic CLI examples PASS.
 Final independent re-review PASS after resolving two P1 findings; hosted CI requires `/ship`. See progress log
 for exact commands, initial failures, repairs and remaining empirical limitations.
+
+
+## Shipping status
+
+The user invoked the ship skill after implementation approval. M4 was committed as
+`bc7568f` and opened in [PR #5](https://github.com/StefanGramadnikov/ai-trading-lab/pull/5).
+Independent shipping review and both implementation-head hosted CI runs passed.
+The documentation follow-up head is checked on the PR before handoff; no merge,
+M5, deployment or live execution approval is included.

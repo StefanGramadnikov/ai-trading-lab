@@ -218,3 +218,18 @@ atomic rollback after inference, report/ledger/event/cost integrity and the actu
 fixture CLI process. Never run full test sessions concurrently on the same test DB.
 The complete `make check`, production migration/drift/replay/health checks and
 fresh independent review remain required. No test calls a paid provider.
+
+
+## M7 reporting acceptance
+
+Install locked development dependencies and Chromium with
+`uv run --locked playwright install chromium` (Linux CI uses `--with-deps`).
+The mandatory `make check` now includes `tests/e2e` through normal pytest discovery.
+Browser installation failure is a blocker, not a skip. Browser tests use actual
+loopback FastAPI and isolated PostgreSQL with synthetic cohorts; deliberate response
+overrides test empty/error/malicious-content states separately. No real Telegram
+or AI call occurs. Check access before data reads, exact decimal display, unknown
+values, export provenance/size, incompatible runtime refusal and read-only state.
+Telegram contract cases cover malformed/oversized/429/5xx/timeouts, recipient checks,
+no blind retries and secret-free errors; PostgreSQL covers claims/concurrency and
+restart uncertainty. Existing M1–M6 gates remain required.

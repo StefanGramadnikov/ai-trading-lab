@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import AsyncIterator, Iterable, Sequence
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, localcontext
 from typing import Literal
@@ -165,17 +166,12 @@ class BudgetStore:
                 raise ValueError("budget_policy_immutable")
 
     async def _load(
-        self, connection: AsyncConnection, budget_id: PyUUID
+        self, connection: AsyncConnection, budget_id: PyUUID, *, for_update: bool = True
     ) -> tuple[BudgetPolicy, list[tuple[_Call, ProviderResult | None]]]:
-        row = (
-            (
-                await connection.execute(
-                    select(budgets).where(budgets.c.budget_id == budget_id).with_for_update()
-                )
-            )
-            .mappings()
-            .one_or_none()
-        )
+        statement = select(budgets).where(budgets.c.budget_id == budget_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await connection.execute(statement)).mappings().one_or_none()
         if row is None:
             raise ValueError("budget_missing")
         policy = BudgetPolicy.model_validate(row["policy"])
@@ -384,10 +380,22 @@ class BudgetStore:
                 return result
             raise ValueError("call_missing")
 
-    async def costs_for_run(self, budget_id: PyUUID, run_id: PyUUID) -> tuple[RunCost, ...]:
+    @asynccontextmanager
+    async def _read_connection(
+        self, snapshot: AsyncConnection | None
+    ) -> AsyncIterator[AsyncConnection]:
+        if snapshot is not None:
+            yield snapshot
+        else:
+            async with self.engine.begin() as connection:
+                yield connection
+
+    async def costs_for_run(
+        self, budget_id: PyUUID, run_id: PyUUID, *, snapshot: AsyncConnection | None = None
+    ) -> tuple[RunCost, ...]:
         """Expose verified per-call estimates without promoting uncertain holds to costs."""
-        async with self.engine.begin() as connection:
-            _, history = await self._load(connection, budget_id)
+        async with self._read_connection(snapshot) as connection:
+            _, history = await self._load(connection, budget_id, for_update=snapshot is None)
             output: list[RunCost] = []
             for call, result in history:
                 if call.run_id != run_id:
@@ -404,9 +412,11 @@ class BudgetStore:
                 )
             return tuple(output)
 
-    async def summary(self, budget_id: PyUUID) -> dict[str, object]:
-        async with self.engine.begin() as connection:
-            policy, history = await self._load(connection, budget_id)
+    async def summary(
+        self, budget_id: PyUUID, *, snapshot: AsyncConnection | None = None
+    ) -> dict[str, object]:
+        async with self._read_connection(snapshot) as connection:
+            policy, history = await self._load(connection, budget_id, for_update=snapshot is None)
             unresolved = sum(_outcome(call, result)[1] for call, result in history)
             spent = _total(
                 (_outcome(c, r)[0] for c, r in history if not _outcome(c, r)[1]), Decimal(0)

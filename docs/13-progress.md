@@ -4,18 +4,14 @@
 
 ## Current state
 
-- **Milestone:** M5 PR #6 merged as `519ee2b`; M6 shipped for review in PR #7;
-  merge and M7 remain separately gated.
-- **Authorization:** user approved document 23 / DEC-036. Fixture AI only; no new
-  paid calls, operational risk activation, M7 or deployment approval. User has
-  now invoked `/ship` for M6; merge remains separately gated.
-- **Branch:** `feature/m6-experiments`, base `519ee2b`; implementation commit `e8bca37`.
-- **Verification:** full `make check` PASS, **846 tests, 96.62% coverage**,
-  Ruff/mypy (106 files), production build/migrations/replay/health and independent
-  re-review PASS. All M1–M5 cases remain required.
-- **Safety:** PAPER_ONLY; synthetic/qualified offline research only. No new paid
-  request or empirical profitability claim. Commit/push and PR creation were
-  authorized by the explicit M6 ship invocation.
+- **Milestone:** M6 PR #7 merged as `1b40185`; M7 implementation approved in document 24.
+- **Branch:** `feature/m7-reporting`, based on merged remote main; uncommitted.
+- **Scope:** local authenticated read-only dashboard/API/audit JSON, explicit
+  Telegram outbox commands, Playwright browser testing. No real Telegram delivery,
+  paid AI, unattended scheduler, deployment, M8 or ship approval.
+- **Verification:** M7 local acceptance PASS: 924 tests/96.35%, Ruff/mypy, production
+  migration/dashboard/export/replay/health and independent re-review. Shipping/CI
+  and real Telegram delivery remain NOT RUN; no message was sent.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -1142,3 +1138,138 @@ before handoff. Local validation services are stopped afterward, retaining volum
 Next manual step: user reviews and squash-merges PR #7 after its final checks are
 green. Then request approval to prepare the M7 plan; no merge, M7 implementation
 or deployment is authorized by this ship invocation.
+
+
+## M7 implementation — 2026-10-20
+
+User approved the presented six-step plan (“yes, carry on”). Verified PR #7 merged
+as `1b401856635e6906d6af73c5a1b21683a14f0c96`, fetched remote main and created
+`feature/m7-reporting` with a clean baseline. Recorded document 24 and DEC-037 before
+runtime edits. Main owns reporting/API/auth/CLI integration; narrow workers own only
+static dashboard/browser cases and notification boundary/migration/tests.
+
+Added bounded reporting reads, existing M6 verification reuse, historical identity
+listing with financial refusal, HTTP Basic from local secrets, exact JSON accounting
+and audit evidence, static responsive accessible dashboard and single-attempt durable
+Telegram outbox. Playwright 1.64.0/pyee 14.0.0 locked as development-only dependencies;
+Chromium installed locally, CI includes browser installation. No extra service.
+
+Initial focused reporting API: 13 PASS. Notification unit/contract worker checks:
+36 PASS; main owns subsequent complete verification. Initial integration run:
+25 PASS, 1 FAIL, 8 setup errors. Failure: read-only reporting invoked legacy
+`SELECT FOR UPDATE`; setup errors: Playwright sync loop prevented fixture
+`asyncio.run`. Repair round 1 adds an explicit no-row-lock option for snapshot reads
+while preserving existing write-path defaults; browser fixture seeding moves to a
+dedicated thread. Audit portfolio identities use M6's deterministic experiment/cell
+UUIDs. No assertions or tests weakened; repeated affected/full checks follow.
+
+Ruff/mypy currently PASS (123 Python source/test/migration files). Full gate,
+production acceptance and independent review remain pending. No real send or paid
+call; no staging/commit/push/PR actions.
+
+
+Repair round 2 fixed audit fill filtering through its order/portfolio relationship
+and deterministic primary-key ordering. Full gate then PASS: 921 tests, 96.31%
+coverage; Ruff and mypy (123 files) PASS. Production build/migration/schema parity
+and fresh four-cell lifecycle replay PASS, with calls 0/1/3/6 and synthetic cost
+0.04 once. This evidence predates round 3 and must be repeated after changes.
+
+Independent review found two P2 defects: notification scans reused keys but varied
+occurrence timestamps; configured non-ASCII passwords could never authenticate
+through FastAPI Basic parsing. Repair round 3 binds signal timestamps to durable
+checkpoint time and dated summary timestamps to UTC midnight, rejects scans before
+checkpoint, validates ASCII password support at startup, and adds regressions.
+Budget verification now borrows the same read-only snapshot connection without row
+locks; existing default writer locking remains. New PostgreSQL regression holds a
+budget writer lock while reporting reads, then repeats notification scans later
+without changing stored events. Mobile visual inspection improved wide audit tables
+with local horizontal scrolling. Final gate/production/re-review pending.
+
+
+## M7 local acceptance — 2026-10-20
+
+Final round-3 code passed the complete required command:
+
+```bash
+ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache make check
+```
+
+Observed **924 passed in 22.81s**, **96.35% statement/branch coverage**; Ruff format
+(162 Python files), Ruff lint and strict mypy (123 files) PASS. 78 cases added beyond
+M6's 846; none removed/skipped/weakened. Includes 8 actual Chromium browser cases
+(desktop/mobile × light/dark, authentication, unavailable/corrupt evidence, empty
+data, missing values and malicious HTML) plus real PostgreSQL notifications and
+read-only reporting/exports. Visual screenshot inspection confirmed responsive
+layout, exact values and locally scrollable wide tables.
+
+Fresh independent re-review: PASS, no remaining actionable findings. Reviewer
+ran only read-only in-memory probes; actual gate is parent-owned. Third/final
+repair round closed both P2 defects and borrowed one read-only budget snapshot.
+A nonblocking stale README replay-timestamp instruction was corrected as wording.
+No independent enforced sandbox is claimed.
+
+Production acceptance used only the existing dedicated project, preserving other
+local services (set ATL_POSTGRES_PORT=55432 and ATL_API_PORT=58000):
+
+- `docker compose -p atl-m1-validation up -d --build --wait api`: PASS with example
+  smoke-only reporting credentials; these are not personal secrets.
+- Container `/app/.venv/bin/alembic upgrade head` / `alembic check`: PASS,
+  head0009_notifications and no schema drift. Previously applied migrations unchanged.
+- Fresh four-cell fixture via container `atl-experiment`: PASS, lifecycle pause/
+  refusal/resume, original key replay, repeated identical reports and installed/host
+  source fingerprint equality. Calls0/1/3/6, synthetic shared expense0.04 once.
+- Actual HTTP: protected dashboard/assets/API/export deny unauthenticated access;
+  authenticated assets load with no-store headers; details match M6 exact economics;
+  two audit downloads are byte-identical with fills and without raw AI traces or
+  fixture responses. Both existing health endpoints PASS, PAPER_ONLY and
+  trading_ready false. Production excludes Playwright and pytest; packaged assets
+  exist. No production UI build service was introduced.
+- Container `atl-notify queue UUID --at 2026-10-20T01:00:00Z --warning-fraction 0.8`
+  and repeated scan at02:00:00Z returned the identical one pending summary;
+  `atl-notify show EVENT_KEY` remains pending. No send command or real Telegram
+  request was executed.
+
+Final verified runtime fingerprint:
+`587a0ec008f302c87f8643b73ef3b853b46722945b436ac65773072351b1063f`.
+Host smoke drivers/logs reside in `/private/tmp/atl-m7-*`; engineering fixtures
+are not real performance, real notification delivery or a multi-day operation.
+Local Markdown links, lock consistency and diff whitespace PASS. Dedicated secret/
+dependency scanners are not configured; no security-audit claim. The documentation
+evidence update repeats the full gate before handoff; dedicated validation services
+are stopped afterward with volumes retained.
+
+Remaining: real Telegram acceptance requires separate user approval and local
+bot token/target. Continuous scheduling, unattended safety monitoring, remote
+HTTPS/access hardening and multi-day paper operation belong to M8. No extra paid
+AI call, live trading, deployment, staging, commit, push or PR action occurred.
+Next safe step: user invokes `/ship` to authorize final verification, commit/push,
+PR creation and hosted CI. M8 requires a separately approved plan after merge.
+
+
+## M7 ship invocation — 2026-10-20
+
+User explicitly selected the repository ship skill. Verified private origin, clean
+base `1b401856635e6906d6af73c5a1b21683a14f0c96`, `feature/m7-reporting`, no existing
+open branch PR and exact 45-file approved scope. No unrelated files or `.env` are
+included. Shipping repeated full `make check`: PASS, **924 tests, 96.35% coverage**,
+Ruff format/lint and strict mypy (123 files). No shipping repair was needed locally.
+
+Fresh independent shipping review: PASS with no actionable findings across all
+45 tracked/untracked files. Reviewer ran no automated suite, DB or network calls;
+execution evidence remains implementer-owned. No separately enforced sandbox or
+dedicated security scanner is claimed. Scope fingerprint at review:
+`47a1d8226ba658c722e624b3882d846ce544b074f1cb05a7c6e20e813d0b74bb`.
+This evidence-only documentation update changes that full-scope hash, not runtime.
+
+Repeated production Compose build/startup, additive migration0009/schema parity,
+fresh four-cell lifecycle/replay and host/image source parity PASS. HTTP auth,
+packaged assets, exact M6 economics and byte-identical audit exports PASS. Explicit
+queue scans at01:00/02:00 reused one pending summary; no send/paid request occurred.
+Health remains PAPER_ONLY, trading_ready false. Runtime unchanged:
+`587a0ec008f302c87f8643b73ef3b853b46722945b436ac65773072351b1063f`.
+
+Lock consistency (55 packages), whitespace and local links PASS. Manual intended
+file inspection and limited credential patterns found no candidates; `.env` is
+ignored/excluded. This is not a security audit. Evidence update repeats the full
+gate before staging only these reviewed paths, then commit/push/PR and exact-head
+hosted CI follow when observed. Merge, real delivery, M8 and deployment remain gated.

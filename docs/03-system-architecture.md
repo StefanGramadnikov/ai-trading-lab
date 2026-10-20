@@ -134,3 +134,12 @@ The runner reuses M3 sizing/risk, M4 marking and M5 bounded inference reservatio
 Pure metrics/cost modules produce paired reports with missing evidence preserved.
 Manual pause applies between bounded supplied-tape cells; this is not an unattended
 scheduler or deployed safety controller. See document 23 and ADR-0010.
+
+
+## M7 local reporting boundary
+
+The existing FastAPI process serves authenticated read-only reporting routes and
+packaged static dashboard assets. Reporting reuses M6 replay checks in a read-only
+repeatable snapshot; historical runtime mismatches refuse financial detail/export.
+The PostgreSQL notification outbox has explicit bounded CLI preparation/delivery,
+no background worker. It cannot control experiments or trading. See document 24.

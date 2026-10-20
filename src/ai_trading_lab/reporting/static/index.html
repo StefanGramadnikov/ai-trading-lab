@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Trading Lab · Paper research</title>
+  <link rel="stylesheet" href="/dashboard/style.css">
+  <script src="/dashboard/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#experiments">Skip to experiments</a>
+  <header><div><p class="eyebrow">AI Trading Lab</p><h1>Paper research</h1></div><span class="badge">PAPER ONLY · Read only</span></header>
+  <main>
+    <p class="notice">Simulated portfolios and fixture/archived evidence. Results do not establish investment performance. This dashboard cannot place orders or change experiments.</p>
+    <section aria-labelledby="status-heading"><h2 id="status-heading">System status</h2><p id="system-status" role="status">Loading status…</p></section>
+    <div class="workspace">
+      <section id="experiments" aria-labelledby="experiments-heading"><div class="section-heading"><h2 id="experiments-heading">Experiments</h2><button id="refresh" type="button">Refresh</button></div>
+        <p id="list-status" role="status">Loading experiments…</p><ul id="experiment-list"></ul>
+        <nav aria-label="Experiment pages"><button id="previous" type="button" disabled>Previous</button><button id="next" type="button" disabled>Next</button></nav>
+      </section>
+      <section id="detail" aria-labelledby="detail-heading" aria-busy="false"><h2 id="detail-heading" tabindex="-1">Experiment detail</h2><p id="detail-status" role="status">Select an experiment to inspect its evidence.</p><div id="report"></div></section>
+    </div>
+  </main>
+  <footer>Local research interface · Decimal values are shown exactly as recorded. SVG curves are approximate visual aids; tables preserve source values.</footer>
+</body>
+</html>

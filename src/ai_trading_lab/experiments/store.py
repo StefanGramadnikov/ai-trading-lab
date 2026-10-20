@@ -146,7 +146,7 @@ class ExperimentStore:
             return await self._append(connection, config, checkpoint, key, payload)
 
     async def _load(
-        self, connection: AsyncConnection, eid: UUIDValue
+        self, connection: AsyncConnection, eid: UUIDValue, *, for_update: bool = True
     ) -> tuple[ExperimentConfig, dict[str, Any], list[Any]]:
         row = (
             (
@@ -239,17 +239,21 @@ class ExperimentStore:
                 )
                 is not None
             ):
-                await BudgetStore(self.engine).summary(cell.ai.budget.budget_id)
+                await BudgetStore(self.engine).summary(
+                    cell.ai.budget.budget_id, snapshot=connection if not for_update else None
+                )
         for index, saved in enumerate(checkpoint["reports"]):
             cell = config.cells[index]
             history, actual_config = await PaperStore(self.engine)._load(
-                connection, uuid5(eid, "cell:" + cell.cell_id)
+                connection, uuid5(eid, "cell:" + cell.cell_id), for_update=for_update
             )
             if actual_config != portfolio_config(
                 cell.profile.effective(cell.research)
             ) or projection_hash(history) != saved.get("paper_projection_hash"):
                 raise ValueError("experiment paper projection integrity failure")
-            await verify_cell_costs(self.engine, config, cell, saved)
+            await verify_cell_costs(
+                self.engine, config, cell, saved, snapshot=connection if not for_update else None
+            )
         return config, checkpoint, records
 
     @staticmethod

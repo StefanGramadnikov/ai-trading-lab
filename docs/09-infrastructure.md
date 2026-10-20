@@ -102,3 +102,26 @@ durable results rather than creating new funding/fills. The bounded command repl
 checks all projections before further execution; corruption blocks operation and
 requires investigation, never silent correction. The initial 1000-command history
 limit is for engineering scenarios and does not establish production scale.
+
+
+## M7 local reporting and notification operations
+
+The existing API serves `/dashboard` and `/api/reports/*`; no new service or broker.
+Reporting credentials are local environment secrets and never JavaScript storage.
+Both username and password are required; blank disables reporting while health
+contracts remain available. Compose publishes only loopback. HTTP Basic here is
+local only; authenticated HTTPS/VPN and deployment hardening remain M8 gates.
+
+The additive `0009_notifications` migration creates a durable outbound outbox.
+Queue/inspect/send/recover commands are explicit, bounded and have no schedule.
+A claimed delivery cannot resend after crash or uncertain response; terminal
+rejections are not automatically retried either. This prioritizes avoiding
+duplicate/ambiguous sends over guaranteed delivery. Delivery failure cannot stop
+deterministic risk controls. `finished_at_utc` is the supplied command timestamp,
+not a measured network-completion time. Recipient identity is stored as a hash.
+
+Telegram bot token and numeric chat ID stay in ignored local environment. Do not
+include credentials in commands or output; real delivery requires separate user
+approval. Development/CI only use injected HTTP transports. Daily summary is an
+explicit cumulative snapshot for a UTC date, not independently computed daily P&L.
+No always-on alerting or database-outage delivery guarantee is established in M7.

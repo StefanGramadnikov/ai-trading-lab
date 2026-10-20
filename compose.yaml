@@ -17,6 +17,8 @@ services:
   api:
     build: .
     environment:
+      ATL_REPORTING_USERNAME: ${ATL_REPORTING_USERNAME:-}
+      ATL_REPORTING_PASSWORD: ${ATL_REPORTING_PASSWORD:-}
       ATL_EXECUTION_MODE: ${ATL_EXECUTION_MODE:-PAPER_ONLY}
       ATL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_trading_lab}:${POSTGRES_PASSWORD:-local_example_only}@db:5432/${POSTGRES_DB:-ai_trading_lab}
       ATL_DATABASE_TIMEOUT_SECONDS: ${ATL_DATABASE_TIMEOUT_SECONDS:-2}

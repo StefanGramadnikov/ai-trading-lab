@@ -17,12 +17,18 @@ atl-data = "ai_trading_lab.market_data.cli:main"
 atl-paper = "ai_trading_lab.paper_execution.cli:main"
 atl-backtest = "ai_trading_lab.backtesting.cli:main"
 atl-ai = "ai_trading_lab.ai.cli:main"
+atl-notify = "ai_trading_lab.reporting.cli:main"
 atl-experiment = "ai_trading_lab.experiments.cli:main"
 
 [dependency-groups]
 dev = [
-  "pytest>=8.3,<10", "pytest-asyncio>=0.26,<2", "pytest-cov>=6,<8",
-  "ruff>=0.11,<1", "mypy>=1.15,<2", "pre-commit>=4,<5",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.26,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+  "mypy>=1.15,<2",
+  "pre-commit>=4,<5",
+  "playwright>=1.50,<2",
 ]
 
 [tool.uv]

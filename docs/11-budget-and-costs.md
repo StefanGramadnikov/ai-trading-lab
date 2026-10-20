@@ -62,3 +62,14 @@ Also report **consolidated platform economic net result**, subtracting shared op
 - FX conversion, VAT/tax treatment and attribution of shared costs.
 
 Before every purchase, record vendor, plan/price, billing unit, renewal, rate limits, data use/privacy conditions, user authorization and experiment budget impact.
+
+
+## M6 executable expense accounting
+
+Immutable expense records distinguish estimates/invoices and carry explicit unit,
+source, UTC time and synthetic/observed evidence. Linked invoices replace estimates;
+fixed allocation weights sum exactly one, with each effective expense counted once
+in consolidated totals. Verified M5 per-call costs are authoritative; unresolved
+holds have unknown amount. Missing amounts or exact dated FX produce unavailable
+results. All-expenses metrics also require declared complete expense coverage.
+M6 authorizes no purchases or additional paid calls. See ADR-0010.

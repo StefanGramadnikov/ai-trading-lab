@@ -205,3 +205,16 @@ Interrupted M5 runs must retain the complete configuration and runtime identity
 before any inference. Recovery rejects changed sizing/risk/code even if the final
 report never committed. Checkpoint migration tests preserve completed identities;
 missing checkpoints with recorded calls fail closed.
+
+
+## M6 experiment acceptance cases
+
+Test paired-dimension rejection, independent portfolios, explicit risk caps,
+threshold equality/UTC daily loss/qualified NAV, suspended entries with continuing
+exits, unavailable marks/statistics, direct/shared expense conservation, invoice
+replacement and missing FX/amounts. Real PostgreSQL checks lifecycle command
+idempotency, bounded concurrent cell advancement, full-config/runtime immutability,
+atomic rollback after inference, report/ledger/event/cost integrity and the actual
+fixture CLI process. Never run full test sessions concurrently on the same test DB.
+The complete `make check`, production migration/drift/replay/health checks and
+fresh independent review remain required. No test calls a paid provider.

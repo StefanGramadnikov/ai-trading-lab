@@ -70,3 +70,14 @@ Hard stop if risk/budget/data-security boundaries breached. Pause for integrity 
 ## Interpretation
 
 Positive 30-day results, especially from volatile memecoins, are **not** proof of future profitability. Backtests and paper results cannot guarantee live fills or returns. Report uncertainty, alternative assumptions and the limits of the available sample.
+
+
+## M6 executable comparison contract
+
+Declare architecture/activation/provider/risk as the single varying dimension.
+Shared tape, window, strategy, capital and baseline simulation must match exactly.
+M6 fixture AI is engineering evidence, not a paid-provider or calibrated-forecast
+experiment. Each cell has an independent ledger, immutable configuration and source
+identity. Minimum frames/fills are configured, not claims of statistical power;
+zero fills may be valid when the declared minimum is zero. Missing cost/valuation
+evidence blocks approval. APPROVED is an explicit evaluation event, not deployment.

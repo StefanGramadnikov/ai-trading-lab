@@ -45,6 +45,7 @@ from ai_trading_lab.paper_execution.store import (
     portfolios,
     projections,
 )
+from ai_trading_lab.run_identity import claim_run
 from ai_trading_lab.strategies.models import Abstain, TradeProposal
 from ai_trading_lab.strategies.rules import decide
 
@@ -149,8 +150,12 @@ class AIRunStore:
         payload = spec.model_dump(mode="json")
         engine_hash = runtime_fingerprint()
         async with asyncio.timeout(300), self.engine.begin() as connection:
-            lock_key = int(run_id.hex[:16], 16) - (1 << 63)
-            await connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+            try:
+                await claim_run(connection, run_id, "ai", run_id, spec.fingerprint)
+            except ValueError as error:
+                raise ValueError(
+                    "AI run start configuration or runtime is immutable; run already owned"
+                ) from error
             saved = (
                 (
                     await connection.execute(

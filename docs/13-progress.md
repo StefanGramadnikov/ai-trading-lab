@@ -4,17 +4,18 @@
 
 ## Current state
 
-- **Milestone:** M5 PR #6 merged as `519ee2b`; M6 local acceptance complete;
-  shipping/hosted CI and M7 remain separately gated.
+- **Milestone:** M5 PR #6 merged as `519ee2b`; M6 shipped for review in PR #7;
+  merge and M7 remain separately gated.
 - **Authorization:** user approved document 23 / DEC-036. Fixture AI only; no new
   paid calls, operational risk activation, M7 or deployment approval. User has
   now invoked `/ship` for M6; merge remains separately gated.
-- **Branch:** `feature/m6-experiments`, base `519ee2b`; work uncommitted.
+- **Branch:** `feature/m6-experiments`, base `519ee2b`; implementation commit `e8bca37`.
 - **Verification:** full `make check` PASS, **846 tests, 96.62% coverage**,
   Ruff/mypy (106 files), production build/migrations/replay/health and independent
   re-review PASS. All M1–M5 cases remain required.
 - **Safety:** PAPER_ONLY; synthetic/qualified offline research only. No new paid
-  request, empirical profitability claim, staging/commit/push or PR action.
+  request or empirical profitability claim. Commit/push and PR creation were
+  authorized by the explicit M6 ship invocation.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -1122,3 +1123,22 @@ expense, host/container source hashes match, health PAPER_ONLY/trading_ready fal
 This is engineering evidence, not market performance. No additional paid call.
 The documentation evidence update repeats the mandatory gate before commit;
 commit/PR and exact-head hosted CI evidence follow when observed.
+
+
+M6 shipped for review in [PR #7](https://github.com/StefanGramadnikov/ai-trading-lab/pull/7).
+Implementation commit `e8bca37f0bf629815d18d653b26d1106700cb090` passed both
+[push CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39428172362)
+and [PR CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39428198993):
+locked dependencies, full quality gate, production Compose build/startup, migrations
+and HTTP health. Final pre-commit local gate passed all 846 tests with 96.62%
+coverage. Exact staged files matched the reviewed 38-file manifest.
+
+CI emitted non-blocking notices about existing Node action runtimes and the
+`ubuntu-latest` image transition. No workflow/dependency upgrades were added to M6.
+No dedicated dependency/secret scanner is configured. This documentation-only
+shipping record repeats `make check`; its final pushed head must also pass CI
+before handoff. Local validation services are stopped afterward, retaining volumes.
+
+Next manual step: user reviews and squash-merges PR #7 after its final checks are
+green. Then request approval to prepare the M7 plan; no merge, M7 implementation
+or deployment is authorized by this ship invocation.

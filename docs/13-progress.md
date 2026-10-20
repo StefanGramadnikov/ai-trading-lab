@@ -4,12 +4,12 @@
 
 ## Current state
 
-- **Milestone:** M4 PR #5 merged as `fec599d`. M5 approved and implemented locally;
-  real-provider acceptance passed; ready for the separate `/ship` gate.
+- **Milestone:** M4 PR #5 merged as `fec599d`. M5 shipped in PR #6;
+  real-provider acceptance passed; user review/merge pending.
 - **Authorization:** approved document 21; OpenAI one-call smoke, US$1 total cap,
   local personal key configured. User subsequently invoked `/ship` for M5; M6,
   deployment and merge remain separately gated.
-- **Branch:** `feature/m5-ai-runtime`, base `fec599d`; work remains uncommitted.
+- **Branch:** `feature/m5-ai-runtime`, base `fec599d`; implementation `9034d3f` pushed in PR #6.
 - **Verification:** `make check` PASS, 689 tests, 96.34% statement/branch coverage,
   Ruff format/lint and mypy 86 files. Production/re-review/smoke evidence below.
 - **Safety:** PAPER_ONLY. Real inference smoke uses synthetic market data; no
@@ -897,3 +897,37 @@ source fingerprints match the host. Health PASS, PAPER_ONLY. Original approved
 smoke ledger still contains exactly one call; no additional paid request occurred.
 Final intended scope is 38 files including the new recovery checkpoint migration.
 Hosted CI evidence follows after authorized commit/push/PR creation.
+
+
+## M5 shipping evidence — 2026-10-20
+
+Committed/pushed `9034d3f81ddede3f8684170874a39c42f4fdc516` and opened
+[PR #6](https://github.com/StefanGramadnikov/ai-trading-lab/pull/6) into main.
+All 38 staged files matched the reviewed working bytes and intended manifest;
+`git diff --cached --check` passed. Manual diff inspection and limited credential
+patterns found no candidates; no dedicated scanner/security audit is claimed.
+No unrelated changes or secrets were included.
+
+Observed hosted CI for this exact implementation head:
+
+- [Push run 39401141487](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39401141487): completed SUCCESS.
+- [PR run 39401181900](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39401181900): completed SUCCESS.
+
+Both passed locked sync, full `make check`, Compose validation, Linux production
+build/startup, migration and HTTP health checks. No hosted CI repair was needed.
+The documentation-only follow-up repeats the full local gate; its exact final-head
+CI is verified on PR #6 before handoff, not inferred from these implementation runs.
+No runtime, tests, migrations or dependencies changed after independent re-review.
+
+The production fixture repeat/host fingerprint parity passed after repair round 1.
+The approved actual OpenAI smoke remains one call at USD0.0038525 conservative
+estimated expense; no paid call was added during shipping. Unknown billing/code
+changes still fail closed. Validation services are stopped with volumes and audit
+evidence preserved after checks.
+
+Remaining limits: synthetic integration does not establish genuine forecast
+calibration, strategy profitability, operational risk policies, all-expenses P&L,
+venue eligibility or unattended deployment. No live orders, merge or M6 occurred.
+
+Next manual step: review and squash-merge PR #6 after its exact-head checks pass.
+After merge, obtain approval to prepare the M6 costs and experiment-evaluation plan.

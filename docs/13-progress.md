@@ -1,22 +1,19 @@
 # 13 — Project progress and recovery log
 
-**Last updated:** 2026-10-19. Observed results only.
+**Last updated:** 2026-10-20. Observed results only.
 
 ## Current state
 
-- **Milestone:** M4 rules-only strategies and offline research shipped in PR #5;
-  merge/M5 approval pending. M3 merged as `686f942` (PR #4).
-- **Authorization:** user approved the presented M4 plan with “approve”. DEC-033
-  and document 20 record scope including qualified offline REPLAY. The user subsequently invoked `/ship`, authorizing M4 final checks,
-  commit/push/PR and CI; M5, merge and deployment remain separately gated.
-- **Branch:** `feature/m4-strategies-backtesting`, from merged main `686f942`.
-  Implementation `bc7568f` is pushed in PR #5; shipping evidence follows below.
-- **Verification:** full `make check` PASS, 528 tests, 96.29% statement/branch
-  coverage; production build/CLI/migration/drift/health PASS. Review initially
-  found two correctness defects; repaired with regressions, re-review PASS.
-- **Safety:** PAPER_ONLY; synthetic engineering scenarios and bounded qualified
-  offline REPLAY only. No venue orders, financial credentials, wallets, paid APIs,
-  AI runtime, operational profile activation or new infrastructure.
+- **Milestone:** M4 PR #5 merged as `fec599d`. M5 shipped in PR #6;
+  real-provider acceptance passed; user review/merge pending.
+- **Authorization:** approved document 21; OpenAI one-call smoke, US$1 total cap,
+  local personal key configured. User subsequently invoked `/ship` for M5; M6,
+  deployment and merge remain separately gated.
+- **Branch:** `feature/m5-ai-runtime`, base `fec599d`; implementation `9034d3f` pushed in PR #6.
+- **Verification:** `make check` PASS, 689 tests, 96.34% statement/branch coverage,
+  Ruff format/lint and mypy 86 files. Production/re-review/smoke evidence below.
+- **Safety:** PAPER_ONLY. Real inference smoke uses synthetic market data; no
+  model-quality, real-market performance or invoiced-cost claim.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -732,3 +729,205 @@ mapping. No AI runtime, paid services, live execution, deployment or merge occur
 Next manual step: review and squash-merge PR #5 after exact-head checks pass.
 After merge, obtain approval to prepare the M5 AI/provider/agent implementation plan;
 no financial credentials or paid provider calls are required by this M4 handoff.
+
+
+## M5 implementation and review repairs — 2026-10-20
+
+Scope: new typed `ai/` contracts, evidence, three bounded HTTP providers, fixture
+provider, durable budget/service, bounded hybrid/sequential/collaborative flows,
+immutable run store and CLI. Migration `0005_ai_runtime` adds budget/call/run tables;
+M4 sizing was extracted unchanged for reuse through M3 risk/accounting. Settings,
+`.env.example`, console entry point, metadata registration and documentation updated.
+No dependency, service, framework, scheduler or execution endpoint was added.
+
+Tests add 156 cases beyond M4's 528: provider schemas/errors/refusals/token and
+billing uncertainty, bounded orchestration, local key isolation, deterministic
+triggering, actual PostgreSQL concurrency, restart/replay, rollback, integrity and
+immutable-policy coverage. Tests never call paid APIs or load local activation.
+
+Exact required gate:
+
+```bash
+ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache make check
+```
+
+Observed PASS: `uv run --locked ruff format --check .`, `uv run --locked ruff check .`,
+`uv run --locked mypy` (85 files), and
+`uv run --locked pytest --cov=ai_trading_lab --cov-report=term-missing`:
+**684 passed, 96.34% coverage**, no warnings. Includes real isolated PostgreSQL
+migration downgrade/upgrade and schema checks. Locked dependency sync previously
+passed offline (53 packages, unchanged lockfile).
+
+Independent review is an AI agent in fresh context, not mandatory human review.
+Its behavioral read-only restrictions are not an enforced separate sandbox.
+First review found model-mismatch accounting; repair round 1 checks model/tier
+before retaining settleable usage, with contract and PostgreSQL regressions.
+That review hit a quota limit before final verdict. A fresh full review found
+partial fixture recovery indexing and unsupported billable tool accounting.
+Repair round 2 binds fixture responses to logical call positions including replay;
+unsupported OpenAI/Anthropic billing features now retain unknown usage/reservations.
+Regression tests interrupt between distinct role answers and prove correct restart,
+and exercise HTTP-to-budget unknown costs plus blocking subsequent calls. Initial
+new-test type/format failures were corrected; no cases skipped/deleted/weakened.
+Re-review and production/smoke evidence remain pending below.
+
+Limits: no unattended AI deployment, operational risk-policy selection, calibrated
+forecasts, genuine historical profitability or all-expenses evaluation. Costs are
+usage-derived USD estimates, separate from simulated cash. Unknown billing blocks
+new calls without automatic retry or administrative override. Hosted CI NOT RUN;
+requires explicit `/ship`. No Git staging/commit/push/PR update is authorized yet.
+
+
+Independent fresh-context re-review: PASS, no remaining actionable findings after
+repair round 2. Reviewer did not run tests, edit files, access external services or
+mutate Git/database state. Parent gate evidence is separate from review.
+
+Production validation (existing `atl-m1-validation`, DB 55432/API 58000):
+`docker compose -p atl-m1-validation up -d --build --wait api` PASS;
+container `/app/.venv/bin/alembic upgrade head` and `alembic check` PASS, no drift.
+A fresh-ID variant of `tests/fixtures/ai_hybrid.json` ran twice through production
+`atl-ai run`: identical complete reports, exactly one recorded zero-priced fixture
+call, one simulated fill, zero unresolved reservations. HTTP `/health/live` and
+`/health/ready` PASS; PAPER_ONLY, database available, trading_ready false.
+
+Before paid smoke, the fixed envelope `a0000000-0000-4000-8000-000000000010`
+had zero recorded calls and no budget row. Official OpenAI model documentation
+was rechecked 2026-10-20: gpt-5.6-terra supports Responses/structured output and
+reasoning none, USD2/M input and USD12/M output; cache writes 1.25x. The existing
+price snapshot remains within 24 hours; USD2.5/M conservative input is retained.
+No real call is automatically retried; the outcome is recorded next.
+
+
+## M5 real-provider acceptance — 2026-10-20
+
+After the full gate and independent PASS, executed exactly the approved fixed run:
+
+```bash
+ATL_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache uv run --locked atl-ai run tests/fixtures/ai_openai_smoke.json
+```
+
+PASS, exit 0: actual OpenAI `gpt-5.6-terra` response validated at
+2026-10-20T07:49:35.912187Z. Recorded 797 input / 155 output / 0 cached tokens,
+3482 ms monotonic elapsed. Model proposed buy at 0.50 on explicitly synthetic
+supplied evidence; deterministic M3 sizing/risk accepted one simulated fill.
+Response hash: `fc75f92ff7fe68576cd028f1f1cb96287b7825cf67f957101615d63e1d849035`.
+The durable ledger records one call, zero unresolved/remaining reservations and
+**USD0.0038525 conservative estimated cost**, inside the approved USD1 total cap.
+This uses USD2.5/M input rather than the ordinary USD2/M to cover potential cache
+writes; it is not an invoiced-cost statement. No financial credentials were used.
+
+Repeated the exact command: exit 0, entire report identical, call_count still 1;
+recorded response replayed without another inference call. The fixed envelope/run
+identities are retained; never regenerate them to bypass uncertainty or max_calls.
+The local personal key was used through settings, never printed/copied/committed.
+Other providers have fixture contract coverage only; no xAI/Anthropic paid activation.
+Real market data, forecasts, strategy profitability and unattended operation remain
+unverified and outside this synthetic provider-connectivity acceptance.
+
+M5 local acceptance is complete. Remaining: explicit `/ship` for final review/gate,
+commit/push/PR and hosted CI; user review/merge; separately approved M6 plan.
+Dedicated validation services are stopped with volumes and evidence preserved.
+
+
+Final documentation consistency review caught a stale README status banner;
+repair round 3 updates that banner to local acceptance complete/shipping pending.
+Code-review PASS is unchanged; no runtime/test logic changed. Final local links
+(33 Markdown files), `uv lock --check --offline` (53 packages) and
+`git diff --check` passed. Final full gate repeated after documentation updates.
+
+
+## M5 ship invocation — 2026-10-20
+
+The user explicitly selected `.agents/skills/ship/SKILL.md`, authorizing shipping
+of the approved M5 scope. Branch `feature/m5-ai-runtime`, base/head before commit
+`fec599dc61d30dc1afca9d306d2f1d629f593c21`; remote main matches that baseline.
+Repository privacy was verified and no existing open M5 PR or unrelated local
+change was found. Initial intended scope comprised 37 files; the recovery migration makes 38 files listed in the staged handoff.
+
+Shipping repeated the exact full `make check` command above: PASS, **684 tests,
+96.34% statement/branch coverage**, Ruff formatting/lint and strict mypy (85 files).
+Production build/startup, container Alembic upgrade/current (`0005_ai_runtime`)/
+schema-drift check and both health endpoints PASS. A fresh-ID synthetic AI fixture
+ran twice in the production container: identical entire reports, exactly one
+zero-priced fixture call, one simulated fill, no unresolved/held reservation.
+No additional paid request was made during shipping.
+
+All 33 Markdown files have valid local targets; `uv lock --check --offline` PASS
+(53 packages), `git diff --check` PASS. Manual intended-file inspection and a
+limited credential/private-key pattern check found no candidates or unrelated
+files. No dedicated secret/dependency scanner is configured; this is not a
+security audit. The local `.env` is ignored and excluded from the intended files.
+
+Fresh independent shipping review and hosted CI evidence follow when observed.
+The final documentation-only evidence update repeats the full gate before commit.
+No merge, deployment, M6, recurring provider spend or live trading is authorized.
+
+
+M5 shipping repair round 1: independent reviewer confirmed that final-transaction
+loss allowed changed sizing/controls under the same run ID because only requests,
+not the full run, were durable. Added a committed `ai_run_starts` checkpoint before
+provider admission, binding full configuration and source fingerprint. New migration
+0006 preserves the already applied 0005; completed development identities backfill,
+incomplete/malformed legacy records without a provable start fail closed. Added five
+PostgreSQL regression cases: interrupted sizing/risk/runtime changes rejected,
+exact recovery without another inference, deleted checkpoint refusal and populated
+migration preservation. Initial backfill failed on intentionally corrupted previous
+test reports; restricting backfill to valid source-hash shapes preserves those rows
+and lets runtime refuse them. No test or assertion was weakened.
+
+The actual OpenAI acceptance above predates this recovery-only shipping repair;
+provider adapter/HTTP behavior is unchanged. Its stored evidence is preserved.
+Changed runtime fingerprints intentionally refuse replay of old reports; no new
+paid request or replacement budget envelope was created to repeat acceptance.
+Final repaired gate/container/re-review evidence follows before commit.
+
+
+After shipping repair round 1, `make check` PASS: **689 tests, 96.34% coverage**,
+Ruff formatting/lint and strict mypy (86 files). Original M1–M4 cases remain required.
+The final count supersedes the initial shipping 684-test gate above.
+
+
+Final shipping re-review returned PASS after repair round 1, with no remaining
+findings across the full scope and surrounding M3/M4 paths. Reviewer ran only a
+read-only in-memory reproduction for the original defect, no automated tests,
+database/network access or mutations. Verification remains parent-owned.
+Rebuilt repaired image/startup PASS; Alembic head `0006_ai_run_starts` and schema
+drift check PASS. Repeated fresh production fixture reports are identical and
+source fingerprints match the host. Health PASS, PAPER_ONLY. Original approved
+smoke ledger still contains exactly one call; no additional paid request occurred.
+Final intended scope is 38 files including the new recovery checkpoint migration.
+Hosted CI evidence follows after authorized commit/push/PR creation.
+
+
+## M5 shipping evidence — 2026-10-20
+
+Committed/pushed `9034d3f81ddede3f8684170874a39c42f4fdc516` and opened
+[PR #6](https://github.com/StefanGramadnikov/ai-trading-lab/pull/6) into main.
+All 38 staged files matched the reviewed working bytes and intended manifest;
+`git diff --cached --check` passed. Manual diff inspection and limited credential
+patterns found no candidates; no dedicated scanner/security audit is claimed.
+No unrelated changes or secrets were included.
+
+Observed hosted CI for this exact implementation head:
+
+- [Push run 39401141487](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39401141487): completed SUCCESS.
+- [PR run 39401181900](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39401181900): completed SUCCESS.
+
+Both passed locked sync, full `make check`, Compose validation, Linux production
+build/startup, migration and HTTP health checks. No hosted CI repair was needed.
+The documentation-only follow-up repeats the full local gate; its exact final-head
+CI is verified on PR #6 before handoff, not inferred from these implementation runs.
+No runtime, tests, migrations or dependencies changed after independent re-review.
+
+The production fixture repeat/host fingerprint parity passed after repair round 1.
+The approved actual OpenAI smoke remains one call at USD0.0038525 conservative
+estimated expense; no paid call was added during shipping. Unknown billing/code
+changes still fail closed. Validation services are stopped with volumes and audit
+evidence preserved after checks.
+
+Remaining limits: synthetic integration does not establish genuine forecast
+calibration, strategy profitability, operational risk policies, all-expenses P&L,
+venue eligibility or unattended deployment. No live orders, merge or M6 occurred.
+
+Next manual step: review and squash-merge PR #6 after its exact-head checks pass.
+After merge, obtain approval to prepare the M6 costs and experiment-evaluation plan.

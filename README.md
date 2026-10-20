@@ -1,7 +1,7 @@
 # AI Trading Lab
 
-> **Status:** Milestone 4 — rules-only strategies and offline research shipped in PR #5; merge pending.
-> **Document version:** 1.2, 2026-10-18.
+> **Status:** Milestone 5 — local acceptance complete; shipping pending.
+> **Document version:** 1.3, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
 AI Trading Lab is a private, experimental platform for collecting market data, researching trading strategies, and comparing automated decision-making architectures. It initially targets **Solana memecoins** and **prediction markets** (Polymarket and potentially Kalshi). It is **not** a proven profitable trading strategy.
@@ -201,6 +201,62 @@ This validates archive consistency, not authenticity or calibrated fills. Other 
 sources remain ineligible where time/depth is missing. Ordinary `atl-paper` stays
 FIXTURE-only. See [M4 contracts](docs/20-m4-strategies-backtesting.md) and
 [ADR-0008](docs/adr/0008-offline-strategy-research.md).
+
+## AI development and integration smoke (M5)
+
+Local acceptance passed on 2026-10-20: 689 automated tests and one actual OpenAI
+response on synthetic market evidence; conservative estimated cost US$0.0038525.
+Exact rerun replayed the stored result without another API request. This verifies
+integration, not real-market strategy performance. See [progress](docs/13-progress.md).
+
+
+Apply migrations, then run deterministic synthetic inference through the same budget,
+proposal and paper-ledger path used by real adapters:
+
+```bash
+uv run --locked alembic upgrade head
+uv run --locked atl-ai doctor
+uv run --locked atl-ai run tests/fixtures/ai_hybrid.json
+```
+
+Real inference is disabled by default. To perform the separately approved personal
+OpenAI integration smoke, configure your ignored local `.env`:
+
+```dotenv
+ATL_EXECUTION_MODE=PAPER_ONLY
+ATL_AI_ENABLED=true
+ATL_OPENAI_API_KEY=replace_locally_with_your_personal_key
+```
+
+Never paste keys in chat, commit them or use company billing. Keep your local
+`ATL_DATABASE_URL` pointed at the intended development database. After the full
+quality gate and review pass, the approved command is:
+
+```bash
+uv run --locked atl-ai run tests/fixtures/ai_openai_smoke.json
+```
+
+This sends synthetic market evidence to a real OpenAI model, not a venue order.
+It validates actual integration, not real-market strategy performance. The fixture
+selects `gpt-5.6-terra`, standard service tier and reasoning disabled, with one call,
+a fixed US$1 envelope and a conservative maximum reservation of US$0.053248. Rates
+were checked on 2026-10-19: US$2 input / US$12 output per million tokens; reservation
+uses US$2.50 input to cover the documented cache-write multiplier. Pricing expires
+24 hours after its verification time; verify/update it explicitly before new calls
+if stale. Do not invent a new envelope to retry an uncertain outcome.
+
+The doctor command prints configuration booleans only. Repeating a completed run
+replays the recorded response without another paid call. An uncertain/mismatched
+billing outcome holds the reservation and blocks new inference pending investigation;
+M5 has no reconciliation override. All API usage costs remain estimates, not invoices.
+A valid abstention or risk rejection is a legitimate smoke result; never force a fill.
+
+Hybrid, sequential and bounded collaborative modes share deterministic candidate,
+price/risk and accounting controls. Periodic/event triggers process bounded supplied
+tapes; no unattended service or deployment is added. OpenAI, xAI and Anthropic have
+fixed-origin adapters and synthetic contract tests; only OpenAI spending is approved.
+See [M5 plan](docs/21-m5-ai-runtime.md), [provider contracts](docs/22-ai-provider-contracts.md)
+and [ADR-0009](docs/adr/0009-ai-runtime-and-cost-reservations.md).
 
 ## Development workflow
 

@@ -16,6 +16,7 @@ dependencies = [
 atl-data = "ai_trading_lab.market_data.cli:main"
 atl-paper = "ai_trading_lab.paper_execution.cli:main"
 atl-backtest = "ai_trading_lab.backtesting.cli:main"
+atl-ai = "ai_trading_lab.ai.cli:main"
 
 [dependency-groups]
 dev = [

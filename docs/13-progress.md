@@ -4,14 +4,15 @@
 
 ## Current state
 
-- **Milestone:** M6 PR #7 merged as `1b40185`; M7 implementation approved in document 24.
-- **Branch:** `feature/m7-reporting`, based on merged remote main; uncommitted.
+- **Milestone:** M6 PR #7 merged as `1b40185`; M7 shipped for review in PR #8.
+- **Branch:** `feature/m7-reporting`, base `1b40185`; implementation commit `8590379`.
 - **Scope:** local authenticated read-only dashboard/API/audit JSON, explicit
   Telegram outbox commands, Playwright browser testing. No real Telegram delivery,
-  paid AI, unattended scheduler, deployment, M8 or ship approval.
+  paid AI, unattended scheduler, deployment or M8 approval. Shipping was explicitly
+  authorized by the user; merge remains separate.
 - **Verification:** M7 local acceptance PASS: 924 tests/96.35%, Ruff/mypy, production
-  migration/dashboard/export/replay/health and independent re-review. Shipping/CI
-  and real Telegram delivery remain NOT RUN; no message was sent.
+  migration/dashboard/export/replay/health and independent re-review. Implementation push/PR CI PASS;
+  real Telegram delivery remains NOT RUN; no message was sent.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -1273,3 +1274,33 @@ file inspection and limited credential patterns found no candidates; `.env` is
 ignored/excluded. This is not a security audit. Evidence update repeats the full
 gate before staging only these reviewed paths, then commit/push/PR and exact-head
 hosted CI follow when observed. Merge, real delivery, M8 and deployment remain gated.
+
+
+## M7 shipping evidence — 2026-10-20
+
+Committed implementation `8590379f81ca9e475f68d38a5e2f8569b023eb6f`, pushed
+`feature/m7-reporting` and opened [PR #8](https://github.com/StefanGramadnikov/ai-trading-lab/pull/8).
+All 45 staged paths matched reviewed working bytes; cached whitespace PASS.
+Final local gate before commit PASS: 924 tests/96.35%, Ruff/mypy. Fresh shipping
+review PASS; no local or hosted repair was required for the implementation head.
+
+Exact implementation head hosted evidence:
+
+- [Push CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39442183508): SUCCESS.
+- [PR CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39442219783): SUCCESS.
+
+Both installed locked dependencies and Chromium, ran full `make check` including
+real browser/PostgreSQL tests, validated Compose, built/started production, applied
+migrations and probed HTTP health. Nonblocking notices concern existing Node
+action runtimes and the ubuntu-latest image transition; no unrelated upgrades.
+
+This documentation-only follow-up records the observed evidence and repeats the
+local full gate. Its actual final pushed head must also pass CI before handoff;
+final-head evidence is recorded in PR #8 and the handoff after observation. No
+runtime/test/dependency change after independent shipping review. Validation
+services are stopped with volumes retained after checks. No dedicated scanner,
+real Telegram message, extra paid AI call, deployment, live trading or merge.
+
+Next manual step: review and squash-merge PR #8 when final checks are green.
+Then request approval to prepare the M8 operational plan, including continuous
+paper scheduling, local multi-day smoke and deployment gates; do not begin it yet.

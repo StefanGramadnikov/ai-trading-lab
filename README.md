@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 7 — local acceptance verified; shipping pending.
+> **Status:** Milestone 7 — PR #8 open; checks verified, merge pending.
 > **Document version:** 1.4, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 merged PR #5 (`fec599d`); M5 merged PR #6 (`519ee2b`); M6 implementation approved under document 23.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 merged PR #5 (`fec599d`); M5 merged PR #6 (`519ee2b`); M6 merged PR #7 (`1b40185`); M7 implementation approved under document 24.
 
 ## Rules for milestone execution
 
@@ -87,3 +87,10 @@ recurring paid inference and live activity require separate authorization.
 User approved [document 23](23-m6-experiments.md): immutable paired experiments,
 explicit paper risk variants, lifecycle/recovery, performance and expense accounting.
 Fixture AI only; no new paid call, operational deployment, M7 or shipping approval.
+
+
+## M7 execution plan — approved 2026-10-20
+
+User approved [document 24](24-m7-reporting.md). M6 PR #7 merged as `1b40185`.
+Local authenticated reporting/dashboard/export, explicit notification commands and
+browser tests only. Real Telegram acceptance, shipping and M8 remain gated.

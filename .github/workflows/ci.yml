@@ -31,6 +31,7 @@ jobs:
           version: '0.11.7'
       - run: uv python install
       - run: uv sync --locked
+      - run: uv run --locked playwright install --with-deps chromium
       - run: make check
       - run: docker compose config --quiet
       - run: docker compose -p atl-ci up -d --build --wait

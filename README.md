@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 6 — PR #7 open; checks verified, merge pending.
+> **Status:** Milestone 7 — PR #8 open; checks verified, merge pending.
 > **Document version:** 1.4, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
@@ -322,3 +322,30 @@ skill; permanent frontend/design roles are deferred until dashboard work.
 - **BLOCKED:** must not proceed until a named gate is satisfied.
 
 **Authoritative project history:** repository documentation and reviewed Git commits. Chat conversations are helpful discussion context but are not a substitute for a committed specification.
+
+
+### M7 local reporting
+
+Set `ATL_REPORTING_USERNAME` and a personal `ATL_REPORTING_PASSWORD` (12+ ASCII characters)
+in ignored `.env`; leave both empty to disable reporting. Start the existing API
+and open `/dashboard` on its loopback port. Browser HTTP Basic credentials protect
+the dashboard, assets, `/api/reports/*` and audit downloads. Do not expose plaintext
+HTTP remotely; HTTPS/VPN deployment belongs to M8. Database health is not source
+freshness or trading readiness. Historical incompatible experiments are listed but
+financial detail/export is refused; use fresh synthetic cohorts with current code.
+
+Install browser tests: `uv run --locked playwright install chromium`. `make check`
+requires these browser tests and the isolated PostgreSQL test database.
+
+Notification preparation is explicit, never scheduled:
+`uv run --locked atl-notify queue EXPERIMENT_UUID --at UTC_TIMESTAMP --warning-fraction FRACTION`.
+This queues a cumulative snapshot summary and recorded halt/failure/budget warnings.
+Repeated scans of the same checkpoint on the same UTC date reuse stable events. Warnings use the
+explicit fraction of the recorded total budget; this does not change a risk limit.
+`atl-notify show EVENT_KEY` displays durable delivery state.
+`atl-notify send EVENT_KEY --at UTC_TIMESTAMP` requires separately approved real
+delivery and locally configured `ATL_TELEGRAM_ENABLED=true`, `ATL_TELEGRAM_BOT_TOKEN`
+and numeric `ATL_TELEGRAM_CHAT_ID`; no real send is part of development/CI.
+Interrupted delivery stays uncertain and is never retried automatically;
+`atl-notify recover-unknown EVENT_KEY --at UTC_TIMESTAMP` records that uncertainty.
+Notification outage cannot alter deterministic trading controls.

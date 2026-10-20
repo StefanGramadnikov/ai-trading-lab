@@ -8,9 +8,10 @@ from ai_trading_lab.ai.run_store import ai_runs
 from ai_trading_lab.backtesting.store import research_runs
 from ai_trading_lab.config import Settings
 from ai_trading_lab.experiments.store import experiments
+from ai_trading_lab.notifications.store import notifications
 
 metadata = ai_runs.metadata
-assert metadata is research_runs.metadata is experiments.metadata
+assert metadata is research_runs.metadata is experiments.metadata is notifications.metadata
 
 
 def run_migrations(connection: Connection) -> None:

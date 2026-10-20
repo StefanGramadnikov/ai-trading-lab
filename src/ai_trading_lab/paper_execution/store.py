@@ -286,19 +286,12 @@ class PaperStore:
             return history.state
 
     async def _load(
-        self, connection: AsyncConnection, portfolio_id: UUID
+        self, connection: AsyncConnection, portfolio_id: UUID, *, for_update: bool = True
     ) -> tuple[History, dict[str, object]]:
-        row = (
-            (
-                await connection.execute(
-                    select(portfolios)
-                    .where(portfolios.c.portfolio_id == portfolio_id)
-                    .with_for_update()
-                )
-            )
-            .mappings()
-            .one_or_none()
-        )
+        statement = select(portfolios).where(portfolios.c.portfolio_id == portfolio_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await connection.execute(statement)).mappings().one_or_none()
         if row is None:
             raise ValueError("Unknown paper portfolio")
         if content_hash(row["config"]) != row["config_hash"]:

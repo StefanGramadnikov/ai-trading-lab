@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, localcontext
 from uuid import uuid5
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ai_trading_lab.ai.budget import BudgetStore
 from ai_trading_lab.ai.evidence import build_evidence
@@ -49,10 +49,14 @@ def suspension(
     return None
 
 
-async def inference_expenses(engine: AsyncEngine, cell: Cell) -> tuple[Expense, ...]:
+async def inference_expenses(
+    engine: AsyncEngine, cell: Cell, *, snapshot: AsyncConnection | None = None
+) -> tuple[Expense, ...]:
     if cell.ai is None:
         return ()
-    rows = await BudgetStore(engine).costs_for_run(cell.ai.budget.budget_id, cell.research.run_id)
+    rows = await BudgetStore(engine).costs_for_run(
+        cell.ai.budget.budget_id, cell.research.run_id, snapshot=snapshot
+    )
     return tuple(
         Expense(
             expense_id="ai:" + str(row.call_id),
@@ -72,9 +76,16 @@ async def inference_expenses(engine: AsyncEngine, cell: Cell) -> tuple[Expense, 
 
 
 async def verify_cell_costs(
-    engine: AsyncEngine, config: ExperimentConfig, cell: Cell, output: dict[str, object]
+    engine: AsyncEngine,
+    config: ExperimentConfig,
+    cell: Cell,
+    output: dict[str, object],
+    *,
+    snapshot: AsyncConnection | None = None,
 ) -> None:
-    expected = [e.model_dump(mode="json") for e in await inference_expenses(engine, cell)]
+    expected = [
+        e.model_dump(mode="json") for e in await inference_expenses(engine, cell, snapshot=snapshot)
+    ]
     if output.get("inference_expenses") != expected:
         raise ValueError("experiment inference cost integrity")
 

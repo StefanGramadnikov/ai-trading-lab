@@ -48,6 +48,8 @@
 
 | DEC-036 | M6 experiments and cost evaluation implementation approved, 2026-10-20 | User approved the presented M6 plan. Immutable experiments/lifecycle, paired supplied tapes, explicit paper profile variants, cost/FX allocation, metrics and tests. Fixture AI only; no extra paid calls, operational risk activation, shipping, M7 or deployment. See document 23. |
 
+| DEC-037 | M7 reporting implementation approved, 2026-10-20 | User: “yes, carry on” after six-step plan. Local read-only FastAPI dashboard, authentication, bounded audit JSON, explicit Telegram outbox commands, Playwright development/browser CI tests. No real send, paid AI, scheduler, deployment or shipping; see document 24. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -65,7 +67,7 @@
 
 ## Proposed choices requiring later confirmation
 
-- UI library remains open; M1 Python, dependency manager, type checker, migrations and quality commands are resolved in ADR-0005.
+- UI choice resolved by DEC-037: lightweight FastAPI-served static dashboard; M1 tooling remains resolved in ADR-0005.
 - Numerical risk limits (the earlier profile percentage table is illustrative).
 - Precise AI periodic interval and experimental concurrency.
 - Dataset retention, VPS vendor, alerting credentials and shared-cost attribution.

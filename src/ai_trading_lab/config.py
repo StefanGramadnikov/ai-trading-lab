@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr(
         "postgresql+psycopg://ai_trading_lab:local_example_only@localhost:5432/ai_trading_lab"
     )
+    reporting_username: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$"
+    )
+    reporting_password: SecretStr | None = Field(default=None, min_length=12, max_length=200)
+    telegram_enabled: bool = False
+    telegram_bot_token: SecretStr | None = None
+    telegram_chat_id: SecretStr | None = None
     ai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     xai_api_key: SecretStr | None = None
@@ -31,3 +38,23 @@ class Settings(BaseSettings):
         except ArgumentError:
             raise ValueError("Invalid PostgreSQL URL") from None
         return value
+
+    @field_validator("reporting_username", "reporting_password", mode="before")
+    @classmethod
+    def empty_reporting_secret(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("reporting_password")
+    @classmethod
+    def ascii_reporting_password(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not value.get_secret_value().isascii():
+            raise ValueError("Reporting password must use ASCII characters")
+        return value
+
+    @model_validator(mode="after")
+    def reporting_credentials(self) -> "Settings":
+        if (self.reporting_username is None) != (self.reporting_password is None):
+            raise ValueError("Reporting username and password must be configured together")
+        if self.telegram_enabled and (not self.telegram_bot_token or not self.telegram_chat_id):
+            raise ValueError("Enabled Telegram requires local token and target")
+        return self

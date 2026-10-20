@@ -49,7 +49,7 @@
 
 ## Proposed, not yet approved as exact specification
 
-- M1 foundation tool selections are resolved in ADR-0005: Python 3.12.13, PostgreSQL, FastAPI, Compose, pytest, Ruff, mypy and GitHub Actions. UI library (including the earlier Streamlit proposal) remains OPEN for M7.
+- M1 foundation tool selections are resolved in ADR-0005: Python 3.12.13, PostgreSQL, FastAPI, Compose, pytest, Ruff, mypy and GitHub Actions. M7 UI choice is resolved by DEC-037: static HTML/CSS/JavaScript served by FastAPI.
 - Five-minute continuous-AI cadence: **placeholder**, not an optimized interval.
 - Conservative/moderate/aggressive example exposure limits from prior conversation: **illustrations**, not binding financial policy. Calibrate from simulations and document explicit approval.
 - A €5–15 monthly VPS cost and separate provider budgets: **estimates**, must be priced and reviewed before purchase.

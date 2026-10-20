@@ -13,8 +13,8 @@ import pytest_asyncio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+import ai_trading_lab.paper_execution.cli as cli
 from ai_trading_lab.market_data.models import DataMode, DataQuality
-from ai_trading_lab.paper_execution import cli
 from ai_trading_lab.paper_execution.models import (
     ExecutionQuote,
     OrderIntent,

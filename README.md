@@ -1,7 +1,7 @@
 # AI Trading Lab
 
-> **Status:** Milestone 5 — local acceptance complete; shipping pending.
-> **Document version:** 1.3, 2026-10-20.
+> **Status:** Milestone 6 — local acceptance verified; shipping pending.
+> **Document version:** 1.4, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
 AI Trading Lab is a private, experimental platform for collecting market data, researching trading strategies, and comparing automated decision-making architectures. It initially targets **Solana memecoins** and **prediction markets** (Polymarket and potentially Kalshi). It is **not** a proven profitable trading strategy.
@@ -201,6 +201,47 @@ This validates archive consistency, not authenticity or calibrated fills. Other 
 sources remain ineligible where time/depth is missing. Ordinary `atl-paper` stays
 FIXTURE-only. See [M4 contracts](docs/20-m4-strategies-backtesting.md) and
 [ADR-0008](docs/adr/0008-offline-strategy-research.md).
+
+## Paired paper experiments (M6)
+
+Local acceptance: 846 tests, 96.62% coverage, full quality gate, production replay
+and independent review passed. Shipping and hosted CI remain pending.
+
+`atl-experiment` binds a complete cohort and source fingerprint before evaluation,
+compares one declared variable, and keeps each cell in its own paper ledger. The
+supplied example uses synthetic rules/Hybrid/sequential/collaborative evidence,
+explicit nonoperational profile numbers, zero-priced fixture AI and a synthetic
+shared expense. It never calls OpenAI or another provider, even if local AI is enabled.
+
+With the local database migrated to head:
+
+```bash
+uv run --locked atl-experiment create tests/fixtures/experiment_architecture.json --key create --at 2026-10-20T00:00:00Z
+uv run --locked atl-experiment start b0000000-0000-4000-8000-000000000001 --key start --at 2026-10-20T00:00:00Z --reason synthetic
+uv run --locked atl-experiment run b0000000-0000-4000-8000-000000000001 --key rules --at 2026-10-20T00:00:00Z
+uv run --locked atl-experiment run b0000000-0000-4000-8000-000000000001 --key hybrid --at 2026-10-20T00:00:00Z
+uv run --locked atl-experiment run b0000000-0000-4000-8000-000000000001 --key sequential --at 2026-10-20T00:00:00Z
+uv run --locked atl-experiment run b0000000-0000-4000-8000-000000000001 --key collaborative --at 2026-10-20T00:00:00Z
+uv run --locked atl-experiment report b0000000-0000-4000-8000-000000000001
+```
+
+Each `run` advances exactly one bounded cell. Retrying its key/time returns the
+original snapshot; a new key advances the next cell. `pause`, `resume`, `approve`
+and `reject` require `--key`, the original UTC `--at` for retries, and `--reason`.
+Pause applies between cells. Risk suspension latches entries off inside a cell
+while qualified exits continue, then pauses the cohort. Resume never clears a
+completed cell's risk latch. Approval is an evaluation event, never deployment.
+
+Reports include NAV curves through the declared endpoint, matched trading/economic
+deltas, profile/AI metrics, exact cost provenance and unavailable reasons. Estimated
+costs and invoices remain distinct; linked invoices replace estimates. Shared bills
+allocate once and consolidated totals subtract them once. Missing FX/marks/bills or
+undeclared expense completeness prevent all-expenses claims and approval. New cohorts
+need fresh cell run IDs; cross-runner reuse is refused. These examples establish
+engineering behavior, not profitability or real provider performance.
+
+See [M6 plan](docs/23-m6-experiments.md), [ADR-0010](docs/adr/0010-experiment-cohorts-and-economic-accounting.md)
+and [progress](docs/13-progress.md) for current verified and pending checks.
 
 ## AI development and integration smoke (M5)
 

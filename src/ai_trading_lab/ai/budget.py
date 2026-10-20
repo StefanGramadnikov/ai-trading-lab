@@ -49,6 +49,15 @@ class Reservation(FrozenModel):
     result: ProviderResult | None = None
 
 
+class RunCost(FrozenModel):
+    call_id: PyUUID
+    provider: ProviderName
+    at: AwareDatetime
+    amount: NonnegativeAmount | None
+    held: NonnegativeAmount
+    currency: Literal["USD"] = "USD"
+
+
 class _Call(FrozenModel):
     call_id: PyUUID
     request: AIRequest
@@ -374,6 +383,26 @@ class BudgetStore:
                 await self._checkpoint(connection, budget_id)
                 return result
             raise ValueError("call_missing")
+
+    async def costs_for_run(self, budget_id: PyUUID, run_id: PyUUID) -> tuple[RunCost, ...]:
+        """Expose verified per-call estimates without promoting uncertain holds to costs."""
+        async with self.engine.begin() as connection:
+            _, history = await self._load(connection, budget_id)
+            output: list[RunCost] = []
+            for call, result in history:
+                if call.run_id != run_id:
+                    continue
+                amount, unknown = _outcome(call, result)
+                output.append(
+                    RunCost(
+                        call_id=call.call_id,
+                        provider=call.request.provider,
+                        at=call.at,
+                        amount=None if unknown else amount,
+                        held=amount if unknown else Decimal(0),
+                    )
+                )
+            return tuple(output)
 
     async def summary(self, budget_id: PyUUID) -> dict[str, object]:
         async with self.engine.begin() as connection:

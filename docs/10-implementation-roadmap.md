@@ -1,6 +1,6 @@
 # 10 — Implementation roadmap and acceptance gates
 
-**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 merged PR #5 (`fec599d`); M5 local acceptance complete (689 tests and real OpenAI smoke); shipping pending.
+**Status:** Sequencing APPROVED in principle; milestone effort estimates intentionally omitted. **Current:** M3 merged PR #4 (`686f942`); M4 merged PR #5 (`fec599d`); M5 merged PR #6 (`519ee2b`); M6 implementation approved under document 23.
 
 ## Rules for milestone execution
 
@@ -80,3 +80,10 @@ live execution remain separately gated.
 User approved [document 21](21-m5-ai-runtime.md) and a final real OpenAI smoke with
 a US$1 total cap. Implementation remains local until `/ship`; M6, deployment,
 recurring paid inference and live activity require separate authorization.
+
+
+## M6 execution plan — approved 2026-10-20
+
+User approved [document 23](23-m6-experiments.md): immutable paired experiments,
+explicit paper risk variants, lifecycle/recovery, performance and expense accounting.
+Fixture AI only; no new paid call, operational deployment, M7 or shipping approval.

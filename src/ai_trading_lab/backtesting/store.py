@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import cast
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Table, UniqueConstraint, select
@@ -24,6 +25,7 @@ from ai_trading_lab.paper_execution.store import (
     portfolios,
     projections,
 )
+from ai_trading_lab.run_identity import claim_run
 
 strategy_versions = Table(
     "strategy_versions",
@@ -67,6 +69,7 @@ class ResearchStore:
         self.engine = engine
 
     async def run(self, spec: ResearchInput) -> dict[str, object]:
+        spec = ResearchInput.model_validate(spec.model_dump(mode="json"))
         evaluation, history = evaluate(spec)
         output = report(spec, evaluation, history)
         config = portfolio_config(spec)
@@ -77,7 +80,8 @@ class ResearchStore:
             dict(run_id=spec.run_id, index=r.index, record=r.model_dump(mode="json"))
             for r in evaluation.decisions
         ]
-        async with self.engine.begin() as connection:
+        async with asyncio.timeout(300), self.engine.begin() as connection:
+            await claim_run(connection, spec.run_id, "research", spec.run_id, spec.fingerprint)
             # This insert serializes concurrent identical strategy/run requests;
             # all ledger and research rows commit together, including first funding.
             await connection.execute(

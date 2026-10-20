@@ -46,6 +46,8 @@
 
 | DEC-035 | M5 real-provider smoke envelope approved | User selected OpenAI with US$1 total cap. One local personal-key integration smoke only; no company credentials, recurring provider spend or new envelope to bypass an uncertain call. Exact model/pricing recorded before transmission. |
 
+| DEC-036 | M6 experiments and cost evaluation implementation approved, 2026-10-20 | User approved the presented M6 plan. Immutable experiments/lifecycle, paired supplied tapes, explicit paper profile variants, cost/FX allocation, metrics and tests. Fixture AI only; no extra paid calls, operational risk activation, shipping, M7 or deployment. See document 23. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -58,6 +60,8 @@
 - [ADR-0007: M3 paper accounting and recovery](adr/0007-paper-execution-accounting.md)
 - [ADR-0008: M4 offline strategy research and qualified replay](adr/0008-offline-strategy-research.md)
 - [ADR-0009: M5 bounded AI and durable cost reservations](adr/0009-ai-runtime-and-cost-reservations.md)
+
+- [ADR-0010: M6 paired cohorts and economic accounting](adr/0010-experiment-cohorts-and-economic-accounting.md)
 
 ## Proposed choices requiring later confirmation
 

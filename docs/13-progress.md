@@ -4,16 +4,17 @@
 
 ## Current state
 
-- **Milestone:** M4 PR #5 merged as `fec599d`. M5 shipped in PR #6;
-  real-provider acceptance passed; user review/merge pending.
-- **Authorization:** approved document 21; OpenAI one-call smoke, US$1 total cap,
-  local personal key configured. User subsequently invoked `/ship` for M5; M6,
-  deployment and merge remain separately gated.
-- **Branch:** `feature/m5-ai-runtime`, base `fec599d`; implementation `9034d3f` pushed in PR #6.
-- **Verification:** `make check` PASS, 689 tests, 96.34% statement/branch coverage,
-  Ruff format/lint and mypy 86 files. Production/re-review/smoke evidence below.
-- **Safety:** PAPER_ONLY. Real inference smoke uses synthetic market data; no
-  model-quality, real-market performance or invoiced-cost claim.
+- **Milestone:** M5 PR #6 merged as `519ee2b`; M6 local acceptance complete;
+  shipping/hosted CI and M7 remain separately gated.
+- **Authorization:** user approved document 23 / DEC-036. Fixture AI only; no new
+  paid calls, operational risk activation, M7 or deployment approval. User has
+  now invoked `/ship` for M6; merge remains separately gated.
+- **Branch:** `feature/m6-experiments`, base `519ee2b`; work uncommitted.
+- **Verification:** full `make check` PASS, **846 tests, 96.62% coverage**,
+  Ruff/mypy (106 files), production build/migrations/replay/health and independent
+  re-review PASS. All M1–M5 cases remain required.
+- **Safety:** PAPER_ONLY; synthetic/qualified offline research only. No new paid
+  request, empirical profitability claim, staging/commit/push or PR action.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -931,3 +932,193 @@ venue eligibility or unattended deployment. No live orders, merge or M6 occurred
 
 Next manual step: review and squash-merge PR #6 after its exact-head checks pass.
 After merge, obtain approval to prepare the M6 costs and experiment-evaluation plan.
+
+
+## M6 implementation in progress — 2026-10-20
+
+User approved the presented M6 plan. Verified M5 merged as
+`519ee2ba0d7a9cb6bf73b1a539dab025e83be16c`, then created
+`feature/m6-experiments` from remote main with a clean working tree.
+
+Added experiments contracts, explicit profile fractions, paired-dimension checks,
+metrics/cost modules, bounded cell runner, lifecycle store, CLI, synthetic four-cell
+example and migration 0007. M5's budget store exposes verified per-run costs;
+metadata, console entry point, test head, instructions and architecture/testing/
+experiment/cost/decision documentation updated. No new dependency or service.
+
+Narrow workers owned only cost+metrics modules/tests and store+migration/tests;
+the main session owns integration and verification. Focused cost/metric cases
+passed (42 and 31 respectively); lifecycle/store initial 14 PostgreSQL cases passed.
+New source edits during one concurrent test attempt correctly triggered source
+identity refusal; source changes/testing were subsequently sequenced. A build-index
+DNS failure was resolved by `uv sync --locked --offline` (53 unchanged packages),
+without adding packages or changing pins. Main's latest offline command:
+
+```bash
+PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache uv run --locked pytest tests/unit tests/contract -q
+```
+
+Observed **734 passed** before the final shared ownership regression additions;
+Ruff lint and strict mypy (105 files) passed. Full `make check` is not yet claimed.
+
+Independent fresh-context review returned FAIL with three confirmed findings.
+Repair round 1 adds terminal endpoint valuation/suspension, complete curves/traces
+in public reports, and a shared run-ownership registry across M4/M5/M6. The registry
+prevents cloned cohorts mixing cost history or appropriating legacy run identities.
+M4 pure failed writes retain their prior retry behavior; AI/experiment claims bind
+before inference. Added unit, CLI and PostgreSQL regressions for stale endpoint
+approval, public curves, concurrent ownership and cross-runner cost isolation.
+Re-review of these material repairs is pending.
+
+Docker incident: new focused PostgreSQL attempt stalled in initial Alembic setup;
+no tests executed during that attempt. Owned pytest/Alembic/compose processes were
+interrupted without altering application data. Bounded daemon checks timed out at
+five seconds, including a retry. Asked the user to check/resume OrbStack; independent
+code/unit/documentation work continues. Expanded PostgreSQL regressions, complete
+`make check`, production build/migration/drift/fixture-repeat/health and final review
+remain NOT RUN/pending as appropriate. Do not declare M6 complete until they pass.
+No staging, commit, push or PR action has been authorized for M6.
+
+
+M6 repair round 2 closes a legacy namespace gap: completed `ai_runs` retain their
+identity even when no call/start checkpoint exists (e.g. malformed legacy reports
+not backfilled by migration 0006). Added a zero-inference legacy regression for
+M4/M6 appropriation refusal. No test was skipped, deleted or weakened.
+
+Fresh-context independent re-review returned PASS after round 2 for the complete
+tracked/untracked source, migrations, regressions and documentation, including M4/
+M5 shared ownership changes. Reviewed runtime fingerprint:
+`a32240e028cd3e97c059ba21ce96866c1113e11325ec8bd9ae74c0b518648500`.
+The reviewer ran only read-only inspection/in-memory probes, no automated suites,
+DB/network calls or mutations. This is code-review evidence, not test acceptance.
+
+Latest verified offline state after repairs:
+
+- `uv run --locked ruff format --check .`: PASS, 143 Python files.
+- `uv run --locked ruff check .`: PASS.
+- `uv run --locked mypy`: PASS, 105 files.
+- `uv run --locked pytest tests/unit tests/contract -q`: PASS, **734 tests**.
+- Local targets in 35 Markdown files and `git diff --check`: PASS.
+
+Docker remained unresponsive after another bounded retry. Current repaired
+PostgreSQL suite, required full `make check`, production build/migration/drift/
+fixture repeat/HTTP health: **NOT RUN / BLOCKED by Docker**. The earlier 14-case
+PostgreSQL pass is historical evidence only, not a pass for the final repair.
+User action requested: check/resume/restart OrbStack and reply ready. Once healthy,
+continue the already approved M6 task with those checks and bounded repairs;
+request `/ship` only after local acceptance is genuinely complete. No additional
+implementation approval is required to finish these existing steps.
+
+
+Docker recovery — user asked to retry; daemon responded (29.8.2), isolated DB
+started successfully. First resumed full gate: 735 cases passed, 107 setup errors;
+all DB tests were blocked by initial migration downgrade. The initial 0007 had
+already been applied to the disposable test DB before ownership was added during
+review repair, so downgrade tried dropping a nonexistent ownership table.
+Repair round 3 restores the original 0007 lifecycle definition and moves ownership
+to new migration 0008. No applied migration is repurposed. Repeated full gate and
+production checks are now running; no success is claimed before observing results.
+
+
+## M6 local acceptance after Docker recovery — 2026-10-20
+
+Full required gate after migration repair round 3:
+
+```bash
+ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache make check
+```
+
+Observed PASS: 842 tests, 96.53% statement/branch coverage; Ruff formatting/lint
+and strict mypy (106 files). All M1–M5 tests remain required. Added two focused
+UTC daily-loss cases afterward: a cumulative 6-unit same-day loss breaches the
+5-unit cap, while separate-day 2/4 losses reset correctly. Both passed, and fresh
+review of this test-only addition returned PASS. Final full-suite counts follow.
+
+Production verification used only the existing `atl-m1-validation` services with
+`ATL_POSTGRES_PORT=55432 ATL_API_PORT=58000`, leaving unrelated services alone:
+
+- `docker compose -p atl-m1-validation up -d --build --wait api`: PASS.
+- Container `/app/.venv/bin/alembic upgrade head` / `alembic current`: PASS,
+  `0008_run_ownership (head)`; `alembic check`: PASS, no new upgrade operations.
+- A fresh-ID variant of `tests/fixtures/experiment_architecture.json` ran through
+  production `atl-experiment`: create/repeated-create/start, first cell, manual
+  pause, refused advance, resume, remaining cells, report twice, replay first key.
+  PASS: original snapshots replayed, full reports identical, state EVALUATING,
+  evidence_sufficient true for synthetic engineering only, source hash matches
+  host `a32240e028cd3e97c059ba21ce96866c1113e11325ec8bd9ae74c0b518648500`.
+- Four independent cell fixture calls: **0/1/3/6**; synthetic expense total **0.04**,
+  actual expense **0**, counted once. No real provider or invoice claim.
+- Every public NAV curve includes the declared endpoint. Stale terminal marks,
+  missing FX/expenses, owner collisions and unknown billing fail closed in tests.
+- HTTP `/health/live` and `/health/ready`: PASS, PAPER_ONLY, database available,
+  trading_ready false. No paid API call was made during M6.
+
+Independent final re-review returned PASS for the complete scope, migration split
+and regression additions. Reviewer behavior is read-only; no separate enforced
+sandbox or reviewer-run full gate is claimed. Three repair rounds were used:
+terminal/identity/report fixes, legacy AI identity guard, applied migration split.
+No checks or tests were weakened. No CI run is claimed before `/ship`.
+
+Limits: no verified real-market profitability/calibration, invoice authenticity,
+continuous worker or real-time emergency controller, operational risk selection,
+recurring provider spending, dashboard/Telegram or deployment. Missing statistical
+and valuation evidence stays unavailable. M6 fixture results are engineering only.
+Next safe step after final gate: user invokes `/ship` for commit/push/PR/hosted CI.
+No further M6 implementation approval is needed; M7 remains separately gated.
+
+
+Final full gate including the reviewed UTC boundary regressions: PASS,
+**844 tests, 96.62% statement/branch coverage**, Ruff formatting/lint and strict
+mypy (106 files). This is 155 added cases beyond M5's 689 baseline. No warnings,
+skips or weakened assertions. All local Markdown targets (35 files),
+`uv lock --check --offline` (53 packages, unchanged pins) and `git diff --check`
+passed. The final documentation-only evidence update repeats the full gate before
+handoff. Validation services are stopped afterward, preserving volumes and audit.
+
+M6 acceptance is local only. Hosted CI NOT RUN because no M6 `/ship` invocation
+has occurred. Work remains uncommitted on the feature branch. Next: ask the user
+to invoke `/ship` for final shipping checks, commit/push, PR creation and hosted CI.
+
+
+## M6 ship invocation — 2026-10-20
+
+User explicitly selected the ship skill for approved M6. Branch
+`feature/m6-experiments`, base/head before shipping
+`519ee2ba0d7a9cb6bf73b1a539dab025e83be16c`; remote main matches that baseline.
+Verified repository privacy, no existing open M6 PR and no unrelated local changes.
+Initial intended scope is 38 files, all within the approved M6 change.
+
+Shipping repeated `make check`: initially PASS, 844 tests/96.62%, Ruff/mypy.
+Fresh independent review found a daily-loss edge across midnight: a pre-midnight
+decision could fill after midnight, then the next frame wrongly reset away that
+loss. Shipping repair round 1 resets by execution/valuation UTC date before fills
+and preserves exact P&L/fee booking. Two regression cases assert actual fill dates:
+2+4 losses on the same execution day breach a 5-unit cap; split execution days do
+not falsely breach. Existing deterministic exits remain available.
+
+Repaired full `make check`: PASS, **846 tests, 96.62% statement/branch coverage**,
+Ruff format/lint and strict mypy (106 files), with all original cases required.
+Production rebuild/startup PASS; repaired migration/replay/health and independent
+re-review evidence follow after completion. No paid API call, dependency/service
+addition, merge, M7 or deployment is authorized by this invocation.
+
+Local Markdown targets, unchanged lock consistency and diff whitespace checks
+passed. Manual intended-file inspection and limited credential patterns found no
+candidates; no dedicated secret/dependency scanner or security audit is claimed.
+Final staged contents are checked against reviewed working files before commit.
+
+
+M6 shipping re-review: PASS after repair round 1. The fresh reviewer independently
+reproduced both UTC execution-day cases in read-only in-memory probes; no remaining
+findings. Reviewed runtime:
+`db9c262932a3c8be62d316630cf591f369b9bea95a05be303501eb7e5c0e8c6a`.
+Automated gate/production evidence remains parent-owned, separate from review.
+No enforced separate read-only sandbox or dedicated scanner is claimed.
+
+Repaired production acceptance PASS: schema upgrade/check, four-cell CLI lifecycle
+with manual pause/refused advance/resume, original key replay and two identical full
+reports. Fixture calls 0/1/3/6, shared synthetic cost 0.04 counted once, zero actual
+expense, host/container source hashes match, health PAPER_ONLY/trading_ready false.
+This is engineering evidence, not market performance. No additional paid call.
+The documentation evidence update repeats the mandatory gate before commit;
+commit/PR and exact-head hosted CI evidence follow when observed.

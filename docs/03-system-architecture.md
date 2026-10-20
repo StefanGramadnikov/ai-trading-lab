@@ -124,3 +124,13 @@ a separate runner owns deterministic sizing and routes every intent through the
 existing M3 History engine. ResearchStore atomically persists the entire run and
 ledger. Default paper scenarios stay FIXTURE-only; ADR-0008 describes the bounded,
 raw-capture-derived REPLAY extension. No AI, worker or live adapter is introduced.
+
+
+## M6 experiment boundary
+
+`ExperimentStore` durably binds full cohort/source identity before cell execution,
+serializes explicit commands and atomically commits cell reports/paper projections.
+The runner reuses M3 sizing/risk, M4 marking and M5 bounded inference reservations.
+Pure metrics/cost modules produce paired reports with missing evidence preserved.
+Manual pause applies between bounded supplied-tape cells; this is not an unattended
+scheduler or deployed safety controller. See document 23 and ADR-0010.

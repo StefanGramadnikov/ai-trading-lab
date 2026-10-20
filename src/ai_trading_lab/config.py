@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr(
         "postgresql+psycopg://ai_trading_lab:local_example_only@localhost:5432/ai_trading_lab"
     )
+    ai_enabled: bool = False
+    openai_api_key: SecretStr | None = None
+    xai_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     database_timeout_seconds: float = Field(default=2, gt=0, le=30)
 
     @field_validator("database_url")

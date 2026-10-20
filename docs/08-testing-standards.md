@@ -186,3 +186,22 @@ ordinary paper mutations; a coherently appended command also blocks repeat outpu
 Reports require qualified full liquidation for NAV/ROI and retain unresolved holdings.
 Synthetic examples demonstrate engineering only; no provider authenticity,
 calibration or investment edge is established by a green test.
+
+
+## M5 AI acceptance cases
+
+Contract tests inject HTTP transports; no deterministic test may use a real key or
+paid network. AI CLI tests explicitly disable local dotenv loading, so a developer's
+activated `.env` cannot trigger billed inference. Exact identity/tier, schema,
+refusal, token/cost caps, prompt-injection data, fixed destinations, unknown billing,
+step/round/deadline, trigger deduplication and response replay require coverage.
+Real PostgreSQL checks budget concurrency/checkpoint integrity, uncertain outcomes,
+rollback and retry without repeat inference, immutable AI reports and paper state.
+Fixture clocks are virtual and cannot expire with the developer's wall clock.
+The approved real OpenAI smoke is separate from `make check`, never a CI dependency
+or a test claimed green without an observed response and persisted audit.
+
+Interrupted M5 runs must retain the complete configuration and runtime identity
+before any inference. Recovery rejects changed sizing/risk/code even if the final
+report never committed. Checkpoint migration tests preserve completed identities;
+missing checkpoints with recorded calls fail closed.

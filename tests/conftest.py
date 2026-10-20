@@ -7,7 +7,15 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolate_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # Developer configuration must not influence fixture-backed tests.
-    for name in ("ATL_EXECUTION_MODE", "ATL_DATABASE_URL", "ATL_DATABASE_TIMEOUT_SECONDS"):
+    for name in (
+        "ATL_EXECUTION_MODE",
+        "ATL_DATABASE_URL",
+        "ATL_DATABASE_TIMEOUT_SECONDS",
+        "ATL_AI_ENABLED",
+        "ATL_OPENAI_API_KEY",
+        "ATL_XAI_API_KEY",
+        "ATL_ANTHROPIC_API_KEY",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 

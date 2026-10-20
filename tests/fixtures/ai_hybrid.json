@@ -1,0 +1,165 @@
+{
+  "schema_version": "1",
+  "research": {
+    "schema_version": "1",
+    "run_id": "a0000000-0000-4000-8000-000000000001",
+    "code_version": "0000000000000000000000000000000000000000",
+    "strategy": {
+      "kind": "probability",
+      "version": "synthetic-v1",
+      "max_age_seconds": 60,
+      "min_edge": "0.1",
+      "cost_buffer": "0.01"
+    },
+    "simulation": {
+      "version": "NONOPERATIONAL-fixture-v1",
+      "fee_bps": "0",
+      "latency_ms": 0,
+      "max_age_seconds": 60,
+      "future_skew_seconds": 0,
+      "max_order_notional": "1000",
+      "max_position_notional": "1000",
+      "max_total_exposure": "1000",
+      "max_cost_bps": "10000"
+    },
+    "cash_unit": "USD",
+    "cash_step": "0.01",
+    "initial_cash": "100",
+    "order_notional": "10",
+    "order_ttl_seconds": 30,
+    "start_at_utc": "2026-10-19T00:00:00Z",
+    "end_at_utc": "2026-10-19T00:00:01Z",
+    "data_mode": "FIXTURE",
+    "frames": [
+      {
+        "quote": {
+          "snapshot_id": "aa2b1491-d9d9-45db-a9e7-12552bec3801",
+          "instrument": {
+            "source": "kalshi",
+            "venue": "fixture",
+            "native_id": "yes",
+            "kind": "prediction",
+            "base_unit": "contract:YES",
+            "cash_unit": "USD",
+            "market_id": "fixture-event",
+            "outcome": "YES",
+            "tick_size": "0.01",
+            "quantity_step": "0.01",
+            "cash_step": "0.01"
+          },
+          "event_time_utc": "2026-10-19T00:00:00Z",
+          "received_at_utc": "2026-10-19T00:00:00Z",
+          "quality": "VALID",
+          "data_mode": "FIXTURE",
+          "bids": [
+            {
+              "price": "0.49",
+              "quantity": "100",
+              "derived": false
+            }
+          ],
+          "asks": [
+            {
+              "price": "0.50",
+              "quantity": "100",
+              "derived": false
+            }
+          ],
+          "spot_price": null,
+          "spot_capacity": null,
+          "impact_bps": null
+        },
+        "at_utc": "2026-10-19T00:00:00Z",
+        "history": [],
+        "momentum": null,
+        "forecast": {
+          "instrument_key": "04fc5b86104e2685b64dcbe673b55180b29cade6e870da9a5fb60cee24c07f86",
+          "market_id": "fixture-event",
+          "outcome": "YES",
+          "resolution_terms_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "probability": "0.8",
+          "provenance": "synthetic-test-only",
+          "version": "test-v1",
+          "calibration_reference": "not-calibrated",
+          "independent": true,
+          "data_mode": "FIXTURE",
+          "produced_at_utc": "2026-10-19T00:00:00Z",
+          "available_at_utc": "2026-10-19T00:00:00Z"
+        },
+        "resolution_terms_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "replay_manifest": null
+  },
+  "inference_mode": "fixture",
+  "purpose": "development",
+  "provider": "fixture",
+  "model": "fixture-v1",
+  "price": {
+    "provider": "fixture",
+    "model": "fixture-v1",
+    "currency": "USD",
+    "input_per_million": "0",
+    "output_per_million": "0",
+    "source_url": "fixture://no-billing",
+    "verified_at_utc": "2026-10-19T00:00:00Z",
+    "version": "synthetic-v1"
+  },
+  "budget": {
+    "budget_id": "a0000000-0000-4000-8000-000000000002",
+    "version": "fixture-v1",
+    "currency": "USD",
+    "total_limit": "0",
+    "daily_limit": "0",
+    "monthly_limit": "0",
+    "provider_limits": [
+      {
+        "provider": "fixture",
+        "limit": "0"
+      }
+    ],
+    "max_calls": 20
+  },
+  "run_spend_limit": "0",
+  "flow": {
+    "mode": "hybrid",
+    "roles": [
+      "strategy"
+    ],
+    "max_steps": 1,
+    "max_rounds": 1,
+    "timeout_seconds": 2,
+    "total_input_tokens": 32768,
+    "total_output_tokens": 8192
+  },
+  "activation": "event",
+  "interval_seconds": 1,
+  "max_input_tokens": 16000,
+  "max_output_tokens": 1000,
+  "request_timeout_seconds": 1,
+  "fixture_results": [
+    {
+      "status": "completed",
+      "answer": {
+        "action": "buy",
+        "instrument_key": "04fc5b86104e2685b64dcbe673b55180b29cade6e870da9a5fb60cee24c07f86",
+        "limit_price": "0.50",
+        "reason": "synthetic-only",
+        "evidence_ids": [
+          "aa2b1491-d9d9-45db-a9e7-12552bec3801"
+        ]
+      },
+      "usage": {
+        "input_tokens": 20,
+        "output_tokens": 20,
+        "cached_input_tokens": 0
+      },
+      "response_id": null,
+      "model": "fixture-v1",
+      "reason": "synthetic",
+      "response_hash": null,
+      "elapsed_ms": null,
+      "completed_at_utc": null
+    }
+  ]
+}

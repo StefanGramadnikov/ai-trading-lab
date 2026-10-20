@@ -4,10 +4,12 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ai_trading_lab.ai.run_store import ai_runs
 from ai_trading_lab.backtesting.store import research_runs
 from ai_trading_lab.config import Settings
 
-metadata = research_runs.metadata
+metadata = ai_runs.metadata
+assert metadata is research_runs.metadata
 
 
 def run_migrations(connection: Connection) -> None:

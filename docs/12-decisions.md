@@ -42,6 +42,10 @@
 
 | DEC-033 | M4 strategy/backtesting implementation approved | User approved the presented M4 plan, including controlled qualified archived REPLAY without provenance relabeling. Rules-only baselines, immutable research runs, offline sizing/execution and benchmarks only. No live observed execution, paid data, AI, operational profile activation or shipping authorization. See document 20. |
 
+| DEC-034 | M5 AI runtime implementation and real-provider acceptance smoke approved | User approved the presented M5 plan and including a real-provider smoke test. Typed adapters, durable budget controls, bounded Hybrid/sequential/collaborative flows and paper integration. No live trading, shipping, company credentials, purchases or unspecified paid budget. See document 21. |
+
+| DEC-035 | M5 real-provider smoke envelope approved | User selected OpenAI with US$1 total cap. One local personal-key integration smoke only; no company credentials, recurring provider spend or new envelope to bypass an uncertain call. Exact model/pricing recorded before transmission. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -53,6 +57,7 @@
 - [ADR-0006: M2 read-only market data and replay evidence](adr/0006-market-data-evidence.md)
 - [ADR-0007: M3 paper accounting and recovery](adr/0007-paper-execution-accounting.md)
 - [ADR-0008: M4 offline strategy research and qualified replay](adr/0008-offline-strategy-research.md)
+- [ADR-0009: M5 bounded AI and durable cost reservations](adr/0009-ai-runtime-and-cost-reservations.md)
 
 ## Proposed choices requiring later confirmation
 

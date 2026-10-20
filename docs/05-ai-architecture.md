@@ -55,3 +55,14 @@ AI may hypothesize, write **sandboxed test-only** strategy prototypes, propose p
 - Provider outages do not block deterministic risk monitoring; AI-dependent entries stop safely.
 - Controls on parallelism, retries, prompt size, round count and per-experiment spend.
 - Different AI agents are not statistically independent just because they have different roles.
+
+
+## M5 implementation boundary
+
+The initial runtime implements bounded supplied-tape activation and advisory flows,
+not an unattended deployed worker. AI can narrow/veto deterministic-qualified
+entries; deterministic exits remain available without inference. Model answers do
+not become independent/calibrated forecasts. Paid integration acceptance uses one
+real OpenAI call on synthetic evidence under DEC-035; actual-market evaluation,
+calibration and paid recurring activation remain separate. ADR-0009 and documents
+21/22 describe current wire, budget, recovery and capability limits.

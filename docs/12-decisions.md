@@ -50,6 +50,8 @@
 
 | DEC-037 | M7 reporting implementation approved, 2026-10-20 | User: “yes, carry on” after six-step plan. Local read-only FastAPI dashboard, authentication, bounded audit JSON, explicit Telegram outbox commands, Playwright development/browser CI tests. No real send, paid AI, scheduler, deployment or shipping; see document 24. |
 
+| DEC-038 | M8A local runtime implementation approved, 2026-10-20 | User approved the M8A plan and repeated continue after quota reset. Bounded local worker, persistent paper portfolio, qualified observed-source simulation, recovery/backup tooling and reporting only. No multi-day run, real Telegram, paid AI, cloud deployment or shipping. See document25 and ADR-0011. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -64,6 +66,7 @@
 - [ADR-0009: M5 bounded AI and durable cost reservations](adr/0009-ai-runtime-and-cost-reservations.md)
 
 - [ADR-0010: M6 paired cohorts and economic accounting](adr/0010-experiment-cohorts-and-economic-accounting.md)
+- [ADR-0011: Bounded observation-driven paper runtime](adr/0011-observation-driven-paper-runtime.md)
 
 ## Proposed choices requiring later confirmation
 

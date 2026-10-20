@@ -80,6 +80,9 @@ class Effect:
 class History:
     def __init__(self, portfolio_id: UUID, config: dict[str, object]) -> None:
         self.policy = SimulationPolicy.model_validate(config["policy"])
+        self.runtime_observed = (
+            "runtime_session_id" in config and config.get("runtime_data_mode") == "OBSERVED"
+        )
         self.replay_manifest = (
             ReplayManifest.model_validate(config["replay_manifest"])
             if "replay_manifest" in config
@@ -122,7 +125,16 @@ class History:
             quote = ExecutionQuote.model_validate(payload["quote"])
             if intent.portfolio_id != self.state.portfolio_id or intent.idempotency_key != key:
                 raise ValueError("Order command identity mismatch")
-            result, lines, kinds = self._order(intent, quote, at)
+            verified_observed = False
+            if quote.data_mode == DataMode.OBSERVED and self.runtime_observed:
+                from ai_trading_lab.paper_execution.replay import ReplayEntry
+                from ai_trading_lab.runtime.evidence import observed_quote
+
+                entry = ReplayEntry.model_validate(payload.get("source_entry"))
+                if observed_quote(entry) != quote:
+                    raise ValueError("runtime_raw_quote_mismatch")
+                verified_observed = True
+            result, lines, kinds = self._order(intent, quote, at, verified_observed)
             end = max(at, result.executed_at_utc)
             self.state = self.state.model_copy(update={"sequence": initial_sequence + len(kinds)})
             receipt = OrderReceipt(
@@ -163,14 +175,20 @@ class History:
         return effect
 
     def _order(
-        self, intent: OrderIntent, quote: ExecutionQuote, at: datetime
+        self,
+        intent: OrderIntent,
+        quote: ExecutionQuote,
+        at: datetime,
+        verified_observed: bool = False,
     ) -> tuple[SimulationResult, tuple[JournalLine, ...], list[tuple[str, dict[str, object]]]]:
         instrument = intent.instrument
         native = identity(instrument)
         definition = self.definitions.get(native)
         reason = admit(self.state, intent, self.policy)
-        if quote.data_mode != DataMode.FIXTURE and not (
-            self.replay_manifest is not None and self.replay_manifest.allows(quote)
+        if (
+            quote.data_mode != DataMode.FIXTURE
+            and not verified_observed
+            and not (self.replay_manifest is not None and self.replay_manifest.allows(quote))
         ):
             reason = "fixture_mode_required"
         if definition is not None:

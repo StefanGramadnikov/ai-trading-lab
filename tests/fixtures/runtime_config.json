@@ -1,0 +1,42 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000008",
+  "cash_unit": "USD",
+  "cash_step": "0.01",
+  "initial_cash": "100",
+  "simulation": {
+    "version": "NONOPERATIONAL-fixture-v1",
+    "fee_bps": "0",
+    "latency_ms": 0,
+    "max_age_seconds": 60,
+    "future_skew_seconds": 0,
+    "max_order_notional": "1000",
+    "max_position_notional": "1000",
+    "max_total_exposure": "1000",
+    "max_cost_bps": "10000"
+  },
+  "profile": {
+    "name": "moderate",
+    "version": "NONOPERATIONAL-fixture-v1",
+    "max_order_fraction": "0.1",
+    "max_position_fraction": "0.2",
+    "max_exposure_fraction": "0.4",
+    "daily_loss_fraction": "0.05",
+    "drawdown_fraction": "0.1"
+  },
+  "strategy": {
+    "kind": "probability",
+    "version": "synthetic-v1",
+    "max_age_seconds": 60,
+    "min_edge": "0.1",
+    "cost_buffer": "0.01"
+  },
+  "order_notional": "10",
+  "order_ttl_seconds": 30,
+  "data_mode": "FIXTURE",
+  "started_at_utc": "2026-10-19T00:00:00+00:00",
+  "deadline_at_utc": "2026-10-21T00:00:00+00:00",
+  "poll_interval_seconds": 1,
+  "max_gap_seconds": 90000,
+  "max_cycles": 3,
+  "max_journal_bytes": 64000000
+}

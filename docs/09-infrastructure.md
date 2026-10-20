@@ -125,3 +125,29 @@ include credentials in commands or output; real delivery requires separate user
 approval. Development/CI only use injected HTTP transports. Daily summary is an
 explicit cumulative snapshot for a UTC date, not independently computed daily P&L.
 No always-on alerting or database-outage delivery guarantee is established in M7.
+
+
+## M8A bounded local worker and recovery
+
+The optional Compose `runtime` profile uses the existing image/PostgreSQL, no
+broker and no published worker port. It has explicit finite cycles/seconds, no
+automatic restart, read-only container filesystem and rotated5MiB×2 logs. Default
+Compose starts only API/database. Session creation starts no polling. Operational
+activation, 2–4-day smoke and cloud deployment remain separately approved.
+
+Runtime journal migration0010 is additive; previous applied migrations unchanged.
+Source config/risk/profile/clock/code are frozen, paper funding occurs once, and
+unknown connection/event state refuses continuation. Record source/receipt times,
+worker interruptions and partial/failed exits; a successful process or DB probe
+does not imply market readiness. Only qualified original Polymarket books can
+drive current observed PAPER simulation. No assumption promotes generic collateral
+to USD/EUR or incomplete Solana data into execution depth. Forecasts remain required
+for the corresponding strategy; zero trades is valid.
+
+Suspended runtime checkpoints queue bounded local diagnostics by session/sequence,
+with receipt time separate from recorded event time. No external delivery occurs
+in the worker. On a database outage no durable alert can be guaranteed; stop,
+retain prior checkpoint/logs and reconcile before restart. Disk/evidence caps are
+engineering admission guards, not automatic evidence deletion. See
+[ADR0011](adr/0011-observation-driven-paper-runtime.md) and
+[backup/restore runbook](26-backup-restore.md).

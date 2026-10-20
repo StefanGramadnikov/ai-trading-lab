@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** Milestone 7 — PR #8 open; checks verified, merge pending.
+> **Status:** Milestone 8A — implementation verified; PR review and merge required.
 > **Document version:** 1.4, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 
@@ -349,3 +349,56 @@ and numeric `ATL_TELEGRAM_CHAT_ID`; no real send is part of development/CI.
 Interrupted delivery stays uncertain and is never retried automatically;
 `atl-notify recover-unknown EVENT_KEY --at UTC_TIMESTAMP` records that uncertainty.
 Notification outage cannot alter deterministic trading controls.
+
+
+### M8A local runtime
+
+`atl-runtime` maintains one persistent paper portfolio per immutable session,
+including positions, fees, risk history and source-depth consumption. Creating a
+session does **not** start a worker. The versioned examples below are synthetic,
+nonoperational parameters, not approved paper-risk settings or real-market results.
+Apply reviewed migration head to the intended local database first.
+
+```bash
+uv run --locked atl-runtime create tests/fixtures/runtime_config.json
+uv run --locked atl-runtime step 00000000-0000-0000-0000-000000000008 tests/fixtures/runtime_tick.json --key example-first --at 2026-10-19T00:00:00+00:00
+uv run --locked atl-runtime show 00000000-0000-0000-0000-000000000008
+```
+
+Use the timestamp embedded in the supplied tick if the example changes. Repeating
+exactly the same step/key/time returns its original checkpoint, never new funding
+or a second fill. Pause/resume/stop require explicit `--key` and aware UTC `--at`;
+stop is terminal and does not imply positions were liquidated. Replay refuses
+changed config/code, missing events, corrupted checkpoint or native source conflicts.
+Preserve the original installed image/config when backing up; see
+[backup/restore and rollback](docs/26-backup-restore.md).
+
+The dashboard's local runtime panel and `/api/reports/runtime` / `/{session_id}`
+are authenticated read-only views. Index entries are unverified metadata; selecting
+a current-compatible checkpoint performs deterministic verification. Last durable
+progress is not proof a worker/process/feed is alive. An unavailable database cannot
+persist a new outage record; investigate the previous checkpoint and process logs.
+
+Future observed operation requires a separately approved explicit configuration
+with original Polymarket metadata/books, generic collateral units, complete risk
+profile, simulation assumptions, lifetime/cycle/journal caps and instrument identity.
+The collector invents no forecasts; missing forecast/feature evidence abstains.
+Other market adapters remain available for read-only collection but cannot provide
+unqualified executable depth. No API order placement or funded credentials exist.
+
+After M8B activation approval, the finite worker command is
+`atl-runtime worker SESSION_UUID --cycles COUNT --seconds DURATION --activate-observed`.
+Alternatively, set `ATL_RUNTIME_SESSION_ID`, `ATL_RUNTIME_CYCLES`,
+`ATL_RUNTIME_SECONDS` and explicitly invoke the optional Compose `runtime` profile.
+Default Compose starts no worker. Each poll reserves its attempt durably before
+two bounded read-only requests; interrupted attempts consume their cap, and old
+worker connections cannot write after losing ownership. AI is disabled in this
+runtime regardless of unrelated `.env` provider settings.
+
+Suspended checkpoints queue deterministic local outbox diagnostics; worker restart
+reuses the checkpoint key. There is no real Telegram send in the worker. Delivery
+continues to require separate approval and the explicit M7 `atl-notify send` command.
+Evidence/command/cycle limits stop admission; they never silently prune history or
+reset a portfolio. Canonical journal byte limits are not physical PostgreSQL disk
+quotas. Approve and measure actual polling/storage/runtime parameters before the
+2–4-day M8B smoke. This implementation does not activate that smoke or cloud hosting.

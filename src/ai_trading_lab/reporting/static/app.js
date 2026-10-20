@@ -130,3 +130,26 @@ byId("refresh").addEventListener("click", () => {load(); systemStatus(); if (act
 byId("previous").addEventListener("click", () => {offset = Math.max(0, offset - limit); load();});
 byId("next").addEventListener("click", () => {offset += limit; load();});
 load(); systemStatus();
+
+async function loadRuntime() {
+  const target = byId("runtime-list"); target.replaceChildren();
+  byId("runtime-detail").textContent = "";
+  try {
+    const data = await request("/api/reports/runtime?limit=20");
+    status("runtime-status", "Last durable progress only; this is not a worker liveness probe. Index metadata is unverified.");
+    if (!data.items.length) status("runtime-status", "No runtime sessions. Starting the dashboard does not start a worker.");
+    for (const item of data.items) {
+      const row = node("li");
+      const button = node("button", `${item.session_id} · ${display(item.status)} · ${display(item.last_at)}${item.runtime_compatible ? "" : " · incompatible runtime"}`);
+      button.addEventListener("click", async () => {
+        byId("runtime-detail").textContent = "Loading verified checkpoint…";
+        try {
+          const report = await request(`/api/reports/runtime/${encodeURIComponent(item.session_id)}`);
+          byId("runtime-detail").textContent = JSON.stringify(report, null, 2);
+        } catch (error) {byId("runtime-detail").textContent = error.message;}
+      }); row.append(button); target.append(row);
+    }
+  } catch (error) {status("runtime-status", error.message, true);}
+}
+byId("refresh").addEventListener("click", loadRuntime);
+loadRuntime();

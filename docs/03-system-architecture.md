@@ -143,3 +143,14 @@ packaged static dashboard assets. Reporting reuses M6 replay checks in a read-on
 repeatable snapshot; historical runtime mismatches refuse financial detail/export.
 The PostgreSQL notification outbox has explicit bounded CLI preparation/delivery,
 no background worker. It cannot control experiments or trading. See document 24.
+
+
+## M8A persistent local runtime boundary
+
+A single-owner optional worker journals explicit bounded poll attempts/results and
+controls. Full replay derives one persistent M3 paper portfolio and risk state;
+it never restarts with newly funded capital. Current-compatible runtime checkpoints
+are exposed via authenticated read-only reporting. Runtime receipts remain in its
+own authoritative event/checkpoint journal rather than mutating offline cohorts.
+Original raw-capture checks alone extend OBSERVED paper simulation; no venue order
+client or AI runtime tool is introduced. See document25 / ADR0011.

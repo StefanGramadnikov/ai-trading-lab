@@ -23,7 +23,7 @@ async def test_connectivity_and_rollback(database_url: str) -> None:
         assert await database_ready(engine, 2) is True
         async with engine.connect() as connection:
             assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0009_notifications"
+                "0010_runtime"
             )
             await connection.execute(text("CREATE TEMP TABLE m1_probe (value INTEGER)"))
             await connection.commit()

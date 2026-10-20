@@ -279,3 +279,39 @@ def test_dashboard_empty_missing_metrics_and_untrusted_text(
         expect(row).not_to_contain_text("0")
     finally:
         page.context.close()
+
+
+def test_local_runtime_checkpoint_is_verified_and_read_only(
+    browser: Browser, dashboard_server: tuple[str, str], database_url: str
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ai_trading_lab.runtime.engine import reducer
+    from ai_trading_lab.runtime.journal import Journal
+    from ai_trading_lab.runtime.models import RuntimeConfig
+    from tests.unit.test_runtime_engine import config
+
+    async def seed_runtime() -> str:
+        engine = create_async_engine(database_url)
+        try:
+            spec = RuntimeConfig.model_validate(config())
+            await Journal(engine, reducer).create(
+                spec.session_id, spec.model_dump(mode="json"), spec.started_at_utc
+            )
+            return str(spec.session_id)
+        finally:
+            await engine.dispose()
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        identity = pool.submit(asyncio.run, seed_runtime()).result(timeout=30)
+    page = open_page(browser, dashboard_server[0])
+    try:
+        page.goto("/dashboard")
+        expect(page.locator("#runtime-status")).to_contain_text("not a worker liveness probe")
+        page.locator("#runtime-list button").filter(has_text=identity).click()
+        expect(page.locator("#runtime-detail")).to_contain_text(identity)
+        expect(page.locator("#runtime-detail")).to_contain_text('"paper_only": true')
+        expect(page.locator("#runtime-detail")).to_contain_text('"ai_enabled": false')
+        expect(page.get_by_role("button", name="Stop", exact=True)).to_have_count(0)
+    finally:
+        page.context.close()

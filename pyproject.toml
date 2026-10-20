@@ -13,6 +13,8 @@ dependencies = [
 ]
 
 [project.scripts]
+atl-runtime = "ai_trading_lab.runtime.cli:main"
+atl-backup = "ai_trading_lab.operations.backup:main"
 atl-data = "ai_trading_lab.market_data.cli:main"
 atl-paper = "ai_trading_lab.paper_execution.cli:main"
 atl-backtest = "ai_trading_lab.backtesting.cli:main"

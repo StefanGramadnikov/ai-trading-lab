@@ -31,6 +31,8 @@ def client(service: Any, *, configured: bool = True) -> TestClient:
         "/dashboard/app.js",
         "/dashboard/style.css",
         "/api/reports/status",
+        "/api/reports/runtime",
+        f"/api/reports/runtime/{uuid4()}",
         "/api/reports/experiments",
         f"/api/reports/experiments/{uuid4()}",
         f"/api/reports/experiments/{uuid4()}/export",
@@ -119,3 +121,15 @@ def test_password_character_contract_is_enforced_before_startup() -> None:
             app.get("/api/reports/status", auth=("reader", "ASCII-punctuation!23")).status_code
             == 200
         )
+
+
+def test_authenticated_runtime_endpoints_are_bounded_and_read_only() -> None:
+    service = AsyncMock()
+    service.runtime_sessions.return_value = {"items": [], "limit": 20}
+    service.runtime_detail.return_value = {"state": {"paper_only": True, "ai_enabled": False}}
+    with client(service) as app:
+        app.auth = ("reader", "local-test-password")
+        assert app.get("/api/reports/runtime").json()["items"] == []
+        assert app.get("/api/reports/runtime?limit=101").status_code == 422
+        assert app.get(f"/api/reports/runtime/{uuid4()}").json()["state"]["ai_enabled"] is False
+        assert app.post("/api/reports/runtime").status_code == 405

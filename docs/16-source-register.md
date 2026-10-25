@@ -72,3 +72,12 @@ Polymarket's. Certificate verification therefore fails closed. The resolvers in 
 resolvers; which one returns the loopback answer was not verified, and whether it is a deliberate block was not
 established. No workaround (alternate DNS, VPN, pinned IPs) was attempted. F-10, F-17 and F-22 remain
 UNVERIFIED and no Polymarket payload has been captured.
+
+
+## Kraken public spot data — 2026-10-25
+
+Reachable from the development machine (DNS public, TLS verified). Read-only GETs captured through
+`atl-data collect --source kraken` (first 9, then 11 after the request plan changed: AssetPairs, Ticker, then Time,
+Depth and OHLC per pair), persisted to a throwaway database and replayed offline. Findings: fee arrays empty in the anonymous API; candle windows hold 721 rows;
+books best-first; server time present in `/0/public/Time`; a tracking cookie is set on the first response. Verified
+fee schedule still needed from Kraken's published fee page before the paper broker's fee model is approved.

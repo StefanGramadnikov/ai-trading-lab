@@ -58,3 +58,9 @@ no request budget. FIXTURE transports with injected clients are unaffected. This
 from DNS overrides, local proxies and TLS-trusted impersonators; certificate verification remains the first
 line of defence and is not weakened. Provider (AI) and Telegram clients, which carry credentials to fixed
 origins, are not yet covered by this guard.
+
+
+Amendment (2026-10-25, V0 slice 1): Kraken is the fifth allow-listed source (five public GETs, no private path).
+`HttpTransport` now accepts no cookies at all: a real host set a tracking cookie on its first response and the
+credentials guard then refused every later request. Instrument metadata must hold only stable fields; volatile
+numbers belong in the observation (a live capture and an integration test now protect this).

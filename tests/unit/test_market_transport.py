@@ -556,3 +556,24 @@ async def test_solana_collection_records_decoding_failure_instead_of_raising() -
     assert "private invalid gzip response" not in batch.model_dump_json()
     assert instance.request_count == 2
     assert instance.health[Source.SOLANA].status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_servers_that_set_cookies_do_not_break_later_requests_and_no_cookie_is_kept() -> None:
+    """Real hosts set tracking cookies on the first response. The transport must accept none of
+    them (no session state, no credentials) instead of refusing the next request."""
+    seen_cookie_headers: list[str | None] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen_cookie_headers.append(request.headers.get("cookie"))
+        return httpx2.Response(
+            200, json=[], headers={"set-cookie": "__cf_bm=abc123; Path=/; HttpOnly; Secure"}
+        )
+
+    clock = Clock()
+    instance, client = transport(handler, clock)
+    for _ in range(3):
+        capture = await instance.request(Source.DEXSCREENER, "GET", "/token-profiles/latest/v1")
+        assert capture.status_code == 200
+    assert seen_cookie_headers == [None, None, None], "no cookie may ever be sent back"
+    assert not client.cookies, "no cookie may be stored"

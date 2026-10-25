@@ -21,6 +21,7 @@ atl-backtest = "ai_trading_lab.backtesting.cli:main"
 atl-ai = "ai_trading_lab.ai.cli:main"
 atl-notify = "ai_trading_lab.reporting.cli:main"
 atl-experiment = "ai_trading_lab.experiments.cli:main"
+atl-live = "ai_trading_lab.live.cli:main"
 
 [dependency-groups]
 dev = [

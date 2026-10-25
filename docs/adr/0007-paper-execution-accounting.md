@@ -79,3 +79,17 @@ before declaring M3 complete. Shipping and merge remain separately authorized.
 M4 extension: [ADR-0008](0008-offline-strategy-research.md) permits immutable,
 qualified offline REPLAY registration. Ordinary fixture scenarios/default portfolios
 retain this ADR’s restriction; OBSERVED execution and live activity stay disabled.
+
+
+Amendment (2026-10-25, V0 slice 2, piece A): (1) A `spot` instrument that supplies explicit order-book levels now
+fills against that book exactly as a prediction contract does (adverse per-level rounding, fee on notional, the same
+round-trip cost gate); without levels it keeps the spot-price/capacity/impact model, and supplying both is still
+`ambiguous_quote`. (2) A portfolio created with the immutable markers `live_session_id` and
+`live_data_mode=OBSERVED` fills an OBSERVED quote only if the order carries a `KrakenEntry` (the pair-rules, server-time
+and book captures) whose derived quote equals the submitted quote; a missing or altered quote is a hard error before any
+state changes. This mirrors the runtime's raw-capture rule for the Polymarket worker. (3) `PaperStore.create` accepts
+such markers and `submit` accepts the evidence; both are part of the replayed, hash-checked history.
+
+## Amendment 2026-10-25 (V0 slice 2)
+
+The `max_cost_bps` effective-cost gate applies to buys only. A sell (stop, take-profit, time exit, liquidation) is never rejected for spread or impact, so risk exits cannot be blocked.

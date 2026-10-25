@@ -83,6 +83,9 @@ class History:
         self.runtime_observed = (
             "runtime_session_id" in config and config.get("runtime_data_mode") == "OBSERVED"
         )
+        self.live_observed = (
+            "live_session_id" in config and config.get("live_data_mode") == "OBSERVED"
+        )
         self.replay_manifest = (
             ReplayManifest.model_validate(config["replay_manifest"])
             if "replay_manifest" in config
@@ -133,6 +136,15 @@ class History:
                 entry = ReplayEntry.model_validate(payload.get("source_entry"))
                 if observed_quote(entry) != quote:
                     raise ValueError("runtime_raw_quote_mismatch")
+                verified_observed = True
+            elif quote.data_mode == DataMode.OBSERVED and self.live_observed:
+                from ai_trading_lab.paper_execution.kraken_evidence import KrakenEntry
+
+                raw_entry = payload.get("source_entry")
+                if raw_entry is None:
+                    raise ValueError("live_source_evidence_required")
+                if KrakenEntry.model_validate(raw_entry).quote != quote:
+                    raise ValueError("live_raw_quote_mismatch")
                 verified_observed = True
             result, lines, kinds = self._order(intent, quote, at, verified_observed)
             end = max(at, result.executed_at_utc)
@@ -192,6 +204,8 @@ class History:
             and not (self.replay_manifest is not None and self.replay_manifest.allows(quote))
         ):
             reason = "fixture_mode_required"
+        if self.live_observed and quote.data_mode != DataMode.OBSERVED:
+            reason = "live_portfolio_requires_observed_quote"
         if definition is not None:
             if definition[0] != instrument:
                 reason = "instrument_definition_conflict"
@@ -239,7 +253,9 @@ class History:
             buy = result.consumed
         else:
             sell = result.consumed
-        if instrument.kind == "spot":
+        if instrument.kind == "spot" and not (quote.bids or quote.asks):
+            # Only the spot-assumptions model has one shared liquidity pool; real books keep
+            # separate ask-side and bid-side consumption.
             buy = sell = result.consumed
         self.quotes[quote.snapshot_id] = (quote, buy, sell)
         return (

@@ -150,6 +150,7 @@ def _pair_rules(info: object) -> tuple[str, str, dict[str, JsonValue]]:
     costmin = _decimal(data.get("costmin"), positive=False)
     lot_decimals = _int(data.get("lot_decimals"))
     pair_decimals = _int(data.get("pair_decimals"))
+    cost_decimals = _int(data.get("cost_decimals"))
     base, quote = data.get("base"), data.get("quote")
     fee_currency = data.get("fee_volume_currency")
     if not all(isinstance(x, str) and x for x in (base, quote, fee_currency, data.get("altname"))):
@@ -164,6 +165,7 @@ def _pair_rules(info: object) -> tuple[str, str, dict[str, JsonValue]]:
         "costmin": str(costmin),
         "lot_decimals": lot_decimals,
         "pair_decimals": pair_decimals,
+        "cost_decimals": cost_decimals,
         "fee_volume_currency": cast(str, fee_currency),
         "status": cast(str, data.get("status")),
     }

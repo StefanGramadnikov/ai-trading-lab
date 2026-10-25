@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal, cast
 from uuid import UUID, uuid5
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Table, select
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Table, func, select
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -25,6 +26,7 @@ from ai_trading_lab.paper_execution.history import (
     clock,
     request_hash,
 )
+from ai_trading_lab.paper_execution.kraken_evidence import KrakenEntry
 from ai_trading_lab.paper_execution.models import (
     ExecutionQuote,
     OrderIntent,
@@ -253,6 +255,7 @@ class PaperStore:
         policy: SimulationPolicy,
         *,
         replay_manifest: ReplayManifest | None = None,
+        markers: Mapping[str, str] | None = None,
     ) -> PortfolioState:
         state, _ = open_portfolio(portfolio_id, cash_unit, cash_step, initial_cash)
         config: dict[str, object] = dict(
@@ -261,6 +264,10 @@ class PaperStore:
             initial_cash=str(initial_cash),
             policy=policy.model_dump(mode="json"),
         )
+        if markers:
+            # Identity markers (for example a live-observed session) are part of the immutable
+            # portfolio configuration, so they cannot be added or changed later.
+            config.update({str(k): str(v) for k, v in markers.items()})
         if replay_manifest is not None:
             config["replay_manifest"] = ReplayManifest.model_validate(
                 replay_manifest.model_dump(mode="json")
@@ -416,7 +423,11 @@ class PaperStore:
             return effect
 
     async def submit(
-        self, intent: OrderIntent, quote: ExecutionQuote, now: datetime
+        self,
+        intent: OrderIntent,
+        quote: ExecutionQuote,
+        now: datetime,
+        source_entry: KrakenEntry | None = None,
     ) -> OrderReceipt:
         # Duplicate detection/result selection occur under the same portfolio lock.
         async with self.engine.begin() as connection:
@@ -436,12 +447,13 @@ class PaperStore:
                 return old.receipt.model_copy(update={"duplicate": True})
             if len(history.effects) >= 1000:
                 raise ValueError("Paper history exceeds bounded scenario capacity")
-            effect = history.apply(
-                "order",
-                intent.idempotency_key,
-                {"intent": intent.model_dump(mode="json"), "quote": quote.model_dump(mode="json")},
-                clock(now),
-            )
+            payload: dict[str, object] = {
+                "intent": intent.model_dump(mode="json"),
+                "quote": quote.model_dump(mode="json"),
+            }
+            if source_entry is not None:
+                payload["source_entry"] = source_entry.model_dump(mode="json")
+            effect = history.apply("order", intent.idempotency_key, payload, clock(now))
             await self._finish(connection, history, effect)
             assert effect.receipt is not None
             return effect.receipt
@@ -474,6 +486,22 @@ class PaperStore:
                 at,
             )
         ).state
+
+    async def last_activity(self, portfolio_id: UUID) -> datetime | None:
+        """The ledger's clock: no new command may be stamped earlier than this."""
+        async with self.engine.begin() as connection:
+            history, _ = await self._load(connection, portfolio_id, for_update=False)
+        return history.last_at
+
+    async def command_count(self, portfolio_id: UUID) -> int:
+        """Stored commands (every submitted order, even a rejected one). The history is capped."""
+        async with self.engine.connect() as connection:
+            count = await connection.scalar(
+                select(func.count())
+                .select_from(commands)
+                .where(commands.c.portfolio_id == portfolio_id)
+            )
+        return int(count or 0)
 
     async def get(self, portfolio_id: UUID) -> PortfolioState:
         async with self.engine.begin() as connection:

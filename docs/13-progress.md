@@ -1669,3 +1669,18 @@ independent review then drove: per-pair adjacent server time with look-ahead and
 decimals, plausible-timestamp bounds (a huge candle timestamp used to crash the whole collection), one-sided books
 marked PARTIAL, rate limits that stop the collection, `pair` required by the transport, `--pair` only for Kraken, and
 an identity-stability test that goes through the adapter. See docs/18, docs/16, ADR-0006 and docs/29.
+
+## 2026-10-25 — V0 slice 2: the live paper loop (branch `feature/s2-live-paper-loop`)
+
+Built in four committed pieces after DEC-043 recorded the approved numbers. A: the simulator lets a spot instrument fill
+against a real book, and live-observed portfolios only fill OBSERVED quotes whose raw Kraken captures re-derive the quote.
+B: the pure rules breakout strategy, mechanical exits (stop -5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk state.
+C: migration 0012, `LiveStore`, pure decisions, the cycle engine with plan-then-submit crash recovery, the passive benchmark.
+D: the single-instance loop runner and `atl-live` CLI. Real runs against Kraken exposed and fixed a clock-ordering bug.
+Details and the run instructions are in docs/29 sections 8 and 9. Not yet: the AI strategy (slice 3), strategy on/off and
+audit (slice 4), deployment (slice 5), dashboard (slice 6).
+
+Independent review of slice 2 (no critical findings) drove: exits exempt from the cost gate, rejected orders no longer
+exhaust the command cap (guard at 900), strategy failure isolation, integrity-error exit codes, lock lease verification,
+own-session strategy filtering, ledger-ordered order stamps, OBSERVED-only fills for live portfolios. Full gate:
+ruff format/check clean, mypy 190 files clean, 1389 tests passed, coverage 95.15%. See docs/29 section 10.

@@ -77,16 +77,18 @@ broker therefore needs a configured fee model. Slice 2 must propose it from Krak
 fetched and cited, not remembered) for the user's approval, and may use the pair's real `ordermin`, `costmin` and
 tick size, which the adapter does provide.
 
-**Numeric risk limits are not yet approved** (docs/12, "proposed choices"). Slice 2 starts by proposing
-concrete values (per-trade size, total exposure, daily loss, drawdown halt, stop and time exits) for the
-user's approval. Do not invent defaults.
+**Numbers approved (DEC-043, 2026-10-25), paper only:** EUR pairs XBTEUR/ETHEUR/SOLEUR long-only; €100 virtual capital;
+0.80% fee per side; 20% per position, 40% total exposure, 3% daily-loss and 10% drawdown suspensions; stop −5%,
+take-profit +8%, 72 h maximum hold, 6 h cooldown after a stop-out, one entry per symbol per 24 h; prices every
+15 min and an AI review every 4 h per symbol; portfolios: AI, rules breakout, passive buy-and-hold benchmark. Any
+change needs a new decision.
 
 ## 5. Slice plan (one at a time; commit + push after each green slice)
 
 | # | Slice | Done when |
 | --- | --- | --- |
 | 1 | **Done (PR pending merge)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
-| 2 | Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
+| 2 | **Built on `feature/s2-live-paper-loop` (PR pending merge)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
@@ -149,3 +151,81 @@ social volume as a ranking input. Borrow the skeleton, not the config:
 Grok / X news as a second analyst is a possible later slice. It needs separate paid xAI billing and a deliberate
 exception to the project's rule that provider tools are disabled, because posts are untrusted and can contain
 prompt injection.
+
+## 8. Slice 2 pieces (live paper loop)
+
+| Piece | Content | Status |
+| --- | --- | --- |
+| A | Simulator fills `spot` instruments against a real book; `KrakenEntry` evidence; `PaperStore` markers and `source_entry` | Done |
+| B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Done (`live/config.py`, `signals.py`, `risk.py`) |
+| C | Tables (strategies, decisions, candles, state, equity), cycle engine with plan-then-submit recovery, passive benchmark | Done (`live/store.py`, `strategies.py`, `engine.py`, migration 0012) |
+| D | `atl-live` worker/CLI, real Kraken local run of several cycles | Done (`live/worker.py`, `cli.py`, `status.py`); real runs below |
+
+Implementation details chosen in piece A, not part of DEC-043: the paper broker's per-trade cost gate
+(`max_cost_bps`) is set to 250 bps (a round trip costs about 160 bps in fees alone, so spread plus impact above about
+0.9% rejects the order), simulated latency is 1 s, quote freshness 60 s, and marketable limit orders are priced 10 bps
+beyond the touch so they can walk the book without chasing it.
+
+Definitions fixed in piece B (implementation of the approved numbers; change only by a new decision):
+- **Equity** = cash plus the net proceeds of liquidating every position against the current book (fee included).
+- **Daily loss** = day-open equity minus current equity, as a share of the *initial* capital, at or above 3%; suspends new
+  entries for the rest of the UTC day and clears at the next UTC day. **Drawdown** = peak-to-now equity at or above 10% of
+  the peak; it latches until cleared by hand and a recovery never clears it. Exits are never blocked by either.
+- **Position size** = the smallest of 20% of equity, the room under 40% total exposure, the broker's per-order cap (20% of
+  the *initial* capital, so growth does not enlarge positions) and the cash left after the fee.
+- **Stop-loss / take-profit** compare the bid-side liquidation price with the average entry price (cost basis per unit,
+  which excludes fees). The most urgent reason wins: stop-loss, then take-profit, then the 72 h limit.
+- **Rules breakout strategy (control):** buy when the last closed 15-minute candle closes strictly above the prior 48 h high
+  on at least the median volume; sell on a close below the prior 24 h low while held. Missing, stale or gapped candles never
+  trade. These strategy parameters are my design for the control strategy, not part of DEC-043.
+
+## 9. Running the live loop (slice 2)
+
+Paper only. `atl-live` needs `ATL_DATABASE_URL` (migrated: `alembic upgrade head`) and `ATL_EXECUTION_MODE=PAPER_ONLY`.
+Until the console script is reinstalled in your environment, use `python -m ai_trading_lab.live.cli`.
+
+| Command | What it does |
+| --- | --- |
+| `atl-live setup` | Creates the two paper portfolios (EUR 100 each) and registers the strategies; safe to repeat, never mutates |
+| `atl-live cycle` | One live cycle against real Kraken data, then prints the report |
+| `atl-live run --cycles N` / `--until-stopped` | The loop. Runs just after each quarter hour (the newest 15-minute candle has closed), holds a single-instance database lock, contains a failing cycle and exits non-zero after 10 in a row so a supervisor restarts it; SIGINT/SIGTERM stop it after the current cycle |
+| `atl-live status` | Strategies, holdings, fees paid, latest equity and recent decisions as JSON |
+
+How a cycle works: collect pair rules, one ticker and, per pair, server time, a 25-level book and candles; store the raw
+captures and new closed candles; build each pair's evidence (`KrakenEntry`; a pair whose evidence does not hold together is
+treated as having no data); evaluate every **enabled** strategy (rules breakout, passive benchmark); write each order as a
+`planned` decision with its intent and raw evidence, submit it to the paper broker, finish the decision, fold the fill into
+the loop state and record equity after the fills. Every hold is logged with its reason.
+
+Behaviour worth knowing:
+- **Slots.** An order's idempotency key includes the 15-minute slot, so a restart inside a slot never doubles an order, and
+  an order that was rejected is retried in the next slot, not repeatedly within the same one.
+- **Cycle time** is read after collection (never before a capture it uses); orders in one cycle are stamped 2 s apart because
+  the paper ledger's clock cannot move backwards and includes the 1 s simulated latency.
+- **Crash recovery.** A `planned` decision found at the start of a cycle is resubmitted with the same key; the broker answers
+  a completed order without a second fill and the loop state is restored from the fill.
+- **Disabled strategies** are skipped entirely (no decisions); existing positions stay until slice 4 defines switching off.
+- **Candles** are fetched incrementally (`since` the last stored candle) and kept as first seen.
+
+First real runs, 2026-10-25 against live Kraken (throwaway database): all three EUR pairs observed with verified evidence and
+no failures; the benchmark filled ETH/EUR and SOL/EUR at about EUR 33 each with 0.80% fees and marked equity at EUR 98.88 after
+fees and spread. The first run exposed a real bug the fake venue had hidden (the cycle read its clock before collecting, so the
+first order's quote looked like it came from the future); it is fixed and has a regression test.
+
+## 10. Review hardening of slice 2 (independent read-only review, 2026-10-25)
+
+- **Cost gate applies to entries only**: a stop, take-profit or time exit is never refused for spread or impact (amends ADR-0007).
+- **Live portfolios fill only OBSERVED quotes** whose Kraken captures re-derive the quote (`live_portfolio_requires_observed_quote`);
+  spot books are consumed per order, separately from other instrument kinds.
+- **Command capacity**: the broker keeps at most 1000 commands per portfolio and stores every submitted order, rejected ones
+  included. The engine refuses new orders at 900 (pre-flight refusal is logged as a decision) instead of failing late.
+- **Integrity vs rejection**: a broker *rejection* is a normal logged outcome; an inconsistent ledger is a fatal
+  `LoopIntegrityError` (CLI exit code 3, 4 for lock loss). The loop never retries past an integrity error.
+- **Strategy isolation**: one failing strategy is recorded in `CycleReport.errors` and the others still run. The engine
+  evaluates only its own session's strategies (the database may hold other sessions').
+- **Order stamping**: orders are never stamped before the ledger's last activity (`last_activity`), since the ledger clock
+  cannot move backwards.
+- **Lock lease** is verified each cycle; a lost lease stops the worker.
+- **Benchmark**: a partial buy counts as held; the rest is retried in the next slot. Disabled strategies make no decisions.
+- **Known limits**: no retention policy for decisions or observations (about 600 decision rows per day); the benchmark and
+  rules portfolios are independent EUR 100 ledgers.

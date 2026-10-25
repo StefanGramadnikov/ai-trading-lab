@@ -401,6 +401,8 @@ class PaperStore:
             history, config = await self._load(connection, portfolio_id)
             if "research_run_id" in config:
                 raise ValueError("Research portfolio is immutable")
+            if "runtime_session_id" in config:
+                raise ValueError("Runtime portfolio is managed by its owner")
             command_id = uuid5(portfolio_id, kind + ":" + key)
             old = history.effects.get(command_id)
             if old is not None:
@@ -421,6 +423,8 @@ class PaperStore:
             history, config = await self._load(connection, intent.portfolio_id)
             if "research_run_id" in config:
                 raise ValueError("Research portfolio is immutable")
+            if "runtime_session_id" in config:
+                raise ValueError("Runtime portfolio is managed by its owner")
             command_id = uuid5(intent.portfolio_id, "order:" + intent.idempotency_key)
             old = history.effects.get(command_id)
             if old is not None:

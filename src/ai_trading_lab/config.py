@@ -1,9 +1,13 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+from ai_trading_lab.ai.models import PriceSnapshot
+from ai_trading_lab.paper_execution.models import NonnegativeAmount
 
 
 class Settings(BaseSettings):
@@ -23,6 +27,8 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_chat_id: SecretStr | None = None
     ai_enabled: bool = False
+    ai_total_limit_usd: NonnegativeAmount = Decimal(0)
+    ai_reviewed_prices: tuple[PriceSnapshot, ...] = Field(default=(), max_length=100)
     openai_api_key: SecretStr | None = None
     xai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None

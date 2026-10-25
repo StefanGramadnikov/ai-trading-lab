@@ -57,6 +57,7 @@ class ResearchInput(FrozenModel):
             raise ValueError("invalid_research_window")
         previous = self.start_at_utc
         snapshots: dict[UUID, object] = {}
+        native: dict[tuple[str, datetime], UUID] = {}
         latency = timedelta(milliseconds=self.simulation.latency_ms)
         for frame in self.frames:
             if not previous <= frame.at_utc <= self.end_at_utc:
@@ -68,6 +69,14 @@ class ResearchInput(FrozenModel):
             old = snapshots.setdefault(quote.snapshot_id, quote)
             if old != quote:
                 raise ValueError("snapshot_definition_conflict")
+            if quote.event_time_utc is not None:
+                # One venue event is one consumable depth, whatever delivery or mode carries
+                # it: a repeat under a fresh snapshot_id would silently renew liquidity.
+                known = native.setdefault(
+                    (quote.instrument.key, quote.event_time_utc), quote.snapshot_id
+                )
+                if known != quote.snapshot_id:
+                    raise ValueError("duplicate_native_event_cannot_renew_depth")
             if self.data_mode == DataMode.REPLAY:
                 if self.replay_manifest is None or not self.replay_manifest.allows(quote):
                     raise ValueError("unqualified_replay_quote")

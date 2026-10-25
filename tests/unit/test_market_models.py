@@ -19,6 +19,7 @@ NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
 def test_capture_preserves_decimal_and_exact_body_fingerprint() -> None:
     capture = Capture(
+        data_mode="FIXTURE",
         source=Source.DEXSCREENER,
         method="GET",
         path="/token-profiles/latest/v1",
@@ -35,7 +36,12 @@ def test_capture_preserves_decimal_and_exact_body_fingerprint() -> None:
 @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])
 def test_nonfinite_json_rejected(value: str) -> None:
     capture = Capture(
-        source=Source.SOLANA, method="POST", path="/", body=value, received_at_utc=NOW
+        data_mode="FIXTURE",
+        source=Source.SOLANA,
+        method="POST",
+        path="/",
+        body=value,
+        received_at_utc=NOW,
     )
     with pytest.raises(ValueError):
         capture.payload()
@@ -52,6 +58,7 @@ def test_identity_and_time_validation() -> None:
         Instrument(source=Source.KALSHI, venue="kalshi", native_id="", kind="prediction")
     with pytest.raises(ValidationError):
         Capture(
+            data_mode="FIXTURE",
             source=Source.SOLANA,
             method="POST",
             path="/",
@@ -96,6 +103,7 @@ def test_nested_evidence_is_immutable_and_detached_from_input() -> None:
         source=Source.SOLANA, venue="solana", native_id="mint", kind="token", metadata=nested
     )
     capture = Capture(
+        data_mode="FIXTURE",
         source=Source.SOLANA,
         method="POST",
         path="/",
@@ -138,6 +146,7 @@ def test_default_evidence_containers_are_frozen() -> None:
 @pytest.mark.parametrize("depth", [65, 10000])
 def test_capture_rejects_excessive_json_depth_as_validation_error(depth: int) -> None:
     capture = Capture(
+        data_mode="FIXTURE",
         source=Source.KALSHI,
         method="GET",
         path="/markets",

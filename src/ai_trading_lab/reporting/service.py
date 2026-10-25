@@ -14,6 +14,8 @@ from ai_trading_lab.experiments.reporting import build_report
 from ai_trading_lab.experiments.store import ExperimentStore, experiments
 from ai_trading_lab.market_data.storage import content_hash, raw_events, snapshots
 from ai_trading_lab.paper_execution.store import events, fills, journal, orders
+from ai_trading_lab.runtime.engine import reducer
+from ai_trading_lab.runtime.journal import Journal, sessions
 
 MAX_EXPORT_BYTES = 8_000_000
 
@@ -23,11 +25,15 @@ class Reports(Protocol):
     async def detail(self, experiment_id: UUID) -> dict[str, object]: ...
     async def export(self, experiment_id: UUID) -> bytes: ...
     async def status(self) -> dict[str, object]: ...
+    async def runtime_sessions(self, limit: int = 20) -> dict[str, object]: ...
+    async def runtime_detail(self, session_id: UUID) -> dict[str, object]: ...
 
 
 class ReportingService:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
+        # One journal keeps its verified-continuation cache across dashboard requests.
+        self._journal = Journal(engine, reducer)
 
     async def list_experiments(self, limit: int = 20, offset: int = 0) -> dict[str, object]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
@@ -164,6 +170,78 @@ class ReportingService:
         if len(result) > MAX_EXPORT_BYTES:
             raise ValueError("export exceeds 8MB")
         return result
+
+    async def runtime_sessions(self, limit: int = 20) -> dict[str, object]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid runtime page size")
+        async with asyncio.timeout(5), self.engine.begin() as connection:
+            await connection.execute(text("SET TRANSACTION READ ONLY"))
+            rows = (
+                await connection.execute(
+                    select(
+                        sessions.c.session_id,
+                        sessions.c.config_hash,
+                        sessions.c.engine_hash,
+                        sessions.c.checkpoint["last_at"].astext.label("last_at"),
+                        sessions.c.checkpoint["sequence"].astext.label("sequence"),
+                        sessions.c.checkpoint["state"]["status"].astext.label("status"),
+                    )
+                    .order_by(sessions.c.session_id)
+                    .limit(limit)
+                )
+            ).mappings()
+            current = runtime_fingerprint()
+            result = [
+                {
+                    "session_id": str(row["session_id"]),
+                    "runtime_compatible": row["engine_hash"] == current,
+                    "last_at": row["last_at"],
+                    "sequence": row["sequence"],
+                    "status": row["status"],
+                    "verification": "unverified_index_metadata",
+                }
+                for row in rows
+            ]
+        return {
+            "items": result,
+            "limit": limit,
+            "heartbeat_basis": "last durable progress; not a live process probe",
+        }
+
+    async def runtime_detail(self, session_id: UUID) -> dict[str, object]:
+        checkpoint = await self._journal.get(session_id)
+        state = cast(dict[str, object], checkpoint["state"])
+        # Full source evidence remains in the local journal, not browser diagnostics.
+        visible = {
+            key: state.get(key)
+            for key in (
+                "status",
+                "portfolio",
+                "nav",
+                "entry_suspended",
+                "suspension_reason",
+                "cycles",
+                "poll_attempts",
+                "poll_pending",
+                "last_at",
+                "peak_nav",
+                "day",
+                "day_open_realized_net",
+                "risk_latch",
+                "history_hash",
+                "paper_only",
+                "ai_enabled",
+            )
+        }
+        return {
+            **checkpoint,
+            "state": visible,
+            "heartbeat_basis": "last durable progress; not a live process probe",
+            # The runtime has no settlement or discretionary exit path (CODEX_FIXES F-12), so
+            # NAV is a full-liquidation mark. It is never a realized or final result.
+            "economic_basis": "mark_only_no_realization",
+            "final_pnl_claim": False,
+        }
 
     async def status(self) -> dict[str, object]:
         async with asyncio.timeout(5), self.engine.begin() as connection:

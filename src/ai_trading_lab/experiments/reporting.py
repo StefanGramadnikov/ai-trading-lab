@@ -9,11 +9,20 @@ from ai_trading_lab.experiments.models import ExperimentConfig
 
 
 def build_report(
-    config: ExperimentConfig, reports: tuple[dict[str, object], ...]
+    config: ExperimentConfig,
+    reports: tuple[dict[str, object], ...],
+    attached_expenses: tuple[Expense, ...] = (),
+    expenses_complete: bool | None = None,
 ) -> dict[str, object]:
+    """Report the immutable cohort plus append-only evidence attached after creation.
+
+    Attached invoices and the completeness declaration are durable lifecycle events; they
+    never rewrite the frozen configuration or its hash.
+    """
     config = ExperimentConfig.model_validate(config.model_dump(mode="json"))
+    complete = config.expenses_complete if expenses_complete is None else expenses_complete
     by_id: dict[str, dict[str, object]] = {}
-    expenses = list(config.expenses)
+    expenses = [*config.expenses, *attached_expenses]
     for report in reports:
         cell_id = report.get("cell_id")
         if not isinstance(cell_id, str) or cell_id in by_id:
@@ -63,7 +72,7 @@ def build_report(
                 reasons.append("cell_not_completed")
             if trading_net is None:
                 reasons.append("trading_valuation_unavailable")
-            if not config.expenses_complete:
+            if not complete:
                 reasons.append("operating_expenses_not_declared_complete")
             if allocated.total_cost is None:
                 reasons.extend(allocated.unavailable_reasons)
@@ -152,6 +161,7 @@ def build_report(
         "start_at_utc": config.cells[0].research.start_at_utc.isoformat(),
         "end_at_utc": config.cells[0].research.end_at_utc.isoformat(),
         "reporting_currency": config.reporting_currency,
+        "expenses_complete": complete,
         "cells": cells,
         "costs": costs.model_dump(mode="json"),
         "paired_comparisons": comparisons,

@@ -233,3 +233,22 @@ values, export provenance/size, incompatible runtime refusal and read-only state
 Telegram contract cases cover malformed/oversized/429/5xx/timeouts, recipient checks,
 no blind retries and secret-free errors; PostgreSQL covers claims/concurrency and
 restart uncertainty. Existing M1–M6 gates remain required.
+
+
+## M8A local runtime acceptance
+
+Keep all M1–M7 tests. Pure fixtures verify repeated cycles retain cash/positions/fees,
+UTC execution-day loss and NAV drawdown latches, exact sizing, stale/partial marks,
+manual pause/resume, terminal stop/deadline, poll budget and native-depth identity.
+Source contract tests inject original-shape synthetic captures and never call public
+APIs; no fixture is counted as genuine observed performance. PostgreSQL verifies
+event/checkpoint replay, idempotency/conflicts, atomic rollback, corruption/deletion,
+capacity, bounded readonly reads and worker ownership including actual termination
+of the dedicated test backend. A stale worker cannot reconnect under an old lease.
+
+Browser tests cover authenticated runtime checkpoint inspection without write
+controls. Backup unit stubs verify safe arguments, private exclusive paths, deadlines,
+streaming caps and refusal; actual production acceptance must separately dump/restore
+a fresh isolated database and replay the same checkpoint with matching source code.
+Never restore over existing data. The same full make check, production migration/
+schema parity, package/CLI smoke and independent review remain mandatory.

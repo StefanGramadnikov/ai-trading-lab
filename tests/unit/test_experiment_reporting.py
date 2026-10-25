@@ -17,16 +17,19 @@ from tests.experiment_helpers import experiment, profile
 async def results() -> tuple[Any, tuple[dict[str, Any], ...]]:
     spec = experiment()
     tape = spec.cells[0].research
+    # Two rules-only cells can only be compared on the risk profile (F-18: the declared
+    # dimension must vary), so the control differs by its profile name alone.
     spec = spec.model_copy(
         update={
+            "dimension": "risk",
             "cells": (
                 spec.cells[0],
                 Cell(
                     cell_id="control",
-                    profile=profile(),
+                    profile=profile("conservative"),
                     rules=tape.model_copy(update={"run_id": uuid4()}),
                 ),
-            )
+            ),
         }
     )
     reports = tuple(
@@ -154,3 +157,14 @@ async def test_public_curves_and_endpoint_gap_are_preserved() -> None:
     assert out["consolidated_economic_net_pnl"] is None
     assert out["cells"][0]["equity_curve"] == reports[0]["equity_curve"]
     assert out["cells"][0]["equity_curve"][-1]["nav"] is None
+
+
+def test_f13_attached_expenses_do_not_change_config_identity() -> None:
+    from ai_trading_lab.experiments.reporting import build_report
+
+    spec = experiment().model_copy(update={"expenses_complete": False})
+    out: Any = build_report(spec, (), attached_expenses=(), expenses_complete=True)
+    assert out["expenses_complete"] is True
+    assert out["config_hash"] == spec.fingerprint
+    assert out["configuration"]["expenses_complete"] is False
+    assert out["empirical_performance_claim"] is False

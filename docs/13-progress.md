@@ -4,15 +4,17 @@
 
 ## Current state
 
-- **Milestone:** M6 PR #7 merged as `1b40185`; M7 shipped for review in PR #8.
-- **Branch:** `feature/m7-reporting`, base `1b40185`; implementation commit `8590379`.
-- **Scope:** local authenticated read-only dashboard/API/audit JSON, explicit
-  Telegram outbox commands, Playwright browser testing. No real Telegram delivery,
-  paid AI, unattended scheduler, deployment or M8 approval. Shipping was explicitly
-  authorized by the user; merge remains separate.
-- **Verification:** M7 local acceptance PASS: 924 tests/96.35%, Ruff/mypy, production
-  migration/dashboard/export/replay/health and independent re-review. Implementation push/PR CI PASS;
-  real Telegram delivery remains NOT RUN; no message was sent.
+- **Milestone:** M7 PR #8 merged as `7d4562f`; M8A local acceptance complete.
+- **Branch:** `feature/m8-local-runtime`, base `7d4562f`; work uncommitted/unstaged.
+- **Scope:** bounded local paper worker, persistent journal/portfolio/risk, qualified
+  observed-source simulation, queued local diagnostics, read-only runtime reporting
+  and backup/isolated restore tooling. All acceptance uses synthetic source evidence.
+- **Verification:** full make check PASS, **1022 tests,95.36% coverage**, Ruff/mypy;
+  production migration/schema/CLI/reporting/backup-restore replay and independent
+  review PASS. Final evidence documentation repeats the full gate before handoff.
+- **Gates:** no shipping/CI, multi-day run, real source collection, real Telegram,
+  paid AI, cloud deployment or live trading occurred or is authorized by M8A.
+  The user's existing M7 dashboard remains untouched on its prior verified image.
 
 ## M3 implementation and initial verification — 2026-10-19
 
@@ -1304,3 +1306,353 @@ real Telegram message, extra paid AI call, deployment, live trading or merge.
 Next manual step: review and squash-merge PR #8 when final checks are green.
 Then request approval to prepare the M8 operational plan, including continuous
 paper scheduling, local multi-day smoke and deployment gates; do not begin it yet.
+
+
+## M8A start and usage-limit handoff — 2026-10-20
+
+User approved the proposed M8A local-runtime phase with “OK, continue with the
+next phase”, then repeated “OK continue” / “continue”. Verified M7 PR #8 merged
+as `7d4562fc2040a3e7e91f805f6eb982ba6043c8e5`; fetched origin and created clean
+`feature/m8-local-runtime` from remote main. Recorded approved contract in
+`docs/25-m8-local-runtime.md` and updated AGENTS current scope.
+
+Account five-hour allowance initially had 7% remaining. All three delegated tasks
+then reported the hard account usage limit and stopped. Reported reset: 2026-10-20
+20:51 Europe/Sofia. This is an external work interruption, not completed acceptance.
+
+Exact partial artifacts observed at interruption: `runtime/journal.py` and
+`operations/backup.py` under src/ai_trading_lab. They are untracked drafts, not
+reviewed or integrated. No runtime engine/models/worker/CLI, migration0010, backup
+runbook or new tests were observed. Inspect partial files before reuse; no claim
+that they implement the approved contracts. M8A tests, quality gate, production
+acceptance and independent review: NOT RUN. No staging, commit, push, real market
+collection, Telegram delivery, paid AI, operational run or deployment occurred.
+Existing M7 local dashboard remains on its prior verified container image.
+
+Resume already approved M8A after account reset; no new implementation approval
+is needed. Read AGENTS, document25 and this checkpoint first. Main owns engine
+integration/CLI/collection/reporting/tests/docs. Prior narrow assignments: journal
+worker owns runtime/journal.py + new0010 migration + PGtests; backup worker owns
+operations/backup.py + unit tests + docs26; engine worker owns runtime models/
+evidence/reducer + minimal backward-compatible M3History extension + unit tests.
+Workers stopped due quota; task messages retain exact contracts. No default paper
+risk values may be activated. Finish all implementations, add tests before/alongside,
+run full make check with isolated PG, production/fault/restore checks and fresh
+independent review before requesting ship. M8B multi-day run, paid AI, real Telegram
+delivery, cloud deployment and shipping remain separately gated.
+
+
+M8A resumed after reset — user confirmed time passed. Account usage access restored.
+Reviewed interrupted drafts, resumed narrow workers and integrated source/CLI/worker
+with explicit finite activation, borrowed physical-connection ownership and read-only
+runtime reporting. No operation was activated. Focused engine/source/CLI/backup tests:
+57 PASS. Worker journal PostgreSQL suite:23 PASS, including forced backend termination
+and refusal of stale-owner writes. Main combined journal/worker/CLI/source/browser
+focused suite:54 PASS in8.89s. Ruff/mypy (140 files) pass before subsequent docs; full
+required gate, production/restore acceptance and independent review remain pending.
+
+
+First full M8A gate: 1015 PASS,1 FAIL (95.28% coverage). The existing immutable
+research-portfolio regression expected the established diagnostic, which a widened
+runtime ownership guard changed. Repair round1 preserves the existing research
+error/behavior and adds a separate runtime-owner refusal; original test unchanged.
+Full gate and independent review are repeated; no acceptance claimed yet.
+
+
+After repair round1, complete make check PASS:1016tests/95.29%, Ruffformat182,
+Rufflint and strictmypy140. First controlled production stack `atl-m8-validation`
+(DB55433/API58001, separate from user's dashboard) passed build/startup, migration
+head0010/schema parity, packaged CLI, fixture position/fee/funding persistence,
+original key replay after stop, authenticated runtime UI/API and health. Actual
+pg_dump backup, isolated pg_restore, matching checkpoint replay and refusal to
+overwrite the existing restore database PASS. Initial acceptance fingerprint
+`4088568b62a19e10352158cd64fe0f5e797ce48993976f99a380920ab004c131`.
+This predates notification integration, so final current-runtime evidence follows.
+
+Finishing approved reporting integration now queues local diagnostics for suspended
+checkpoints from worker/explicit controls; no Telegram delivery. New focused unit
+checks13PASS, Ruff/mypy142PASS. Added README/operator examples, synthetic versioned
+config/tick, testing/infrastructure/architecture references. Full repeated gate,
+final-production repeat and final independent review pending. Initial review found
+no actionable code issue but correctly reported acceptance incomplete before those
+results/README existed. No shipping/multi-day/paid/live approval is implied.
+
+
+Repair round2: review confirmed notification enqueue failure could abort otherwise
+usable deterministic monitoring after a suspended checkpoint. Queue SQL/time/
+validation failures now emit a fixed local diagnostic without leaking exception
+text or changing the committed paper control result. A common worker exit hook
+also attempts diagnostics for deadline/interrupted-poll terminal paths. Added unit
+and real-PG regression with an unavailable outbox: two separately invoked worker
+cycles still consume4mocked readonly requests, retain capital and reach the bound.
+No real source/Telegram call. Full gate/production/re-review repeated after repair.
+
+
+## M8A final local acceptance — 2026-10-20
+
+After repair round2, full mandatory command:
+
+```bash
+ATL_TEST_DATABASE_URL=postgresql+psycopg://ai_trading_lab:local_example_only@127.0.0.1:55432/ai_trading_lab_test PATH=/private/tmp/ai-trading-lab-tools/bin:$PATH UV_CACHE_DIR=/private/tmp/ai-trading-lab-uv-cache make check
+```
+
+Observed **1022 passed in26.58s**, **95.36% statement/branch coverage**, Ruff
+format/lint and strictmypy142files PASS. 98 cases beyond M7's924; all prior
+assertions remain required, no skipped/weakened tests. Includes nine real Chromium
+cases (runtime checkpoint plus prior viewport/theme/error/auth cases), actual PG
+worker ownership/recovery tests and deterministic raw-source/engine/backup tests.
+Original research-immutability diagnostic preserved after round1. Round2 prevents
+outbox failure from stopping qualified monitoring and covers terminal diagnostics.
+
+Fresh independent final review: PASS for all46modified/untracked paths against
+`7d4562fc2040a3e7e91f805f6eb982ba6043c8e5`. Reviewer inspected exact gate and final
+production evidence, ran only a read-only in-memory reproduction; no independent
+full-suite execution, enforced separate sandbox or security-audit claim.
+
+Repaired production acceptance used fresh isolated `atl-m8-final-validation` at
+DB55434/API58002 to leave the user's M7 dashboard/DB on58000/55432 untouched:
+
+- Compose build/startup PASS; container Alembic upgrade/current head0010_runtime
+  and `alembic check` PASS, no schema drift. Previous migrations unchanged.
+- Fresh synthetic config: packaged `atl-runtime create` twice, `step` twice with
+  same key/time, restart `show`, pause/resume/stop and replay original step after
+  stop PASS. Cash/fees/positions remain persistent; stop does not fabricate exits
+  or replenish virtual funding. No fixture is claimed as live market evidence.
+- Actual authenticated HTTP dashboard/assets/runtime index/verified checkpoint and
+  no-auth401 PASS; existing health remains PAPER_ONLY/trading_readyfalse.
+  Production image excludes pytest/Playwright. No worker profile was activated.
+- Stop temporary API writer before backup. Actual `BackupTool.backup` using existing
+  PostgreSQL17.9container pg_dump/coreutils timeout produced a private custom-format
+  archive+hash/count manifest. `restore` created only the fresh dedicated
+  ai_trading_lab_restore_test database. Schema/counts matched; replay from that
+  database equals the entire original stopped checkpoint. A second restore refused
+  the existing target without modifying it. Source/restore retained for inspection.
+- Actual restored summary: migration0010, runtime_sessions1/runtime_events4; raw
+  sources/paper tables/experiments0 for this isolated scenario. Runtime simulated
+  receipts live in its authoritative journal, not legacy offline paper tables.
+
+Final installed/host runtime fingerprint:
+`c17ee97a41794bd4c9244668378eb2d1da463050856e2b617237cc30a94e01ac`.
+Exact driver/evidence: `/private/tmp/atl-m8-final-smoke.py`,
+`/private/tmp/atl-m8-final-production-smoke.log`, `/private/tmp/atl-m8-final-acceptance.json`.
+Private backup location/checksum are in that local acceptance file, outside Git.
+The earlier pre-notification acceptance remains historical; final evidence above
+binds the repaired source. No real collection, paid provider call or Telegram send.
+
+Lock check (55unchangedpackages), local Markdown references and diff whitespace
+PASS. No dedicated dependency/secret scanner configured; no security audit claimed.
+Final evidence-only docs repeat complete make check before handoff. Temporary M8
+validation services are stopped afterward, retaining volumes and backup artifacts;
+existing M7 dashboard service remains running. No staging/commit/push/PR/hostedCI.
+
+Limits: no multi-day stability/throughput/physicaldisk quota claim; numeric caps
+are engineering ceilings. Worker records only durable progress, not external uptime.
+Observed Polymarket raw qualification retains generic collateral; collector supplies
+no forecast, so missing evidence abstains. Runtime AI remains disabled. Outbox is
+local only; failure emits safe diagnostics without altering deterministic controls.
+
+Next safe step: user invokes `/ship` for final verification/commit/push/PR/CI. After
+merge, approve exact risk/source/cadence/storage settings and an explicit M8B local
+2–4-day start. M8C cloud/vendor/spending and real Telegram remain separate gates.
+
+
+## M8A ship gate — 2026-10-20
+
+User explicitly selected the repository ship skill after local acceptance.
+Branch `feature/m8-local-runtime`, base `7d4562fc2040a3e7e91f805f6eb982ba6043c8e5`;
+46 intended paths. No unrelated changes or dependency/lock upgrades.
+
+Repeated the exact full `make check` command above: **1022 passed in26.31s**,
+**95.36% coverage**, Ruff format184/lint and strictmypy142 PASS. Log:
+`/private/tmp/atl-m8-ship-check.log`. Local Markdown targets (39 files), offline
+locked dependency check (55 packages), diff whitespace and limited credential
+pattern inspection PASS. `.env` excluded. No dedicated security scanner configured.
+
+Fresh isolated production project `atl-m8-ship-validation` (DB55435/API58003)
+passed image build/startup, migration0010/schema parity, packaged fixture CLI
+idempotency/restart/control/replay with retained positions, HTTP auth/runtime and
+health, absence of dev tools, actual private pg_dump and new isolated pg_restore,
+matching full checkpoint replay and refusal to overwrite an existing restore target.
+Same final runtime fingerprint `c17ee97a41794bd4c9244668378eb2d1da463050856e2b617237cc30a94e01ac`.
+Evidence: `/private/tmp/atl-m8-ship-production-smoke.log` and
+`/private/tmp/atl-m8-ship-acceptance.json`. Temporary services are stopped after
+acceptance, retaining volumes/backup; user's M7 dashboard remains untouched.
+Fresh independent shipping review PASS with no actionable findings across all46
+paths and surrounding contracts. Reviewer inspected evidence but ran no tests;
+read-only restrictions were behavioral, not an enforced separate sandbox.
+Post-documentation full gate repeated PASS:1022tests in25.84s/95.36%.
+Log: `/private/tmp/atl-m8-ship-doc-check.log`. No ship repair rounds required.
+Final-head hosted CI will be verified after push and recorded in the associated
+PR and completion handoff; it is not claimed green before execution.
+No real market acquisition, operational worker, paid inference, Telegram delivery,
+multi-day operation, cloud deployment or live trading is part of this ship gate.
+
+
+## Local operational readiness and manual-action tracking — 2026-10-20
+
+User requested local setup for observation/optimization and explicit notification
+when accounts, keys or other manual work become necessary. Keep this checklist
+current during subsequent approved phases; identify owner, blocker and completion
+evidence, and notify the user at the point their action is required. No unattended
+monitor, account creation, operational start or new paid envelope is implied.
+
+M8A PR #9 is OPEN (not merged) when checked. Final head
+`1bdda164bbac382bab8fd7564636926435ea6ff4` passed both hosted runs:
+[PR CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39477552607)
+and [push CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39477525348).
+Each passed1022tests/95.36%, production build/migrations/health. Existing M7 demo
+health on localhost58000 is alive/PAPER_ONLY; this is not an activated M8 runtime.
+
+| Action / readiness item | Owner / timing | Current status |
+| --- | --- | --- |
+| Squash-merge reviewed PR #9 | User, before M8B setup | Pending; no merge authorization |
+| Prepare exact local setup and short smoke plan, then approve bounded activation | Agent prepares; user approves parameters/start | Proposed; no runtime started |
+| Preserve existing demo/data, back up, use compatible pinned code/schema/config | Agent, approved setup | Required before updating local installation |
+| Confirm source access/current schema, market identity, cadence and storage limits | Agent proposes/proves; user approves operating limits | Pending; public source access not yet proven by M8A fixtures |
+| Strategy/forecast inputs and continuous AI integration | Agent scopes; user approves any new work | Current collector generates no forecast; runtime AI disabled; missing inputs abstain |
+| Mac power/sleep, OrbStack and network availability | User, immediately before operational run | Manual checklist pending; no OS settings changed |
+| Public market-data credentials | Agent checks before selected source activation | No account/key requested for planned public Polymarket reads; no trading account/wallet required |
+| Personal OpenAI configuration | User already supplied locally in M5 | One real M5 call recorded; verify local configuration without displaying secrets before reuse; recurring AI/model/budget approval still pending |
+| Telegram bot token and recipient | User, when real notification acceptance is approved | Not requested now; real delivery untested; use ignored local environment only |
+| Other AI providers / paid data / VPS | User only if selected and approved later | Deferred; no account, key or purchase requested |
+| Measure and record optimization evidence | Agent, approved short smoke then 2–4-day run | Pending: collection latency/failures/freshness, cycle duration, CPU/RAM, actual DB/log growth, recovery/replay and dashboard responsiveness; do not invent thresholds or tune strategy for an apparent backtest profit |
+
+Next proposed sequence: merge M8A → approve local setup/short smoke plan → execute
+bounded source/readiness test → review measured evidence and blockers → approve
+2–4-day M8B operation. AI activation and real Telegram send remain explicit gates.
+This entry is an uncommitted documentation update; no runtime/config or GitHub
+state changed and no secret was inspected or printed.
+
+
+Readiness checklist validation: local Markdown links and `git diff --check` PASS.
+Required documentation-update `make check` passed Ruff format/lint and strict mypy,
+then BLOCKED while preparing the database fixture for browser tests. Docker info
+also failed a bounded5second retry (timeout). Stopped only this turn's identified
+stalled test/migration/probe processes; no application container/volume cleanup.
+Current full-suite recheck is INCOMPLETE, not a new green result. User notified:
+check/resume/restart OrbStack and confirm responsiveness before local setup; then
+rerun the full gate. Earlier M8A local and exact-head hostedCI evidence remains
+historical verified PASS. No application code changed in this documentation task.
+
+## CODEX_FIXES repair execution — 2026-10-23 (in progress)
+
+User approved restoring pinned Python/dependencies and Chromium, then continuing
+regression-first M8A repairs. Restored Python3.12.13 under /private/tmp/atl-fixes-python;
+preserved broken .venv as /private/tmp/atl-broken-venv-20261022 and recreated with
+uv0.11.7 sync --locked (55 resolved packages). Chromium installation completed.
+No real source, AI or Telegram calls. No staging/commit/push/branch/PR change.
+
+Created only new disposable postgres:17.9-bookworm server atl-fixes-20261022,
+loopback32768/database ai_trading_lab_test, ephemeral tmpfs storage. All previous
+demo containers/volumes/data remain untouched. Remove only the new test server
+when verification finishes; test URL uses synthetic fixes_test_only credentials.
+
+Verified so far (focused results, not a full-gate claim):
+
+- F01: four behavioral regressions failed before changes; reducing sells and NAV
+  simulation no longer use entry-only max_order_notional. New tests verify profitable
+  exit, peak NAV/drawdown and experiment result. Focused109PASS; later F01 repeat4PASS.
+  Logs /private/tmp/atl-f01-red.log and /private/tmp/atl-f01-green.log.
+- F02: nine provenance regressions RED then GREEN; focused332PASS, Ruff/mypy PASS.
+  Required explicit capture mode, synthetic transport labeling, observed CLI refusal,
+  pending canonical poll/result and active physical worker lease. Existing synthetic
+  callers deliberately updated to explicit FIXTURE. Historical audit query documented
+  in document27 only; NOT RUN against existing data. Isolated PG ownership test PASS.
+- F05: five cross-envelope regressions RED then GREEN; focused91PASS in3.37s,
+  Ruff/targeted mypy PASS. Disabled-by-default total budget, configured reviewed tariff,
+  durable global serialization/history verification and provider unknown-outcome block.
+  User approved guards while preserving ADR0009's prohibition on reconciliation override.
+- F04 approved subset:18 health/config unit tests PASS after missing-module RED;
+  isolated PG readonly/staleness/terminal/no-writer-lock regression PASS. Compose
+  failed-exit restart bounded to3; unhealthy status alone does not restart a container.
+  Operational/risk latches are never automatically cleared. No existing service restarted.
+- F06: two regressions RED then GREEN. History.last_at orders submitted commands;
+  Effect.at and receipt execution time retain simulated latency. Pause/poll can occur
+  during that latency. Focused36PASS; logs /private/tmp/atl-f06-{red,green}.log.
+- F07: two worker error-path unit regressions RED then GREEN. Known rejected source
+  results record a safe failure; concurrent operator stop returns stopped state.
+  Integrity/lease/persistence errors remain fatal. Real PG cases/full gate pending.
+
+F03 user decision: larger-limit proposal explicitly approved, maximum configurable
+canonical journal512MiB, explicit session settings and worst-case admission budget;
+no existing session limits silently widened. Actual database footprint is measured
+separately. Compact/incremental journal implementation and realistic benchmark
+validation remain in progress; no throughput/capacity result claimed yet.
+
+Automatic repair accounting so far: round1 F02 CLI local-variable type correction;
+round2 F04 database-row mapping type correction; round3 F03 test type narrowing.
+After round3 verification, further failures require user direction; do not silently
+reset the counter or weaken assertions. Full gate/production/restore/review results
+and complete finding dispositions will be recorded after actual execution.
+
+
+### Repair pass verification and stop — 2026-10-23
+
+Detailed dispositions for all22findings, exact commands, limitations and next steps:
+[document28](28-review-repair-status.md). Full pytest1078PASS/1FAIL/95.13%; all9
+Chromium tests and6000tick real-reducer benchmark ran. Formatting PASS200files;
+lint FAIL1unusedimport; mypy FAIL4testtypingerrors. Pytest failure is a deliberate
+pending migration-head assertion update (expects0010, new0011isapplied). Coverage
+0.07points below supplied review baseline explained in document28; no weakening.
+
+Production image build (approved locked dependency downloads), Compose validation,
+production migration up→down→up/schema parity and actual private backup/new isolated
+restore/full runtime checkpoint replay PASS. Initial no-network build lacked cached
+dependencies; helper first needed explicit repository PYTHONPATH. Final successful
+commands/evidence recorded in document28. No existing demo services changed.
+
+Fresh independent interim review INCOMPLETE: confirmed HIGH midnight risk-baseline
+rewind during control/in-flight latency and MEDIUM capacity reason lost atdeadline;
+F07 real-PG coverage and benchmark latency assertions remain missing. No further
+application/test repairs after round3; user direction required. Remaining original
+findings, historical-read/report labels and unverified capture work remain pending.
+No shipping/activation is implied. Disposable test server removal recorded below.
+
+Cleanup verified: stopped only disposable container
+2613639fd49d09dabc578fb0a6c591f5ebeadede17118ae208006f52d27ca5f9
+(atl-fixes-20261022); its automatic removal completed after a short asynchronous
+wait, and a bounded inspect confirmed it no longer exists. Its tmpfs data was
+discarded; private backup artifact remains outside Git. Existing services/volumes
+untouched. Local Markdown targets41files and final diff whitespace PASS. All work
+remains unstaged/uncommitted. Next action requires user direction under repair cap.
+
+## 2026-10-25 — CODEX_FIXES repair continuation (verified state)
+
+Continued the repair on the same uncommitted tree after Codex stopped at its repair limit.
+Fixed and tested: F-09, F-13 (store, report and CLI), F-14, F-15, F-16, F-19, F-21; added the F-12 mark-only
+label, F-10 ordering contract test, F-03 benchmark time budgets, worker bound tests, and an
+F-18 reporting fixture correction. Gate on this tree: ruff format/check and mypy clean; 1117
+pytest passed before the final F-13 guard tests were added, coverage 95.12%. Not repeated:
+production image build, Compose validation, backup/restore production verification. Open
+decisions (F-04 auto-clear, F-08 risk unification, F-11 chaining, F-12 exit path) and unverified
+live-shape questions (F-10, F-17, F-22) are listed in document 28. M8B remains blocked; nothing
+committed or shipped.
+
+## 2026-10-25 — DEC-039 bounded automatic recovery (F-04)
+
+User approved auto-clearing of `collection_failure` and `clock_gap` only: three consecutive fresh
+qualified ticks (non-duplicate, VALID, advancing event time, within `max_gap_seconds`; the gap-detecting
+tick is not counted), never a pause, risk latch, capacity or stop, with a breaker of 5 clears per session
+and 3 per rolling hour. Implemented in the runtime reducer, with a queued `recovery` notification and
+state fields `recovery_ticks`, `auto_clears`, `auto_clear_breaker`, `auto_clear_times`. ADR-0011 and
+documents 06/12/25 amended. A gap during a manual pause no longer converts the pause into a gap.
+
+## 2026-10-25 — DEC-040: M8B is a no-trade soak (F-12 decided)
+
+User approved deferring the exit/settlement path. Code review showed the OBSERVED runtime cannot open
+positions (collector supplies no forecast/feature; rules strategies abstain), so exits are unreachable in
+M8A. M8B validates infrastructure only and makes no trading or P&L claim. A forecast/feature source, an
+exit/settlement path using captured resolution evidence, and a chaining decision (F-11) gate any trading
+run; F-08 should be decided before one. Documentation only; no code changed, nothing committed.
+
+## 2026-10-25 — Course correction to a fast live-paper experiment (DEC-041, DEC-042)
+
+The user restated the goal: test whether an AI-driven system can make a profit, deploy fast and cheaply,
+paper money for 1–2 weeks, easy dashboard with strategy on/off, and learn from mistakes. A review of the built
+system found it was a well-guarded engine with no live loop: the runtime cannot trade, the AI can only veto,
+the dashboard is read-only. Chosen: Kraken public data (BTC/ETH/SOL), OpenAI with a €10 cap (a key already
+exists in the git-ignored `.env`), a cheap VPS, 1–2 week evaluation, one-slice-at-a-time process with commit and
+push after each green slice. Public reads verified reachable from the user's network on 2026-10-25: DexScreener,
+Solana RPC, Kalshi, Kraken, Coinbase; Polymarket remains blocked. Committed and pushed the green repair work
+(1170 tests, coverage 95.19%) to PR #9. New plan and handoff: document 29. AGENTS.md updated (scope, commit/push
+rule, no repair-round cap). No application code changed in this step.

@@ -76,3 +76,29 @@ full input and installed-source fingerprint before provider admission. An interr
 run rejects altered sizing, simulation/risk controls or runtime; exact recovery uses
 recorded responses. Migration 0006 preserves completed development identities and
 refuses old incomplete calls without full configuration. See ADR-0009.
+
+## F-05 admission repair plan — 2026-10-23
+
+Apply a configured aggregate USD ceiling and reviewed price snapshots outside run
+files, defaulting to zero spending and no reviewed prices. Serialize durable call
+admission and settlement across envelopes; unresolved paid calls block their
+provider, and all paid spending/holds count against the shared ceiling. Verify
+existing history/checkpoints, preserve completed replay, and exercise concurrency,
+restart, understated prices and defaults with synthetic PostgreSQL tests. Reuse
+existing durable tables; no applied migration changes. The user approved these
+narrow guards and deferred any administrative resolution command: ADR-0009's
+manual-investigation/separately-reviewed-resolution boundary remains in force.
+
+The implemented configuration keys are `ATL_AI_TOTAL_LIMIT_USD` and
+`ATL_AI_REVIEWED_PRICES` (a JSON array of exact `PriceSnapshot` objects, including
+provider/model, token tariffs, source URL, verification UTC and version). Run-file
+prices must exactly match a configured reviewed snapshot and remain fresh under
+the existing one-day rule. All paid usage estimates and unresolved holds in the
+same database count toward the lifetime ceiling, with no envelope/day/month reset;
+per-envelope limits remain additional restrictions. Library callers default to
+zero/empty configuration without reading dotenv; the CLI passes its loaded
+Settings explicitly. Existing completed calls remain replayable after disabling
+spending or price expiration. Test fixtures configure synthetic tariffs explicitly.
+The ledger owner and deployment configuration remain trusted boundaries; this is
+not a provider-account quota across unrelated databases. No paid activation,
+pricing amount or resolution override is authorized by this repair.

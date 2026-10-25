@@ -80,7 +80,7 @@ async def test_fixture_run_cleanup(
     if failure:
         store.run.side_effect = SQLAlchemyError("synthetic-secret")
     monkeypatch.setattr(cli, "create_database_engine", lambda settings: engine)
-    monkeypatch.setattr(cli, "AIRunStore", lambda actual, provider: store)
+    monkeypatch.setattr(cli, "AIRunStore", lambda actual, provider, **kwargs: store)
     args = cli.parser().parse_args(["run", str(path)])
     if failure:
         with pytest.raises(SQLAlchemyError):
@@ -117,7 +117,7 @@ async def test_real_opt_in_missing_key_and_close(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(cli, "HTTPProvider", FakeHTTP)
     monkeypatch.setattr(cli, "create_database_engine", lambda settings: engine)
-    monkeypatch.setattr(cli, "AIRunStore", lambda actual, provider: store)
+    monkeypatch.setattr(cli, "AIRunStore", lambda actual, provider, **kwargs: store)
     assert await cli.run(args) == 0 and closed == [True]
     engine.dispose.assert_awaited_once()
 

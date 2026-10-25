@@ -63,3 +63,21 @@ def test_invalid_notification(change: dict[str, object]) -> None:
 def test_adapter_configuration(token: str, chat: str, timeout: float) -> None:
     with pytest.raises(ValueError):
         TelegramAdapter(SecretStr(token), SecretStr(chat), timeout_seconds=timeout)
+
+
+def test_f21_destination_hash_is_keyed_by_the_unstored_token() -> None:
+    import hashlib
+
+    def adapter(token: str, chat: str = "123456789") -> TelegramAdapter:
+        return TelegramAdapter(SecretStr(token), SecretStr(chat))
+
+    first = adapter("123456:abcdefghijklmnopqrstuvwxyz")
+    other_secret = adapter("123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    other_chat = adapter("123456:abcdefghijklmnopqrstuvwxyz", "987654321")
+    assert first.destination_hash == adapter("123456:abcdefghijklmnopqrstuvwxyz").destination_hash
+    assert (
+        len({first.destination_hash, other_secret.destination_hash, other_chat.destination_hash})
+        == 3
+    )
+    # Anyone holding only the persisted digest cannot confirm a guessed bot:chat pair.
+    assert first.destination_hash != hashlib.sha256(b"123456:123456789").hexdigest()

@@ -7,3 +7,5 @@
 /* Keep dense audit tables readable on phones without widening the page. */
 .table-wrap table{min-width:36rem}.table-wrap th,.table-wrap td{overflow-wrap:normal}
 .table-wrap{overscroll-behavior-x:contain}
+
+#runtime-list button{max-width:100%;text-align:left;overflow-wrap:anywhere}#runtime-detail{max-height:30rem;overflow:auto}

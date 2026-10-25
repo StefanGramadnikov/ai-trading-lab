@@ -247,3 +247,14 @@ def test_model_copy_cannot_bypass_accounting_validation() -> None:
         allocate_costs([invalid], ["rules"], "USD")
     with pytest.raises(ValidationError):
         CostAllocation(cell_id="rules", weight=Decimal("NaN"))
+
+
+def test_f13_observed_invoice_replaces_synthetic_estimate_preserving_both_evidence() -> None:
+    estimate = expense(expense_id="estimate", kind="estimated", evidence="synthetic")
+    invoice = expense(replaces_expense_id="estimate", amount="12")
+    report = allocate_costs([estimate, invoice], ["rules"], "USD")
+    assert report.consolidated.actual_cost == 12
+    assert report.consolidated.estimated_cost == 0
+    assert report.included_expense_ids == ("invoice-1",)
+    assert report.expenses[0].evidence == "synthetic"
+    assert report.expenses[1].evidence == "observed"

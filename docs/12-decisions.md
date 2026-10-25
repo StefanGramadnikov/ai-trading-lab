@@ -50,6 +50,15 @@
 
 | DEC-037 | M7 reporting implementation approved, 2026-10-20 | User: “yes, carry on” after six-step plan. Local read-only FastAPI dashboard, authentication, bounded audit JSON, explicit Telegram outbox commands, Playwright development/browser CI tests. No real send, paid AI, scheduler, deployment or shipping; see document 24. |
 
+| DEC-038 | M8A local runtime implementation approved, 2026-10-20 | User approved the M8A plan and repeated continue after quota reset. Bounded local worker, persistent paper portfolio, qualified observed-source simulation, recovery/backup tooling and reporting only. No multi-day run, real Telegram, paid AI, cloud deployment or shipping. See document25 and ADR-0011. |
+
+| DEC-039 | Independent review repair scope and bounded-runtime amendments approved, 2026-10-23 | User authorized regression-first CODEX_FIXES repairs, pinned environment/Chromium restoration, bounded supervised restart and staleness checks, and explicitly approved512MiB maximum configurable journal. Retain per-session limits, manual operational suspension recovery and risk latches. F05 global guards approved without administrative reconciliation override. F11 chaining/F12 new exit-settlement behavior and real source captures remain deferred. No shipping, existing-container changes or operational activation. |
+
+| DEC-040 | M8B is a no-trade infrastructure soak; exit/settlement deferred, 2026-10-25 | User approved (“yes”) after review finding F-12. The OBSERVED runtime cannot open positions (its collector supplies no forecast/feature, so the rules strategies always abstain), so an exit/settlement path is not built before M8B. M8B validates collection, journaling, restart, DEC-039 recovery, notifications and backup over the DEC-016 2–4 day window and carries **no trading, strategy or P&L claim**. Any run that can hold positions first requires (1) an approved independent forecast/feature source, (2) a deterministic exit/settlement path using captured, verified resolution evidence (and a separately approved policy for any latch-driven unwind), and (3) a session-chaining decision (F-11). Narrows document 25's earlier statement that a forecast configuration is an M8B prerequisite: it is now a prerequisite for a trading run only. No multi-day run, shipping or live trading is authorized. |
+
+| DEC-041 | Working process for the fast live-paper experiment, 2026-10-25 | User, answering the process questions: work **one piece at a time**; run tests; **fix and rerun until everything is green**; commit and push after each green piece; keep documentation current enough that a new session with no context can continue; deploy to a small VPS is allowed; evaluate after 1–2 weeks; assistant may commit, push and open/update PRs (the user merges). Branching rule added 2026-10-25: each slice starts on a fresh branch cut from the latest `main`, ends with an open PR that the user merges, and the next slice starts only after that merge. Supersedes the `/ship` gate (DEC-029) and the three-repair-round cap (DEC-030) for this work; independent review of substantive changes stays. Paper-only, deterministic risk, the AI spending cap, no secrets in Git, and anything touching real money remain mandatory. |
+| DEC-042 | V0 live-paper scope, 2026-10-25 | User chose **Kraken public data for BTC, ETH and SOL**, **OpenAI** as the first AI provider with a **€10 total AI cap**, a **cheap VPS** (chosen together), and a **1–2 week** paper evaluation (supersedes DEC-016's 2–4 day local plus ~30 day cloud timeline). The AI proposes trades; deterministic code sizes, checks risk and fills. Grok/X news and WorldMonitor context are deferred. Real-money trading is a separate later step needing the user's explicit go, a venue/legal/tax check and a security review. See document 29. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)
@@ -64,6 +73,7 @@
 - [ADR-0009: M5 bounded AI and durable cost reservations](adr/0009-ai-runtime-and-cost-reservations.md)
 
 - [ADR-0010: M6 paired cohorts and economic accounting](adr/0010-experiment-cohorts-and-economic-accounting.md)
+- [ADR-0011: Bounded observation-driven paper runtime](adr/0011-observation-driven-paper-runtime.md)
 
 ## Proposed choices requiring later confirmation
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
+from ai_trading_lab.ai.evidence import evidence_failure
 from ai_trading_lab.ai.models import (
     Evidence,
     FlowConfig,
@@ -38,6 +39,8 @@ async def orchestrate(config: FlowConfig, evidence: Evidence, invoke: Invoke) ->
             reason=reason,
         )
 
+    if (failure := evidence_failure(evidence)) is not None:
+        return stop(failure)
     try:
         async with asyncio.timeout(config.timeout_seconds):
             for round_number in range(config.max_rounds):

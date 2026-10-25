@@ -114,4 +114,20 @@ def router(settings: Settings) -> APIRouter:
         except (SQLAlchemyError, TimeoutError, OSError, ValueError, LookupError) as exc:
             raise error(exc) from None
 
+    @result.get("/api/reports/runtime")
+    async def runtimes(
+        request: Request, limit: Annotated[int, Query(ge=1, le=100)] = 20
+    ) -> Response:
+        try:
+            return response(await service(request).runtime_sessions(limit))
+        except (SQLAlchemyError, TimeoutError, OSError, ValueError) as exc:
+            raise error(exc) from None
+
+    @result.get("/api/reports/runtime/{session_id}")
+    async def runtime_detail(request: Request, session_id: UUID) -> Response:
+        try:
+            return response(await service(request).runtime_detail(session_id))
+        except (SQLAlchemyError, TimeoutError, OSError, ValueError, LookupError) as exc:
+            raise error(exc) from None
+
     return result

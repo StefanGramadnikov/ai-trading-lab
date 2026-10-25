@@ -47,3 +47,14 @@ financial accounting, risk policy and AI remain later milestones.
 - [Approved M2 plan](../18-m2-market-data.md)
 - [Source register and observed limits](../16-source-register.md)
 - [Testing standards](../08-testing-standards.md)
+
+Amendment (2026-10-25, user-directed hardening after a reachability diagnosis; see document 16): an
+OBSERVED `HttpTransport` (one that owns its HTTP client) only talks to the public internet. Before each
+attempt it resolves the fixed host and refuses with `unsafe_destination` if any address is loopback, private,
+link-local, carrier-grade NAT, documentation, reserved, multicast or malformed (IPv4-mapped IPv6 included);
+after connecting it verifies the actual peer address of the response and discards the response, retaining no
+body, if it is not public or unknown. A refused destination is permanent for the call (no retry) and consumes
+no request budget. FIXTURE transports with injected clients are unaffected. This protects the OBSERVED label
+from DNS overrides, local proxies and TLS-trusted impersonators; certificate verification remains the first
+line of defence and is not weakened. Provider (AI) and Telegram clients, which carry credentials to fixed
+origins, are not yet covered by this guard.

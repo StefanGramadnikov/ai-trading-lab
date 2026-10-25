@@ -131,7 +131,11 @@ def test_declared_ai_differences_and_undeclared_rejection(
     ai = spec.cells[1].ai
     assert ai is not None
     alt = ai.model_copy(
-        update={"research": ai.research.model_copy(update={"run_id": uuid4()}), field: value}
+        update={
+            "research": ai.research.model_copy(update={"run_id": uuid4()}),
+            "budget": ai.budget.model_copy(update={"budget_id": uuid4()}),
+            field: value,
+        }
     )
     if field == "model":
         alt = alt.model_copy(update={"price": alt.price.model_copy(update={"model": value})})
@@ -159,3 +163,35 @@ def test_pair_rejects_snapshot_and_window_differences() -> None:
     raw["cells"] = (spec.cells[0], spec.cells[1].model_copy(update={"ai": changed}))
     with pytest.raises(ValueError, match="paired"):
         ExperimentConfig.model_validate(raw)
+
+
+def test_f18_shared_envelope_is_rejected() -> None:
+    from uuid import uuid4
+
+    spec = experiment().model_dump(mode="json")
+    other = dict(spec["cells"][1])
+    other["cell_id"] = "second"
+    other["ai"] = dict(other["ai"])
+    other["ai"]["research"] = dict(other["ai"]["research"], run_id=str(uuid4()))
+    other["ai"]["flow"] = dict(other["ai"]["flow"], mode="sequential")
+    spec["cells"] = [spec["cells"][1], other]
+    spec["baseline_cell"] = "hybrid"
+    with pytest.raises(ValueError, match="budget IDs must be independent"):
+        ExperimentConfig.model_validate(spec)
+
+
+@pytest.mark.parametrize("dimension", ["architecture", "activation", "provider", "risk"])
+def test_f18_declared_dimension_must_actually_vary(dimension: str) -> None:
+    from uuid import uuid4
+
+    spec = experiment().model_dump(mode="json")
+    first = spec["cells"][1]
+    import copy
+
+    other = copy.deepcopy(first)
+    other["cell_id"] = "second"
+    other["ai"]["research"]["run_id"] = str(uuid4())
+    other["ai"]["budget"]["budget_id"] = str(uuid4())
+    spec.update(cells=[first, other], baseline_cell="hybrid", dimension=dimension)
+    with pytest.raises(ValueError, match="dimension must vary"):
+        ExperimentConfig.model_validate(spec)

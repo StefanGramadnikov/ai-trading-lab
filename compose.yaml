@@ -32,5 +32,29 @@ services:
       interval: 5s
       timeout: 4s
       retries: 12
+  worker:
+    profiles: [runtime]
+    build: .
+    command: ["/app/.venv/bin/atl-runtime", "worker", "${ATL_RUNTIME_SESSION_ID:-00000000-0000-0000-0000-000000000000}", "--cycles", "${ATL_RUNTIME_CYCLES:-1}", "--seconds", "${ATL_RUNTIME_SECONDS:-60}", "--activate-observed"]
+    environment:
+      ATL_EXECUTION_MODE: PAPER_ONLY
+      ATL_AI_ENABLED: "false"
+      ATL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_trading_lab}:${POSTGRES_PASSWORD:-local_example_only}@db:5432/${POSTGRES_DB:-ai_trading_lab}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "on-failure:3"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-m", "ai_trading_lab.runtime.health", "${ATL_RUNTIME_SESSION_ID:-00000000-0000-0000-0000-000000000000}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    read_only: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 volumes:
   postgres_data:

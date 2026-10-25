@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Kind = Literal["failure", "safety_halt", "budget_warning", "daily_summary"]
+Kind = Literal["failure", "safety_halt", "budget_warning", "daily_summary", "recovery"]
 State = Literal["pending", "delivering", "delivered", "rejected", "unknown"]
 
 

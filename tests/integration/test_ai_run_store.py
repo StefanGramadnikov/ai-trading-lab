@@ -21,7 +21,9 @@ from ai_trading_lab.ai.models import (
 )
 from ai_trading_lab.ai.providers import FixtureProvider
 from ai_trading_lab.ai.run_store import AIRunStore, ai_runs
+from ai_trading_lab.config import Settings
 from ai_trading_lab.paper_execution.store import PaperStore
+from tests.ai_budget_helpers import isolated_budgets
 from tests.ai_helpers import ai_spec
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -31,7 +33,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(database_url)
     try:
-        yield engine
+        async with isolated_budgets(engine):
+            yield engine
     finally:
         await engine.dispose()
 
@@ -176,11 +179,13 @@ async def test_provider_model_mismatch_keeps_budget_unresolved(engine: AsyncEngi
     from tests.contract.test_ai_providers import request, response
     from tests.unit.test_ai_budget import AT, policy, pricing
 
-    budget = BudgetStore(engine)
-    envelope = policy()
-    await budget.create(envelope)
     req = request()
     price = pricing().model_copy(update={"provider": "openai", "model": req.model})
+    budget = BudgetStore(
+        engine, Settings(_env_file=None, ai_total_limit_usd="1", ai_reviewed_prices=(price,))
+    )
+    envelope = policy()
+    await budget.create(envelope)
     payload = response(model="unexpected-expensive-model")
     async with httpx2.AsyncClient(
         transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json=payload))
@@ -323,10 +328,12 @@ async def test_unsupported_billing_features_hold_and_block(
             "output_tokens": 5,
             "server_tool_use": {"web_search_requests": 1},
         }
-    budget = BudgetStore(engine)
+    price = pricing().model_copy(update={"provider": provider, "model": req.model})
+    budget = BudgetStore(
+        engine, Settings(_env_file=None, ai_total_limit_usd="1", ai_reviewed_prices=(price,))
+    )
     envelope = policy().model_copy(update={"provider_limits": ()})
     await budget.create(envelope)
-    price = pricing().model_copy(update={"provider": provider, "model": req.model})
     async with httpx2.AsyncClient(
         transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json=payload))
     ) as client:

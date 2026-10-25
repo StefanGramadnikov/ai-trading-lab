@@ -56,3 +56,21 @@ The user approved comparing **Conservative**, **Moderate**, and **Aggressive** p
 - [ ] Human authorizes venue, capital amount, strategy, risk profile and deployment revision.
 
 This list is a gate, not a preauthorization.
+
+
+## M8A review corrections — 2026-10-23
+
+The order-notional cap controls new exposure, not a reducing sale or full-liquidation
+valuation. A qualified exit still needs held quantity, matching identity, current
+original evidence, executable remaining depth and the existing fee/cost checks.
+A submitted pause/stop is ordered by command time, independently of any modeled
+future execution latency. These corrections do not change approved risk fractions.
+
+Collection failure and clock-gap entry suspensions clear automatically only after
+three consecutive fresh qualified ticks, within a per-session breaker of five clears
+and three per rolling hour (DEC-039); beyond it, explicit manual recovery is required.
+A manual pause, financial risk latches and capacity are never cleared automatically.
+Bounded process restart does not clear those reasons or financial risk latches. A readonly progress probe distinguishes stalled/terminal workers from
+recent durable activity; it is not market-data readiness or guaranteed alert delivery.
+Autonomous settlement/unwind and cross-session capital carry-forward remain pending
+separate decisions; no completed realized-return claim follows from marked positions.

@@ -1,0 +1,61 @@
+{
+  "action": "tick",
+  "frame": {
+    "quote": {
+      "snapshot_id": "037a56df-f8d3-47c4-8b37-3af303aa1832",
+      "instrument": {
+        "source": "kalshi",
+        "venue": "fixture",
+        "native_id": "yes",
+        "kind": "prediction",
+        "base_unit": "contract:YES",
+        "cash_unit": "USD",
+        "market_id": "fixture-event",
+        "outcome": "YES",
+        "tick_size": "0.01",
+        "quantity_step": "0.01",
+        "cash_step": "0.01"
+      },
+      "event_time_utc": "2026-10-19T00:00:00Z",
+      "received_at_utc": "2026-10-19T00:00:00Z",
+      "quality": "VALID",
+      "data_mode": "FIXTURE",
+      "bids": [
+        {
+          "price": "0.49",
+          "quantity": "100",
+          "derived": false
+        }
+      ],
+      "asks": [
+        {
+          "price": "0.50",
+          "quantity": "100",
+          "derived": false
+        }
+      ],
+      "spot_price": null,
+      "spot_capacity": null,
+      "impact_bps": null
+    },
+    "at_utc": "2026-10-19T00:00:00Z",
+    "history": [],
+    "momentum": null,
+    "forecast": {
+      "instrument_key": "04fc5b86104e2685b64dcbe673b55180b29cade6e870da9a5fb60cee24c07f86",
+      "market_id": "fixture-event",
+      "outcome": "YES",
+      "resolution_terms_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "probability": "0.8",
+      "provenance": "synthetic-test-only",
+      "version": "test-v1",
+      "calibration_reference": "not-calibrated",
+      "independent": true,
+      "data_mode": "FIXTURE",
+      "produced_at_utc": "2026-10-19T00:00:00Z",
+      "available_at_utc": "2026-10-19T00:00:00Z"
+    },
+    "resolution_terms_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "source_entry": null
+}

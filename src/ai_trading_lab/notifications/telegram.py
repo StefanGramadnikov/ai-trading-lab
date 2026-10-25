@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import hmac
 import re
 
 import httpx2
@@ -35,9 +36,16 @@ class TelegramAdapter:
 
     @property
     def destination_hash(self) -> str:
-        """Identify bot and chat without persisting credentials or recipient ID."""
-        bot_id = self._token.get_secret_value().split(":", 1)[0]
-        return hashlib.sha256(f"{bot_id}:{self._chat.get_secret_value()}".encode()).hexdigest()
+        """Identify bot and chat without persisting credentials or recipient ID.
+
+        Chat IDs are short numbers, so an unkeyed digest would be brute-forceable from a
+        database dump. The bot token is a secret that is never stored; keying with it makes
+        the digest useless to anyone holding only persisted data.
+        """
+        token = self._token.get_secret_value()
+        return hmac.new(
+            token.encode(), f"destination:{self._chat.get_secret_value()}".encode(), hashlib.sha256
+        ).hexdigest()
 
     async def send(self, event: Notification) -> DeliveryResult:
         if not self.enabled:

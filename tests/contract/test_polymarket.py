@@ -294,3 +294,21 @@ async def test_nested_raw_book_keeps_prior_observation_and_capture() -> None:
         "malformed_book",
         "page_limit_reached",
     ]
+
+
+@pytest.mark.asyncio
+async def test_f10_book_level_order_is_preserved_never_silently_sorted() -> None:
+    """Native ordering is unverified against live payloads; the adapter must not guess.
+
+    Levels stay exactly as delivered so that downstream simulation rejects an unordered
+    book (``unordered_book``) instead of trading a sorted guess. A real read-only capture
+    must establish the venue's ordering before an observed multi-day run (CODEX_FIXES F-10).
+    """
+    unordered = book() | {
+        "bids": [{"price": "0.10", "size": "1"}, {"price": "0.20", "size": "1"}],
+        "asks": [{"price": "0.90", "size": "1"}, {"price": "0.80", "size": "1"}],
+    }
+    batch = await PolymarketAdapter(SyntheticTransport([market(), unordered])).collect(limit=1)
+    item = batch.observations[0]
+    assert [level.price for level in item.bids] == [Decimal("0.10"), Decimal("0.20")]
+    assert [level.price for level in item.asks] == [Decimal("0.90"), Decimal("0.80")]

@@ -26,6 +26,7 @@ from ai_trading_lab.ai.budget import BudgetStore, budgets
 from ai_trading_lab.ai.run_store import projection_hash
 from ai_trading_lab.backtesting.models import runtime_fingerprint
 from ai_trading_lab.backtesting.runner import portfolio_config
+from ai_trading_lab.experiments.costs import Expense, allocate_costs
 from ai_trading_lab.experiments.models import ExperimentConfig, State, transition
 from ai_trading_lab.market_data.storage import content_hash, metadata
 from ai_trading_lab.paper_execution.store import (
@@ -320,7 +321,13 @@ class ExperimentStore:
             if action == "approve":
                 from ai_trading_lab.experiments.reporting import build_report
 
-                if not build_report(config, tuple(checkpoint["reports"]))["evidence_sufficient"]:
+                attached, complete = self._attached(records)
+                if not build_report(
+                    config,
+                    tuple(checkpoint["reports"]),
+                    attached,
+                    config.expenses_complete or complete,
+                )["evidence_sufficient"]:
                     raise ValueError("insufficient experiment evidence for approval")
             checkpoint["resume_state"] = state if action == "pause" else None
             checkpoint["state"] = next_state
@@ -368,12 +375,80 @@ class ExperimentStore:
             checkpoint["resume_state"] = next_state if saved.get("entry_suspended") else None
             return await self._append(connection, config, checkpoint, key, payload)
 
+    @staticmethod
+    def _attached(records: list[Any]) -> tuple[tuple[Expense, ...], bool]:
+        """Expense evidence and the completeness declaration, from the verified event chain."""
+        items = tuple(
+            Expense.model_validate(r["payload"]["expense"])
+            for r in records
+            if r["payload"].get("action") == "attach_expense"
+        )
+        return items, any(r["payload"].get("action") == "complete_expenses" for r in records)
+
+    async def attach_expense(
+        self, experiment_id: UUIDValue, key: str, at: datetime, expense: Expense
+    ) -> dict[str, object]:
+        """Durably add one invoice/actual expense; estimates are replaced, never added to."""
+        expense = Expense.model_validate(expense.model_dump(mode="json"))
+        payload = _payload(key, "attach_expense", at) | {"expense": expense.model_dump(mode="json")}
+        async with asyncio.timeout(300), self.engine.begin() as connection:
+            await self._lock(connection, experiment_id)
+            config, checkpoint, records = await self._load(connection, experiment_id)
+            replay = self._replay(records, key, payload)
+            if replay is not None:
+                return replay
+            attached, complete = self._attached(records)
+            if complete or config.expenses_complete:
+                raise ValueError("expenses already declared complete")
+            if sum(1 for r in records if r["payload"].get("action") == "attach_expense") >= 200:
+                raise ValueError("attached expense capacity exceeded")
+            # Reject duplicates, unknown cells and invalid estimate replacement before commit.
+            from ai_trading_lab.experiments.runner import cell_inference_expenses
+
+            allocate_costs(
+                [
+                    *config.expenses,
+                    *attached,
+                    expense,
+                    *cell_inference_expenses(tuple(checkpoint["reports"])),
+                ],
+                tuple(c.cell_id for c in config.cells),
+                config.reporting_currency,
+                config.fx_rates,
+            )
+            return await self._append(connection, config, checkpoint, key, payload)
+
+    async def complete_expenses(
+        self, experiment_id: UUIDValue, key: str, at: datetime, reason: str
+    ) -> dict[str, object]:
+        """Declare the operating-expense list complete once every cell has reported."""
+        payload = _payload(key, "complete_expenses", at, reason)
+        if not reason.strip():
+            raise ValueError("completion reason required")
+        async with asyncio.timeout(300), self.engine.begin() as connection:
+            await self._lock(connection, experiment_id)
+            config, checkpoint, records = await self._load(connection, experiment_id)
+            replay = self._replay(records, key, payload)
+            if replay is not None:
+                return replay
+            if self._attached(records)[1] or config.expenses_complete:
+                raise ValueError("expenses already declared complete")
+            if len(checkpoint["reports"]) != len(config.cells):
+                raise ValueError("all cells must report before expenses are declared complete")
+            return await self._append(connection, config, checkpoint, key, payload)
+
     async def report(self, experiment_id: UUIDValue) -> dict[str, object]:
         from ai_trading_lab.experiments.reporting import build_report
 
         async with asyncio.timeout(300), self.engine.begin() as connection:
             await self._lock(connection, experiment_id)
-            config, checkpoint, _ = await self._load(connection, experiment_id)
-            output = build_report(config, tuple(checkpoint["reports"]))
+            config, checkpoint, records = await self._load(connection, experiment_id)
+            attached, complete = self._attached(records)
+            output = build_report(
+                config,
+                tuple(checkpoint["reports"]),
+                attached,
+                config.expenses_complete or complete,
+            )
             output["lifecycle"] = _snapshot(experiment_id, checkpoint, len(config.cells))
             return output

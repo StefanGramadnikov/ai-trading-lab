@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import cast
 from uuid import uuid5
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
 
 from ai_trading_lab.market_data.adapters.kraken import (
     MAX_TIME_GAP_SECONDS,
@@ -51,6 +51,17 @@ class KrakenEntry(FrozenModel):
     @property
     def quote(self) -> ExecutionQuote:
         return self.derive_quote()
+
+    @property
+    def rules(self) -> dict[str, JsonValue]:
+        """The venue's stable pair rules (tick size, minimum order and cost, decimals)."""
+        result = _result(
+            self.pairs_capture, "/0/public/AssetPairs", dict(self.pairs_capture.params)
+        )
+        info = next(
+            v for v in result.values() if isinstance(v, dict) and v.get("altname") == self.pair
+        )
+        return _pair_rules(info)[2]
 
     def derive_quote(self) -> ExecutionQuote:
         captures = (self.pairs_capture, self.time_capture, self.book_capture)

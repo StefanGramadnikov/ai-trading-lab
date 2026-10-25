@@ -202,3 +202,10 @@ async def test_history_rejects_a_forged_quote_missing_evidence_and_unmarked_port
     plain = {k: v for k, v in live_config().items() if not k.startswith("live_")}
     effect = History(PORTFOLIO, plain).apply("order", "k1", good, RECEIVED)
     assert effect.receipt is not None and effect.receipt.result.reason == "fixture_mode_required"
+
+
+@pytest.mark.asyncio
+async def test_rules_expose_the_venues_minimums_for_sizing() -> None:
+    rules = (await entry()).rules
+    assert rules["ordermin"] == "0.0001" and rules["costmin"] == "0.5"
+    assert rules["tick_size"] == "0.1" and rules["lot_decimals"] == 8

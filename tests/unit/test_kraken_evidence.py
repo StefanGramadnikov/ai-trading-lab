@@ -1,6 +1,7 @@
 """Kraken orders are only admitted when their quote re-derives from the raw captures."""
 
 import json
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -159,18 +160,25 @@ def live_config(**extra: object) -> dict[str, object]:
     }
 
 
-async def buy_payload(item: KrakenEntry, quantity: str = "0.0002") -> dict[str, object]:
+async def buy_payload(
+    item: KrakenEntry,
+    quantity: str = "0.0002",
+    *,
+    side: str = "buy",
+    key: str = "k1",
+    at: datetime = RECEIVED,
+) -> dict[str, object]:
     quote = item.quote
     intent = OrderIntent.model_validate(
         {
             "portfolio_id": PORTFOLIO,
-            "idempotency_key": "k1",
+            "idempotency_key": key,
             "instrument": quote.instrument,
-            "side": "buy",
+            "side": side,
             "quantity": quantity,
-            "limit_price": "67050.0",
-            "created_at_utc": RECEIVED,
-            "expires_at_utc": RECEIVED.replace(minute=5),
+            "limit_price": "67050.0" if side == "buy" else "66900.0",
+            "created_at_utc": at,
+            "expires_at_utc": at + timedelta(minutes=5),
         }
     )
     return {
@@ -209,3 +217,32 @@ async def test_rules_expose_the_venues_minimums_for_sizing() -> None:
     rules = (await entry()).rules
     assert rules["ordermin"] == "0.0001" and rules["costmin"] == "0.5"
     assert rules["tick_size"] == "0.1" and rules["lot_decimals"] == 8
+
+
+@pytest.mark.asyncio
+async def test_a_sell_after_a_buy_on_the_same_snapshot_tracks_bid_depth_separately() -> None:
+    """On a real spot book asks and bids are different level lists. Depth consumed by a buy must
+    never be applied to the bid side (or break a sell when the sides have different depths)."""
+    got = await captures()
+    one_ask = await entry(
+        book_capture=rewrite(got["Depth"], lambda b: b["result"]["XXBTZUSD"]["asks"].pop())
+    )
+    history = History(PORTFOLIO, live_config())
+    buy = history.apply("order", "k1", await buy_payload(one_ask), RECEIVED)
+    assert buy.receipt is not None and buy.receipt.result.status == "FILLED"
+    later = RECEIVED + timedelta(seconds=5)
+    sell_payload = await buy_payload(one_ask, side="sell", key="k2", at=later)
+    sell = history.apply("order", "k2", sell_payload, later)
+    assert sell.receipt is not None and sell.receipt.result.status == "FILLED"
+    assert sell.receipt.result.notional == Decimal("0.0002") * Decimal("66999.9")
+
+
+@pytest.mark.asyncio
+async def test_a_live_portfolio_accepts_only_observed_quotes() -> None:
+    fixture = await entry(DataMode.FIXTURE)
+    effect = History(PORTFOLIO, live_config()).apply(
+        "order", "k1", await buy_payload(fixture), RECEIVED
+    )
+    assert effect.receipt is not None
+    assert effect.receipt.result.reason == "live_portfolio_requires_observed_quote"
+    assert effect.receipt.result.status == "REJECTED"

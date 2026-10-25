@@ -19,6 +19,7 @@ from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_trading_lab.live.config import LiveConfig
+from ai_trading_lab.live.errors import LoopIntegrityError
 from ai_trading_lab.live.risk import RiskState, update_risk
 from ai_trading_lab.live.store import LiveStore, LoopState, PlannedDecision, StrategyRow
 from ai_trading_lab.live.strategies import (
@@ -33,15 +34,30 @@ from ai_trading_lab.live.strategies import (
 from ai_trading_lab.market_data.adapters.kraken import KrakenAdapter, parse_candles
 from ai_trading_lab.market_data.models import Batch, DataQuality, FrozenModel, Source, Transport
 from ai_trading_lab.market_data.storage import ObservationStore
+from ai_trading_lab.paper_execution.accounting import admit
 from ai_trading_lab.paper_execution.history import identity
 from ai_trading_lab.paper_execution.kraken_evidence import KrakenEntry
 from ai_trading_lab.paper_execution.models import OrderIntent, SimulationResult
+from ai_trading_lab.paper_execution.simulation import simulate
 from ai_trading_lab.paper_execution.store import PaperStore
 
 TransportFactory = Callable[[], AbstractAsyncContextManager[Transport]]
-ORDER_SPACING = timedelta(
-    seconds=2
-)  # the paper ledger clock cannot move back, and includes latency
+# The paper ledger clock cannot move back and includes the simulated latency.
+ORDER_SPACING = timedelta(seconds=2)
+# Every submitted order, even a refused one, is a permanent ledger command and the history is capped
+# at 1000. New entries stop well before that; exits never do.
+COMMAND_SOFT_LIMIT = 900
+# ValueErrors from the ledger that mean corruption, a second writer or a broken invariant. They are
+# never recorded as ordinary rejections or retried.
+INTEGRITY_MARKERS = (
+    "Idempotency key conflict",
+    "Paper history exceeds",
+    "Paper clock cannot move backwards",
+    "integrity",
+    "immutable",
+    "live_raw_quote_mismatch",
+    "live_source_evidence_required",
+)
 
 
 def _utcnow() -> datetime:
@@ -62,6 +78,7 @@ class CycleReport(FrozenModel):
     observed: list[str]
     failures: list[str]
     strategies: dict[str, StrategyReport]
+    errors: list[str] = []
 
 
 def build_markets(batch: Batch, config: LiveConfig) -> dict[str, Market]:
@@ -198,11 +215,30 @@ class LiveEngine:
             and any(o.instrument.metadata.get("altname") == p for o in batch.observations)
         ]
         reports: dict[str, StrategyReport] = {}
-        for strategy in await self.store.strategies():
-            await self._recover(strategy, now)
-            reports[strategy.strategy_id] = await self._step(strategy, markets, now)
+        errors: list[str] = []
+        # The strategy that owns the mechanical exits runs first.
+        own = {self.rules_id, self.benchmark_id}
+        strategies = sorted(
+            (s for s in await self.store.strategies() if s.strategy_id in own),
+            key=lambda s: (s.kind != "rules", s.strategy_id),
+        )
+        for strategy in strategies:
+            try:
+                await self._recover(strategy, now)
+                reports[strategy.strategy_id] = await self._step(strategy, markets, now)
+            except LoopIntegrityError:
+                raise
+            except Exception as exc:  # one strategy's bug must not starve the other
+                errors.append(f"{strategy.strategy_id}:{type(exc).__name__}")
+                reports[strategy.strategy_id] = StrategyReport(
+                    equity=None, blocked="strategy_error"
+                )
         return CycleReport(
-            cycle_at=now, observed=sorted(markets), failures=failures, strategies=reports
+            cycle_at=now,
+            observed=sorted(markets),
+            failures=failures,
+            strategies=reports,
+            errors=errors,
         )
 
     async def _collect(self) -> Batch:
@@ -266,7 +302,8 @@ class LiveEngine:
                     item.decision_id, "rejected", {"error": "unreadable_planned_decision"}, now
                 )
                 continue
-            loop, _ = await self._submit(strategy, item, intent, entry, now, loop)
+            stamped = await self._stamp(strategy, now)
+            loop, _ = await self._submit(strategy, item, intent, entry, stamped, loop)
 
     async def _step(
         self, strategy: StrategyRow, markets: Mapping[str, Market], now: datetime
@@ -279,6 +316,11 @@ class LiveEngine:
         )
         equity, marks = self._value(state, markets, policy, now)
         blocked: str | None = None
+        capacity = (
+            "command_capacity"
+            if await self.paper.command_count(strategy.portfolio_id) >= COMMAND_SOFT_LIMIT
+            else None
+        )
         if strategy.kind == "rules":
             if equity is not None:
                 risk, blocked = update_risk(
@@ -287,6 +329,7 @@ class LiveEngine:
                 loop = loop.model_copy(update={"risk": risk})
             else:
                 blocked = _current_block(loop.risk, now.date())
+            blocked = blocked or capacity
             candles = {
                 p: await self.store.candles(
                     p,
@@ -307,8 +350,14 @@ class LiveEngine:
                 blocked=blocked,
             )
         else:
+            blocked = capacity
             decisions = decide_benchmark(
-                config=self.config, now=now, markets=markets, state=state, loop=loop
+                config=self.config,
+                now=now,
+                markets=markets,
+                state=state,
+                loop=loop,
+                blocked=blocked,
             )
         report = {"orders": 0, "filled": 0, "rejected": 0, "holds": 0}
         submitted = 0
@@ -320,8 +369,13 @@ class LiveEngine:
                 report["holds"] += 1
                 continue
             at = now + submitted * ORDER_SPACING
+            loop, status = await self._execute(
+                strategy, decision, markets[decision.pair], at, loop, policy
+            )
+            if status == "skipped":
+                report["holds"] += 1  # refused before submission: no ledger command was spent
+                continue
             submitted += 1
-            loop, status = await self._execute(strategy, decision, markets[decision.pair], at, loop)
             report["orders"] += 1
             report["filled" if status in ("filled", "partial") else "rejected"] += 1
         await self.store.save_state(sid, loop, now)
@@ -353,6 +407,12 @@ class LiveEngine:
 
     # ---- orders -----------------------------------------------------------------------
 
+    async def _stamp(self, strategy: StrategyRow, at: datetime) -> datetime:
+        """No command may be stamped earlier than the ledger's last activity (a restart in the
+        same minute, or a recovery order followed by a new one)."""
+        floor = await self.paper.last_activity(strategy.portfolio_id)
+        return max(at, floor) if floor is not None else at
+
     async def _execute(
         self,
         strategy: StrategyRow,
@@ -360,11 +420,13 @@ class LiveEngine:
         market: Market,
         at: datetime,
         loop: LoopState,
+        policy: Any,
     ) -> tuple[LoopState, str]:
         order = decision.order
         assert order is not None
         slot = int(at.timestamp() // self.config.cycle_seconds)
         key = f"{strategy.strategy_id}:{decision.pair}:{decision.action}:{slot}"
+        at = await self._stamp(strategy, at)
         intent = OrderIntent(
             portfolio_id=strategy.portfolio_id,
             idempotency_key=key,
@@ -375,6 +437,19 @@ class LiveEngine:
             created_at_utc=at,
             expires_at_utc=at + timedelta(seconds=60),
         )
+        # Pre-flight: an order the broker would certainly refuse is logged as a hold and never
+        # submitted, so a recurring refusal cannot use up the ledger's capped command history.
+        state = await self.paper.get(strategy.portfolio_id)
+        refusal = admit(state, intent, policy)
+        if refusal is None:
+            outcome = simulate(intent, market.quote, policy, at, ())
+            if outcome.status not in ("FILLED", "PARTIALLY_FILLED"):
+                refusal = outcome.reason
+        if refusal is not None:
+            await self.store.log_decision(
+                strategy.strategy_id, decision.pair, at, decision.action, f"preflight_{refusal}"
+            )
+            return loop, "skipped"
         planned = await self.store.plan_decision(
             strategy.strategy_id,
             decision.pair,
@@ -385,8 +460,9 @@ class LiveEngine:
             intent.model_dump(mode="json"),
             market.entry.model_dump(mode="json"),
         )
-        if planned.status != "planned":
-            return loop, planned.status  # this slot's order was already handled before a restart
+        if not planned.created:
+            # Handled before a restart, or planned by another writer: never submit it again here.
+            return loop, ("contended" if planned.status == "planned" else planned.status)
         return await self._submit(strategy, planned, intent, market.entry, at, loop)
 
     async def _submit(
@@ -401,6 +477,8 @@ class LiveEngine:
         try:
             receipt = await self.paper.submit(intent, entry.quote, at, source_entry=entry)
         except ValueError as exc:
+            if any(marker in str(exc) for marker in INTEGRITY_MARKERS):
+                raise LoopIntegrityError(str(exc)[:200]) from exc
             await self.store.finish_decision(
                 planned.decision_id, "rejected", {"error": str(exc)[:200]}, at
             )

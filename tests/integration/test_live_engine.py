@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.engine import LiveEngine
+from ai_trading_lab.live.errors import LoopIntegrityError
 from ai_trading_lab.live.risk import RiskState
 from ai_trading_lab.live.store import LiveStore, LoopState, live_candles
 from ai_trading_lab.market_data.adapters.kraken import Candle
@@ -258,7 +260,7 @@ async def test_a_drawdown_latch_survives_cycles_until_cleared_by_hand(engine: As
     await seed_breakout(r)
     latched = LoopState(
         risk=RiskState(
-            peak_equity=D(200), day=date(2026, 1, 1), day_open_equity=D(100), drawdown_latched=True
+            peak_equity=D(100), day=date(2026, 1, 1), day_open_equity=D(100), drawdown_latched=True
         )
     )
     await r.store.save_state(r.rules_id, latched, r.now)
@@ -437,3 +439,184 @@ async def test_status_summary_reports_holdings_equity_and_recent_decisions(
     await r.store.set_enabled(r.bench_id, False)
     again = {s["strategy_id"]: s for s in (await summary(r.live))["strategies"]}
     assert again[r.bench_id]["enabled"] is False  # disabled strategies stay visible
+
+
+async def portfolio_id(r: Rig, strategy_id: str):  # type: ignore[no-untyped-def]
+    return next(
+        x for x in await r.store.strategies(enabled_only=False) if x.strategy_id == strategy_id
+    ).portfolio_id
+
+
+async def test_orders_the_broker_would_refuse_are_never_submitted_so_they_cannot_fill_its_history(
+    engine: AsyncEngine,
+) -> None:
+    """Every submitted order, even a rejected one, is a permanent ledger command (capped at 1000).
+    A recurring refusal must therefore be caught before submission, not retried into the cap."""
+    r = Rig(engine, Venue(), LiveConfig(pairs=PAIRS, cash_unit="USD", max_cost_bps=D(100)))
+    await r.live.setup()
+    for n in range(3):
+        report = await r.cycle(minutes_later=15 if n else 0)
+        assert report.strategies[r.bench_id].orders == 0
+    assert await r.paper.command_count(await portfolio_id(r, r.bench_id)) == 0
+    reasons = {d.reason for d in await r.store.decisions(r.bench_id)}
+    assert reasons == {"preflight_max_cost_bps"}
+
+
+async def test_entries_stop_before_the_ledger_history_is_full_but_exits_do_not(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = await rig(engine)
+    await seed_breakout(r)
+    monkeypatch.setattr(r.live.paper, "command_count", AsyncMock(return_value=900))
+    report = await r.cycle()
+    assert report.strategies[r.rules_id].orders == 0
+    assert report.strategies[r.rules_id].blocked == "command_capacity"
+    assert report.strategies[r.bench_id].orders == 0
+    reasons = {d.reason for d in await r.store.decisions(r.bench_id)}
+    assert reasons == {"command_capacity"}
+
+
+async def test_one_strategy_failing_does_not_starve_the_other_and_is_reported(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = await rig(engine)
+
+    def boom(**_: object) -> object:
+        raise RuntimeError("bug in the benchmark")
+
+    monkeypatch.setattr("ai_trading_lab.live.engine.decide_benchmark", boom)
+    report = await r.cycle()
+    assert report.errors == [f"{r.bench_id}:RuntimeError"]
+    assert len(await r.store.decisions(r.rules_id)) == 3  # the rules strategy still ran
+    assert list(report.strategies)[0] == r.rules_id, "the strategy with the exits runs first"
+
+
+async def test_ledger_integrity_errors_are_fatal_not_business_rejections(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = await rig(engine)
+    monkeypatch.setattr(
+        r.live.paper, "submit", AsyncMock(side_effect=ValueError("Idempotency key conflict"))
+    )
+    with pytest.raises(LoopIntegrityError, match="Idempotency"):
+        await r.cycle()
+
+
+async def test_a_key_planned_by_another_writer_is_never_submitted_twice(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ai_trading_lab.live.store import PlannedDecision
+
+    r = await rig(engine)
+
+    async def contended(*_: object, **__: object) -> PlannedDecision:
+        return PlannedDecision(decision_id=uuid4(), status="planned", created=False)
+
+    monkeypatch.setattr(r.live.store, "plan_decision", contended)
+    submit = AsyncMock()
+    monkeypatch.setattr(r.live.paper, "submit", submit)
+    report = await r.cycle()
+    submit.assert_not_awaited()
+    assert report.strategies[r.bench_id].filled == 0
+
+
+async def planned_buy(r: Rig, key: str):  # type: ignore[no-untyped-def]
+    from ai_trading_lab.live.engine import build_markets
+    from ai_trading_lab.market_data.adapters.kraken import KrakenAdapter
+    from ai_trading_lab.paper_execution.models import OrderIntent
+
+    async with r.live.transport() as transport:
+        batch = await KrakenAdapter(transport).collect(PAIRS, candles_since=1)
+    market = build_markets(batch, CONFIG)["XBTUSD"]
+    row = next(s for s in await r.store.strategies() if s.strategy_id == r.rules_id)
+    intent = OrderIntent(
+        portfolio_id=row.portfolio_id,
+        idempotency_key=key,
+        instrument=market.quote.instrument,
+        side="buy",
+        quantity=D("0.0002"),
+        limit_price=D("67067.2"),
+        created_at_utc=r.now,
+        expires_at_utc=r.now + timedelta(seconds=60),
+    )
+    planned = await r.store.plan_decision(
+        r.rules_id,
+        "XBTUSD",
+        r.now,
+        "buy",
+        "breakout_above_48h_high",
+        key,
+        intent.model_dump(mode="json"),
+        market.entry.model_dump(mode="json"),
+    )
+    return market, intent, planned
+
+
+async def test_a_crash_after_planning_but_before_submitting_resolves_safely(
+    engine: AsyncEngine,
+) -> None:
+    r = await rig(engine)
+    await seed_breakout(r)
+    _, _, planned = await planned_buy(r, f"{r.rules_id}:XBTUSD:buy:lost")
+    # Several minutes later the stored quote is stale: the order must be refused, not filled at
+    # an old price, and the decision must not stay planned forever.
+    await r.cycle(minutes_later=5)
+    assert await r.store.planned(r.rules_id) == []
+    lost = [d for d in await r.store.decisions(r.rules_id) if d.decision_id == planned.decision_id]
+    assert [(d.status, (d.result or {}).get("reason")) for d in lost] == [
+        ("rejected", "order_expired")  # the intent's 60 s life ended before the retry
+    ]
+
+
+async def test_a_crash_after_saving_state_but_before_finishing_is_idempotent(
+    engine: AsyncEngine,
+) -> None:
+    r = await rig(engine)
+    await seed_breakout(r)
+    market, intent, planned = await planned_buy(r, f"{r.rules_id}:XBTUSD:buy:half")
+    receipt = await r.paper.submit(intent, market.quote, r.now, source_entry=market.entry)
+    state = LoopState(
+        risk=RiskState(peak_equity=D(100), day=r.now.date(), day_open_equity=D(100)),
+        entered_at={"XBTUSD": receipt.result.executed_at_utc},
+        last_entry_at={"XBTUSD": receipt.result.executed_at_utc},
+    )
+    await r.store.save_state(r.rules_id, state, r.now)  # state saved, decision never finished
+    await r.cycle()
+    assert await r.store.planned(r.rules_id) == []
+    done = [d for d in await r.store.decisions(r.rules_id) if d.decision_id == planned.decision_id]
+    assert [d.status for d in done] == ["filled"]
+    loop = await r.store.load_state(r.rules_id)
+    assert loop is not None and loop.entered_at["XBTUSD"] == receipt.result.executed_at_utc
+    assert len((await r.portfolio(r.rules_id)).positions) == 1
+
+
+async def test_the_daily_suspension_clears_at_the_next_utc_day_inside_the_engine(
+    engine: AsyncEngine,
+) -> None:
+    r = await rig(engine)
+    suspended = LoopState(
+        risk=RiskState(
+            peak_equity=D(100), day=r.now.date(), day_open_equity=D(100), daily_suspended=True
+        )
+    )
+    await r.store.save_state(r.rules_id, suspended, r.now)
+    first = await r.cycle()
+    assert first.strategies[r.rules_id].blocked == "daily_loss_suspended"
+    later = await r.cycle(minutes_later=24 * 60)
+    assert later.strategies[r.rules_id].blocked is None
+    loop = await r.store.load_state(r.rules_id)
+    assert loop is not None and loop.risk.day == r.now.date() and not loop.risk.daily_suspended
+
+
+async def test_a_disabled_strategy_with_a_position_gets_no_exits_until_slice_4_defines_it(
+    engine: AsyncEngine,
+) -> None:
+    """Documented current behaviour (docs/29): switching a strategy off freezes it entirely."""
+    r = await rig(engine)
+    await seed_breakout(r)
+    await r.cycle()
+    await r.store.set_enabled(r.rules_id, False)
+    before = len(await r.store.decisions(r.rules_id))
+    await r.cycle(minutes_later=72 * 60 + 1)
+    assert len(await r.store.decisions(r.rules_id)) == before
+    assert len((await r.portfolio(r.rules_id)).positions) == 1

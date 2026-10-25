@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Literal, cast
 from uuid import UUID, uuid5
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Table, select
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Table, func, select
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -486,6 +486,22 @@ class PaperStore:
                 at,
             )
         ).state
+
+    async def last_activity(self, portfolio_id: UUID) -> datetime | None:
+        """The ledger's clock: no new command may be stamped earlier than this."""
+        async with self.engine.begin() as connection:
+            history, _ = await self._load(connection, portfolio_id, for_update=False)
+        return history.last_at
+
+    async def command_count(self, portfolio_id: UUID) -> int:
+        """Stored commands (every submitted order, even a rejected one). The history is capped."""
+        async with self.engine.connect() as connection:
+            count = await connection.scalar(
+                select(func.count())
+                .select_from(commands)
+                .where(commands.c.portfolio_id == portfolio_id)
+            )
+        return int(count or 0)
 
     async def get(self, portfolio_id: UUID) -> PortfolioState:
         async with self.engine.begin() as connection:

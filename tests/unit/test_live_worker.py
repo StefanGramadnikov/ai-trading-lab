@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from ai_trading_lab.live.errors import CycleErrors, LoopIntegrityError
 from ai_trading_lab.live.worker import next_run, run_loop
 
 
@@ -44,7 +45,7 @@ async def test_a_bounded_run_makes_exactly_that_many_cycles_and_sleeps_between()
     done = await run_loop(
         cycle, cycles=3, interval=900, offset=20, clock=clock, sleep=clock.sleep, emit=events.append
     )
-    assert done == 3 and len(calls) == 3
+    assert (done.done, done.failed) == (3, 0) and len(calls) == 3
     assert len(clock.sleeps) == 2  # no sleep after the last cycle
     assert [e["event"] for e in events].count("cycle_done") == 3
 
@@ -65,7 +66,7 @@ async def test_a_failing_cycle_is_contained_and_the_loop_keeps_going() -> None:
     done = await run_loop(
         flaky, cycles=4, interval=900, offset=20, clock=clock, sleep=clock.sleep, emit=events.append
     )
-    assert done == 4 and attempts == 4
+    assert (done.done, done.failed) == (4, 1) and attempts == 4
     failed = [e for e in events if e["event"] == "cycle_failed"]
     assert len(failed) == 1 and failed[0]["error"] == "TimeoutError"
 
@@ -115,7 +116,7 @@ async def test_a_stop_request_ends_the_loop_after_the_current_cycle() -> None:
         sleep=stop_after_first_sleep,
         emit=events.append,
     )
-    assert done == 1 and events[-1]["event"] == "stopped"
+    assert done.done == 1 and events[-1]["event"] == "stopped"
 
 
 @pytest.mark.asyncio
@@ -142,3 +143,81 @@ async def test_the_stop_aware_sleep_reports_a_stop_request_and_a_normal_timeout(
     assert await sleep(0.01) is False
     event.set()
     assert await sleep(5) is True
+
+
+@pytest.mark.asyncio
+async def test_an_integrity_failure_stops_the_loop_at_once_with_no_retry() -> None:
+    clock = Clock()
+    events: list[dict[str, Any]] = []
+    attempts = 0
+
+    async def corrupted() -> Any:
+        nonlocal attempts
+        attempts += 1
+        raise LoopIntegrityError("Idempotency key conflict")
+
+    with pytest.raises(LoopIntegrityError):
+        await run_loop(
+            corrupted,
+            cycles=5,
+            interval=900,
+            offset=20,
+            clock=clock,
+            sleep=clock.sleep,
+            emit=events.append,
+        )
+    assert attempts == 1 and events[-1]["event"] == "fatal"
+
+
+@pytest.mark.asyncio
+async def test_a_lost_lock_stops_the_loop_before_another_cycle_can_write() -> None:
+    clock = Clock()
+    events: list[dict[str, Any]] = []
+    cycles_run = 0
+
+    async def cycle() -> Any:
+        nonlocal cycles_run
+        cycles_run += 1
+        return {}
+
+    beats = 0
+
+    async def heartbeat() -> None:
+        nonlocal beats
+        beats += 1
+        if beats == 2:
+            raise LoopIntegrityError("lock lost")
+
+    with pytest.raises(LoopIntegrityError):
+        await run_loop(
+            cycle,
+            cycles=5,
+            interval=900,
+            offset=20,
+            clock=clock,
+            sleep=clock.sleep,
+            emit=events.append,
+            heartbeat=heartbeat,
+        )
+    assert cycles_run == 1  # the second cycle never ran
+
+
+@pytest.mark.asyncio
+async def test_strategy_errors_in_a_cycle_count_as_a_failed_cycle_but_are_contained() -> None:
+    clock = Clock()
+    events: list[dict[str, Any]] = []
+
+    async def partial() -> Any:
+        raise CycleErrors(["v0-benchmark:ValueError"])
+
+    done = await run_loop(
+        partial,
+        cycles=2,
+        interval=900,
+        offset=20,
+        clock=clock,
+        sleep=clock.sleep,
+        emit=events.append,
+    )
+    assert (done.done, done.failed) == (2, 2)
+    assert events[0]["detail"] == ["v0-benchmark:ValueError"]

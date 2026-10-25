@@ -15,6 +15,7 @@ from ai_trading_lab.config import Settings
 from ai_trading_lab.database import create_database_engine
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.engine import LiveEngine
+from ai_trading_lab.live.errors import CycleErrors, LoopIntegrityError
 from ai_trading_lab.live.status import summary
 from ai_trading_lab.live.worker import (
     AlreadyRunning,
@@ -68,20 +69,28 @@ async def run(arguments: argparse.Namespace) -> int:
         elif arguments.command == "status":
             _emit(await summary(live))
         elif arguments.command == "cycle":
-            await live.setup()
-            _emit((await live.run_cycle()).model_dump(mode="json"))
+            # A manual cycle takes the same lock as the loop, so two writers can never overlap.
+            async with single_instance(engine):
+                await live.setup()
+                report = await live.run_cycle()
+                _emit(report.model_dump(mode="json"))
+            if report.errors:
+                return 1
         else:
             stop = asyncio.Event()
             loop = asyncio.get_running_loop()
             for name in ("SIGINT", "SIGTERM"):
                 loop.add_signal_handler(getattr(signal, name), stop.set)
-            async with single_instance(engine):
+            async with single_instance(engine) as lease:
                 await live.setup()
 
                 async def cycle() -> Any:
-                    return (await live.run_cycle()).model_dump(mode="json")
+                    report = await live.run_cycle()
+                    if report.errors:
+                        raise CycleErrors(report.errors)
+                    return report.model_dump(mode="json")
 
-                await run_loop(
+                result = await run_loop(
                     cycle,
                     cycles=None if arguments.until_stopped else arguments.cycles,
                     interval=config.cycle_seconds,
@@ -89,7 +98,9 @@ async def run(arguments: argparse.Namespace) -> int:
                     clock=live.clock,
                     sleep=stop_aware_sleep(stop),
                     emit=_emit,
+                    heartbeat=lease.verify,
                 )
+            return 0 if result.failed == 0 else 1
     finally:
         await engine.dispose()
     return 0
@@ -101,6 +112,11 @@ def main() -> None:
     except AlreadyRunning:
         print(json.dumps({"status": "failed", "error": "another live loop is already running"}))
         code = 3
+    except LoopIntegrityError as exc:
+        print(
+            json.dumps({"status": "failed", "error": "integrity failure", "detail": str(exc)[:200]})
+        )
+        code = 4
     except (ValueError, OSError, TimeoutError, SQLAlchemyError, RuntimeError):
         print(
             json.dumps({"status": "failed", "error": "Invalid input, state or persistence failure"})

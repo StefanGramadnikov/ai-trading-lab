@@ -204,6 +204,8 @@ class History:
             and not (self.replay_manifest is not None and self.replay_manifest.allows(quote))
         ):
             reason = "fixture_mode_required"
+        if self.live_observed and quote.data_mode != DataMode.OBSERVED:
+            reason = "live_portfolio_requires_observed_quote"
         if definition is not None:
             if definition[0] != instrument:
                 reason = "instrument_definition_conflict"
@@ -251,7 +253,9 @@ class History:
             buy = result.consumed
         else:
             sell = result.consumed
-        if instrument.kind == "spot":
+        if instrument.kind == "spot" and not (quote.bids or quote.asks):
+            # Only the spot-assumptions model has one shared liquidity pool; real books keep
+            # separate ask-side and bid-side consumption.
             buy = sell = result.consumed
         self.quotes[quote.snapshot_id] = (quote, buy, sell)
         return (

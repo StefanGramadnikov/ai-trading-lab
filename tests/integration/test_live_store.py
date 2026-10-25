@@ -116,3 +116,18 @@ async def test_loop_state_and_equity_roundtrip(engine: AsyncEngine) -> None:
     await store.record_equity(sid, NOW, D("101.5"), D("80"), D("21.5"))  # same cycle: no duplicate
     points = await store.equity_curve(sid)
     assert [(p.at_utc, p.equity) for p in points] == [(NOW, D("101.5"))]
+
+
+async def test_recent_reads_return_the_newest_rows_in_time_order_with_a_true_count(
+    engine: AsyncEngine,
+) -> None:
+    store, sid = LiveStore(engine), f"s-{uuid4()}"
+    await store.register(sid, "rules", uuid4(), {}, NOW)
+    for n in range(12):
+        await store.log_decision(sid, "XBTEUR", NOW + timedelta(minutes=n), "hold", f"r{n}")
+        await store.record_equity(sid, NOW + timedelta(minutes=n), D(100 + n), D(100), D(n))
+    assert await store.decision_count(sid) == 12
+    recent = await store.recent_decisions(sid, 3)
+    assert [d.reason for d in recent] == ["r9", "r10", "r11"]
+    curve = await store.equity_curve(sid, limit=4)
+    assert [p.equity for p in curve] == [D(108), D(109), D(110), D(111)]

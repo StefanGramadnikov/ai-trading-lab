@@ -211,3 +211,21 @@ First real runs, 2026-10-25 against live Kraken (throwaway database): all three 
 no failures; the benchmark filled ETH/EUR and SOL/EUR at about EUR 33 each with 0.80% fees and marked equity at EUR 98.88 after
 fees and spread. The first run exposed a real bug the fake venue had hidden (the cycle read its clock before collecting, so the
 first order's quote looked like it came from the future); it is fixed and has a regression test.
+
+## 10. Review hardening of slice 2 (independent read-only review, 2026-10-25)
+
+- **Cost gate applies to entries only**: a stop, take-profit or time exit is never refused for spread or impact (amends ADR-0007).
+- **Live portfolios fill only OBSERVED quotes** whose Kraken captures re-derive the quote (`live_portfolio_requires_observed_quote`);
+  spot books are consumed per order, separately from other instrument kinds.
+- **Command capacity**: the broker keeps at most 1000 commands per portfolio and stores every submitted order, rejected ones
+  included. The engine refuses new orders at 900 (pre-flight refusal is logged as a decision) instead of failing late.
+- **Integrity vs rejection**: a broker *rejection* is a normal logged outcome; an inconsistent ledger is a fatal
+  `LoopIntegrityError` (CLI exit code 3, 4 for lock loss). The loop never retries past an integrity error.
+- **Strategy isolation**: one failing strategy is recorded in `CycleReport.errors` and the others still run. The engine
+  evaluates only its own session's strategies (the database may hold other sessions').
+- **Order stamping**: orders are never stamped before the ledger's last activity (`last_activity`), since the ledger clock
+  cannot move backwards.
+- **Lock lease** is verified each cycle; a lost lease stops the worker.
+- **Benchmark**: a partial buy counts as held; the rest is retried in the next slot. Disabled strategies make no decisions.
+- **Known limits**: no retention policy for decisions or observations (about 600 decision rows per day); the benchmark and
+  rules portfolios are independent EUR 100 ledgers.

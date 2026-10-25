@@ -89,3 +89,7 @@ round-trip cost gate); without levels it keeps the spot-price/capacity/impact mo
 and book captures) whose derived quote equals the submitted quote; a missing or altered quote is a hard error before any
 state changes. This mirrors the runtime's raw-capture rule for the Polymarket worker. (3) `PaperStore.create` accepts
 such markers and `submit` accepts the evidence; both are part of the replayed, hash-checked history.
+
+## Amendment 2026-10-25 (V0 slice 2)
+
+The `max_cost_bps` effective-cost gate applies to buys only. A sell (stop, take-profit, time exit, liquidation) is never rejected for spread or impact, so risk exits cannot be blocked.

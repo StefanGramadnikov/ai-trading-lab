@@ -9,7 +9,7 @@ import pytest
 
 from ai_trading_lab.config import Settings
 from ai_trading_lab.live import cli
-from ai_trading_lab.live.worker import AlreadyRunning
+from ai_trading_lab.live.worker import AlreadyRunning, LoopResult
 
 
 def args(*argv: str) -> argparse.Namespace:
@@ -34,11 +34,20 @@ async def test_commands_dispatch_and_always_dispose_the_engine(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     engine, live = AsyncMock(), AsyncMock()
-    live.run_cycle.return_value = MagicMock(model_dump=lambda mode: {"cycle": "ok"})
+    live.run_cycle.return_value = MagicMock(model_dump=lambda mode: {"cycle": "ok"}, errors=[])
+
+    class Held:
+        async def __aenter__(self) -> Any:
+            return AsyncMock()
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
     with (
         patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
         patch.object(cli, "create_database_engine", return_value=engine),
         patch.object(cli, "LiveEngine", return_value=live),
+        patch.object(cli, "single_instance", return_value=Held()),
         patch.object(cli, "summary", AsyncMock(return_value={"status": "ok"})),
     ):
         assert await cli.run(args(command)) == 0
@@ -96,13 +105,14 @@ async def test_run_passes_the_bound_the_interval_and_the_lock_to_the_loop(
     entered: list[str] = []
 
     class Held:
-        async def __aenter__(self) -> None:
+        async def __aenter__(self) -> Any:
             entered.append("lock")
+            return AsyncMock()
 
         async def __aexit__(self, *_: Any) -> None:
             entered.append("released")
 
-    loop = AsyncMock(return_value=0)
+    loop = AsyncMock(return_value=LoopResult(done=2, failed=0))
     with (
         patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
         patch.object(cli, "create_database_engine", return_value=engine),
@@ -117,3 +127,48 @@ async def test_run_passes_the_bound_the_interval_and_the_lock_to_the_loop(
     assert entered == ["lock", "released"]
     live.setup.assert_awaited_once()
     engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_bounded_run_in_which_cycles_failed_does_not_exit_zero() -> None:
+    engine, live = AsyncMock(), AsyncMock()
+    live.clock = lambda: None
+
+    class Held:
+        async def __aenter__(self) -> Any:
+            return AsyncMock()
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+        patch.object(cli, "single_instance", return_value=Held()),
+        patch.object(cli, "run_loop", AsyncMock(return_value=LoopResult(done=3, failed=3))),
+    ):
+        assert await cli.run(args("run", "--cycles", "3")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_manual_cycle_takes_the_same_lock_as_the_loop() -> None:
+    engine, live = AsyncMock(), AsyncMock()
+    live.run_cycle.return_value = MagicMock(model_dump=lambda mode: {"cycle": "ok"}, errors=[])
+
+    class Busy:
+        async def __aenter__(self) -> None:
+            raise AlreadyRunning("busy")
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+        patch.object(cli, "single_instance", return_value=Busy()),
+    ):
+        with pytest.raises(AlreadyRunning):
+            await cli.run(args("cycle"))
+    live.run_cycle.assert_not_awaited()

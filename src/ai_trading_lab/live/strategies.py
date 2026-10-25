@@ -150,6 +150,8 @@ def decide_rules(
     """Exits first (never blocked by risk state), then entries for pairs that pass every gate."""
     risk = config.risk
     exposure = sum((p.cost_basis for p in state.positions), Decimal(0))
+    cash_left = state.cash - state.reserved_cash
+    fee_rate = config.fee_bps / Decimal(10000)
     decisions: list[Decision] = []
     for pair in config.pairs:
         market = markets.get(pair)
@@ -162,14 +164,18 @@ def decide_rules(
         history = candles.get(pair, ())
         if position is not None:
             mark = marks.get(pair)
-            if mark is None:
-                decisions.append(_hold(pair, "unmarkable_position"))
-                continue
             entry_price = position.cost_basis / position.quantity
             # Unknown entry time means unknown age: close it rather than hold it indefinitely.
             entered = loop.entered_at.get(pair, now - timedelta(hours=risk.max_hold_hours))
-            reason: str | None = exit_reason(entry_price, mark.price, entered, now, risk)
+            # A position that cannot be fully valued (a thin or stressed book) must still be able
+            # to stop out: mechanical exits fall back to the touch price. The sale then fills as
+            # deep as the book allows.
+            price = mark.price if mark is not None else quote.bids[0].price
+            reason: str | None = exit_reason(entry_price, price, entered, now, risk)
             if reason is None:
+                if mark is None:
+                    decisions.append(_hold(pair, "unmarkable_position"))
+                    continue
                 signal = breakout_signal(history, held=True, now=now, config=config.breakout)
                 reason = signal.reason if signal.action == "sell" else None
             if reason is None:
@@ -209,7 +215,7 @@ def decide_rules(
             market,
             equity=equity,
             exposure_basis=exposure,
-            cash=state.cash - state.reserved_cash,
+            cash=cash_left,
             policy_cap=config.policy().max_order_notional,
             fee_bps=config.fee_bps,
             risk=risk,
@@ -218,6 +224,9 @@ def decide_rules(
         if quantity is None:
             decisions.append(_hold(pair, "size_below_minimum_or_no_room"))
             continue
+        # Later pairs in this cycle see what the earlier ones will already use.
+        exposure += quantity * limit
+        cash_left -= quantity * limit * (1 + fee_rate)
         decisions.append(
             Decision(
                 pair=pair,
@@ -236,8 +245,13 @@ def decide_benchmark(
     markets: Mapping[str, Market],
     state: PortfolioState,
     loop: LoopState,
+    blocked: str | None = None,
 ) -> list[Decision]:
-    """Spend an equal share of capital on each pair once, then hold. It never sells."""
+    """Spend an equal share of capital on each pair once, then hold. It never sells.
+
+    A partial entry counts as held and is not topped up; a refused or unfilled entry is retried
+    in the next slot. `blocked` (for example near the ledger's capacity) stops new entries only.
+    """
     share = config.initial_cash / len(config.pairs)
     whole = RiskConfig(position_fraction=Decimal(1), exposure_fraction=Decimal(1))
     decisions: list[Decision] = []
@@ -249,6 +263,9 @@ def decide_benchmark(
         assert market is not None
         if held_position(state, market.quote.instrument) is not None or pair in loop.entered_at:
             decisions.append(_hold(pair, "benchmark_holding"))
+            continue
+        if blocked is not None:
+            decisions.append(_hold(pair, blocked))
             continue
         limit = marketable_limit(
             "buy", market.quote.asks[0].price, market.quote.instrument.tick_size, 10

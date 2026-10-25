@@ -235,7 +235,7 @@ def test_negative_zero_and_float_consumption() -> None:
     assert simulate(intent(), quote(), policy(), NOW, (Decimal("-0.0"),)).status == "FILLED"
 
 
-@pytest.mark.parametrize("side", ["buy", "sell"])
+@pytest.mark.parametrize("side", ["buy"])
 def test_actual_rounded_fee_enforces_cost_limit_without_consuming_depth(side: str) -> None:
     data = quote(bids=[{"price": "0.5", "quantity": "1"}], asks=[{"price": "0.5", "quantity": "1"}])
     order = intent(side=side, quantity="0.1", limit_price="0.6" if side == "buy" else "0.4")
@@ -251,7 +251,7 @@ def test_actual_rounded_fee_enforces_cost_limit_without_consuming_depth(side: st
     assert filled.fee == Decimal("0.01")
 
 
-@pytest.mark.parametrize("side", ["buy", "sell"])
+@pytest.mark.parametrize("side", ["buy"])
 def test_depth_weighted_effective_price_enforces_cost_limit(side: str) -> None:
     bids = [{"price": "0.5", "quantity": "100"}]
     asks = [{"price": "0.5", "quantity": "100"}]
@@ -271,7 +271,7 @@ def test_depth_weighted_effective_price_enforces_cost_limit(side: str) -> None:
     assert filled.notional == Decimal("6.8" if side == "buy" else "3.2")
 
 
-@pytest.mark.parametrize("side", ["buy", "sell"])
+@pytest.mark.parametrize("side", ["buy"])
 @pytest.mark.parametrize("rounding", ["tick", "cash"])
 def test_cost_limit_includes_adverse_tick_and_cash_rounding(side: str, rounding: str) -> None:
     asset = instrument(kind="spot")
@@ -411,3 +411,29 @@ def test_spot_without_a_book_still_uses_the_spot_assumptions_model() -> None:
     )
     order = intent(instrument=asset, quantity="0.001", limit_price="67100.0")
     assert simulate(order, data, policy(max_cost_bps="1000"), NOW).status == "FILLED"
+
+
+def test_the_cost_gate_governs_entries_only_a_reducing_sale_is_never_refused_by_it() -> None:
+    """A stop-loss must be executable in a stressed, wide book. The gate is an entry-economics
+    control; refusing the exit would trap the very position it exists to protect."""
+    wide = quote(
+        bids=[{"price": "0.30", "quantity": "10"}], asks=[{"price": "0.70", "quantity": "10"}]
+    )
+    sell = intent(side="sell", quantity="1", limit_price="0.2")
+    result = simulate(sell, wide, policy(max_cost_bps="10"), NOW)
+    assert result.status == "FILLED" and result.reason == "filled"
+    assert result.notional == Decimal("0.30")
+    buy = intent(side="buy", quantity="1", limit_price="0.8")
+    assert simulate(buy, wide, policy(max_cost_bps="10"), NOW).reason == "max_cost_bps"
+    # The same holds on a real spot book and for a spot-assumptions quote.
+    book = spot_book(
+        bids=[{"price": "60000.0", "quantity": "1"}], asks=[{"price": "70000.0", "quantity": "1"}]
+    )
+    order = intent(instrument=kraken_like(), side="sell", quantity="0.001", limit_price="50000.0")
+    assert simulate(order, book, policy(max_cost_bps="10"), NOW).status == "FILLED"
+    asset = kraken_like()
+    assumed = quote(
+        instrument=asset, bids=[], asks=[], spot_price="0.5", spot_capacity="10", impact_bps="50"
+    )
+    sale = intent(instrument=asset, side="sell", quantity="0.1", limit_price="0.3")
+    assert simulate(sale, assumed, policy(max_cost_bps="10"), NOW).status == "FILLED"

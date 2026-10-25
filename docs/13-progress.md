@@ -1679,3 +1679,8 @@ C: migration 0012, `LiveStore`, pure decisions, the cycle engine with plan-then-
 D: the single-instance loop runner and `atl-live` CLI. Real runs against Kraken exposed and fixed a clock-ordering bug.
 Details and the run instructions are in docs/29 sections 8 and 9. Not yet: the AI strategy (slice 3), strategy on/off and
 audit (slice 4), deployment (slice 5), dashboard (slice 6).
+
+Independent review of slice 2 (no critical findings) drove: exits exempt from the cost gate, rejected orders no longer
+exhaust the command cap (guard at 900), strategy failure isolation, integrity-error exit codes, lock lease verification,
+own-session strategy filtering, ledger-ordered order stamps, OBSERVED-only fills for live portfolios. Full gate:
+ruff format/check clean, mypy 190 files clean, 1389 tests passed, coverage 95.15%. See docs/29 section 10.

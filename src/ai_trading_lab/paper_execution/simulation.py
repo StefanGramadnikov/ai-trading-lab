@@ -188,7 +188,10 @@ def _simulate(
     effective_price = notional / quantity
     adverse = max(ZERO, effective_price - reference if buy else reference - effective_price)
     cost = 2 * BPS * (adverse / reference + fee / notional)
-    if cost > policy.max_cost_bps:
+    # The round-trip cost gate is an entry-economics control. A reducing sale is never refused by
+    # it: a stop-loss must be executable in a stressed, wide book, or the gate would trap the very
+    # position it exists to protect. (Entries and valuation of an exit remain exact and costed.)
+    if buy and cost > policy.max_cost_bps:
         return result("max_cost_bps")
     return SimulationResult(
         status="FILLED" if quantity == intent.quantity else "PARTIALLY_FILLED",

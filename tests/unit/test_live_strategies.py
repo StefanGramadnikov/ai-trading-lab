@@ -249,3 +249,46 @@ async def test_benchmark_buys_each_pair_once_and_never_sells() -> None:
     done = decide_benchmark(config=config, now=NOW, markets={PAIR: m}, state=held(m), loop=loop())
     assert next(d for d in done if d.pair == PAIR).reason == "benchmark_holding"
     assert all(d.order is None for d in done)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entry_price", "held_hours", "reason"),
+    [("72000", 1, "stop_loss"), ("67000", 72, "max_hold")],
+)
+async def test_mechanical_exits_still_fire_when_the_position_cannot_be_fully_valued(
+    entry_price: str, held_hours: int, reason: str
+) -> None:
+    """A thin or stressed book must not disable a stop: exits fall back to the touch price."""
+    m = await market()
+    (decision,) = await rules(
+        state=held(m, entry_price=entry_price),
+        marks={PAIR: None},
+        loop=loop(entered_at={PAIR: NOW - timedelta(hours=held_hours)}),
+        equity=None,
+    )
+    assert (decision.action, decision.reason) == ("sell", reason)
+    assert decision.order is not None and decision.order.quantity == D("0.0003")
+
+
+@pytest.mark.asyncio
+async def test_same_cycle_entries_share_the_exposure_ceiling_in_config_order() -> None:
+    m = await market()
+    config = LiveConfig(pairs=("XBTUSD", "ETHUSD", "SOLUSD"), cash_unit="USD")
+    markets = {p: Market(p, m.entry, m.quote, m.rules) for p in config.pairs}
+    candles = {p: flat_candles(BREAKOUT) for p in config.pairs}
+    decisions = decide_rules(
+        config=config,
+        now=NOW,
+        markets=markets,
+        candles=candles,
+        state=portfolio(m),
+        loop=loop(),
+        marks={},
+        equity=D(100),
+        blocked=None,
+    )
+    spent = [d.order.quantity * d.order.limit_price for d in decisions if d.order is not None]
+    assert len(spent) == 2 and all(D("19.9") < x <= D(20) for x in spent)
+    assert sum(spent) <= D(40)  # 40% of equity, never three 20% entries
+    assert [d.reason for d in decisions][-1] == "size_below_minimum_or_no_room"

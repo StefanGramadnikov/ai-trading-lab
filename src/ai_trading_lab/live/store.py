@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    func,
     select,
     text,
     update,
@@ -419,6 +420,45 @@ class LiveStore:
             for r in rows
         ]
 
+    async def decision_count(self, strategy_id: str) -> int:
+        async with self.engine.connect() as connection:
+            count = await connection.scalar(
+                select(func.count())
+                .select_from(live_decisions)
+                .where(live_decisions.c.strategy_id == strategy_id)
+            )
+        return int(count or 0)
+
+    async def recent_decisions(self, strategy_id: str, limit: int) -> list[DecisionRow]:
+        """The newest `limit` decisions, oldest first."""
+        async with self.engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        select(live_decisions)
+                        .where(live_decisions.c.strategy_id == strategy_id)
+                        .order_by(live_decisions.c.seq.desc())
+                        .limit(limit)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [self._row(r) for r in reversed(rows)]
+
+    @staticmethod
+    def _row(r: Any) -> DecisionRow:
+        return DecisionRow(
+            decision_id=r["decision_id"],
+            strategy_id=r["strategy_id"],
+            pair=r["pair"],
+            cycle_at_utc=r["cycle_at_utc"],
+            action=r["action"],
+            reason=r["reason"],
+            status=r["status"],
+            result=r["result"],
+        )
+
     async def decisions(self, strategy_id: str, limit: int = 1000) -> list[DecisionRow]:
         async with self.engine.connect() as connection:
             rows = (
@@ -508,13 +548,14 @@ class LiveStore:
         )
 
     async def equity_curve(self, strategy_id: str, limit: int = 5000) -> list[EquityPoint]:
+        """The newest `limit` equity points, oldest first."""
         async with self.engine.connect() as connection:
             rows = (
                 (
                     await connection.execute(
                         select(live_equity)
                         .where(live_equity.c.strategy_id == strategy_id)
-                        .order_by(live_equity.c.at_utc)
+                        .order_by(live_equity.c.at_utc.desc())
                         .limit(limit)
                     )
                 )
@@ -528,5 +569,5 @@ class LiveStore:
                 cash=r["cash"],
                 positions_value=r["positions_value"],
             )
-            for r in rows
+            for r in reversed(rows)
         ]

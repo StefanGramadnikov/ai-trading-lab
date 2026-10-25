@@ -56,8 +56,16 @@ against session limits across restarts. See ADR-0011. The collector supplies no
 forecast, so a probability strategy without supplied qualifying evidence abstains.
 
 Canonical journal evidence is capped at64MiB; this is not PostgreSQL physical disk
-usage. Disk sizing/retention decisions and a valid operational source/forecast
-configuration are M8B acceptance prerequisites, not invented current capabilities.
+usage. Disk sizing/retention decisions are M8B acceptance prerequisites, not invented
+current capabilities. Superseded by DEC-040 (2026-10-25): M8B is a no-trade infrastructure
+soak, so a forecast/feature source is no longer an M8B prerequisite; it, an exit/settlement
+path with captured resolution evidence, and a session-chaining decision gate any run that
+can hold positions.
+
+**M8B places no orders.** The collector supplies no forecast or feature, so the rules
+strategies abstain and no position can open; reports remain mark-only
+(`economic_basis: mark_only_no_realization`, `final_pnl_claim: false`). A multi-day
+"RUNNING, no losses" result is infrastructure evidence only, never strategy evidence.
 
 
 ## Local acceptance — 2026-10-20
@@ -71,3 +79,32 @@ paid inference or Telegram delivery was activated. Exact commands, fingerprints,
 quota interruption and repaired evidence are recorded in document13.
 The user invoked `/ship` after local acceptance. Hosted CI must pass on the final
 PR head; merge and M8B/M8C activation remain separately gated.
+
+## Independent review repair plan — 2026-10-23
+
+User authorized verifying CODEX_FIXES.md against binding requirements, regression
+first fixes and complete isolated verification. Work remains on the existing
+branch without staging, commits, pushes, branch changes or external PR changes.
+Preserve all existing demo containers/volumes/data. Use a new disposable PostgreSQL
+server/database ai_trading_lab_test and remove only that server after verification.
+Python3.12.13/locked dependencies and Chromium restoration downloads were approved.
+
+Sequence: F01 reducing exits/marks; F02 provenance/leased polling; F03 incremental
+journal/capacity plus measured real-reducer benchmark; F05 cross-envelope spending
+and trusted pricing; F04 bounded supervision/staleness only; then remaining verified
+medium findings. Each behavioral change needs an observed failing regression before
+implementation, focused repeat, then the complete format/lint/mypy/coverage suite,
+production build/Compose validation/migration roundtrip and fresh independent review.
+
+F05 narrower scope explicitly approved: retain ADR0009's prohibition on an
+administrative reconciliation override; add global guards without that command.
+F04 automatic clearing of collection_failure/clock_gap was approved on 2026-10-25
+(DEC-039): three consecutive fresh qualified ticks, breaker of five per session and
+three per rolling hour, never a pause/risk latch/capacity/stop. F11 chaining
+and F12 new exit/settlement behavior are deferred; implement historical read access,
+documented single-session limits and mark-only/no-realization labeling only.
+F10/F17 use synthetic negative/contract tests and describe required real captures;
+no public requests are authorized. The user explicitly approved the F03 maximum
+configurable canonical journal limit of512MiB. Per-session limits remain explicit;
+that approval does not establish measured storage/latency or physical disk quotas.
+Increasing a cap alone cannot resolve checkpoint copying or whole-tape replay.

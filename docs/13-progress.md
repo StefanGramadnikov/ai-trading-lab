@@ -1486,3 +1486,161 @@ Final-head hosted CI will be verified after push and recorded in the associated
 PR and completion handoff; it is not claimed green before execution.
 No real market acquisition, operational worker, paid inference, Telegram delivery,
 multi-day operation, cloud deployment or live trading is part of this ship gate.
+
+
+## Local operational readiness and manual-action tracking — 2026-10-20
+
+User requested local setup for observation/optimization and explicit notification
+when accounts, keys or other manual work become necessary. Keep this checklist
+current during subsequent approved phases; identify owner, blocker and completion
+evidence, and notify the user at the point their action is required. No unattended
+monitor, account creation, operational start or new paid envelope is implied.
+
+M8A PR #9 is OPEN (not merged) when checked. Final head
+`1bdda164bbac382bab8fd7564636926435ea6ff4` passed both hosted runs:
+[PR CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39477552607)
+and [push CI](https://github.com/StefanGramadnikov/ai-trading-lab/actions/runs/39477525348).
+Each passed1022tests/95.36%, production build/migrations/health. Existing M7 demo
+health on localhost58000 is alive/PAPER_ONLY; this is not an activated M8 runtime.
+
+| Action / readiness item | Owner / timing | Current status |
+| --- | --- | --- |
+| Squash-merge reviewed PR #9 | User, before M8B setup | Pending; no merge authorization |
+| Prepare exact local setup and short smoke plan, then approve bounded activation | Agent prepares; user approves parameters/start | Proposed; no runtime started |
+| Preserve existing demo/data, back up, use compatible pinned code/schema/config | Agent, approved setup | Required before updating local installation |
+| Confirm source access/current schema, market identity, cadence and storage limits | Agent proposes/proves; user approves operating limits | Pending; public source access not yet proven by M8A fixtures |
+| Strategy/forecast inputs and continuous AI integration | Agent scopes; user approves any new work | Current collector generates no forecast; runtime AI disabled; missing inputs abstain |
+| Mac power/sleep, OrbStack and network availability | User, immediately before operational run | Manual checklist pending; no OS settings changed |
+| Public market-data credentials | Agent checks before selected source activation | No account/key requested for planned public Polymarket reads; no trading account/wallet required |
+| Personal OpenAI configuration | User already supplied locally in M5 | One real M5 call recorded; verify local configuration without displaying secrets before reuse; recurring AI/model/budget approval still pending |
+| Telegram bot token and recipient | User, when real notification acceptance is approved | Not requested now; real delivery untested; use ignored local environment only |
+| Other AI providers / paid data / VPS | User only if selected and approved later | Deferred; no account, key or purchase requested |
+| Measure and record optimization evidence | Agent, approved short smoke then 2–4-day run | Pending: collection latency/failures/freshness, cycle duration, CPU/RAM, actual DB/log growth, recovery/replay and dashboard responsiveness; do not invent thresholds or tune strategy for an apparent backtest profit |
+
+Next proposed sequence: merge M8A → approve local setup/short smoke plan → execute
+bounded source/readiness test → review measured evidence and blockers → approve
+2–4-day M8B operation. AI activation and real Telegram send remain explicit gates.
+This entry is an uncommitted documentation update; no runtime/config or GitHub
+state changed and no secret was inspected or printed.
+
+
+Readiness checklist validation: local Markdown links and `git diff --check` PASS.
+Required documentation-update `make check` passed Ruff format/lint and strict mypy,
+then BLOCKED while preparing the database fixture for browser tests. Docker info
+also failed a bounded5second retry (timeout). Stopped only this turn's identified
+stalled test/migration/probe processes; no application container/volume cleanup.
+Current full-suite recheck is INCOMPLETE, not a new green result. User notified:
+check/resume/restart OrbStack and confirm responsiveness before local setup; then
+rerun the full gate. Earlier M8A local and exact-head hostedCI evidence remains
+historical verified PASS. No application code changed in this documentation task.
+
+## CODEX_FIXES repair execution — 2026-10-23 (in progress)
+
+User approved restoring pinned Python/dependencies and Chromium, then continuing
+regression-first M8A repairs. Restored Python3.12.13 under /private/tmp/atl-fixes-python;
+preserved broken .venv as /private/tmp/atl-broken-venv-20261022 and recreated with
+uv0.11.7 sync --locked (55 resolved packages). Chromium installation completed.
+No real source, AI or Telegram calls. No staging/commit/push/branch/PR change.
+
+Created only new disposable postgres:17.9-bookworm server atl-fixes-20261022,
+loopback32768/database ai_trading_lab_test, ephemeral tmpfs storage. All previous
+demo containers/volumes/data remain untouched. Remove only the new test server
+when verification finishes; test URL uses synthetic fixes_test_only credentials.
+
+Verified so far (focused results, not a full-gate claim):
+
+- F01: four behavioral regressions failed before changes; reducing sells and NAV
+  simulation no longer use entry-only max_order_notional. New tests verify profitable
+  exit, peak NAV/drawdown and experiment result. Focused109PASS; later F01 repeat4PASS.
+  Logs /private/tmp/atl-f01-red.log and /private/tmp/atl-f01-green.log.
+- F02: nine provenance regressions RED then GREEN; focused332PASS, Ruff/mypy PASS.
+  Required explicit capture mode, synthetic transport labeling, observed CLI refusal,
+  pending canonical poll/result and active physical worker lease. Existing synthetic
+  callers deliberately updated to explicit FIXTURE. Historical audit query documented
+  in document27 only; NOT RUN against existing data. Isolated PG ownership test PASS.
+- F05: five cross-envelope regressions RED then GREEN; focused91PASS in3.37s,
+  Ruff/targeted mypy PASS. Disabled-by-default total budget, configured reviewed tariff,
+  durable global serialization/history verification and provider unknown-outcome block.
+  User approved guards while preserving ADR0009's prohibition on reconciliation override.
+- F04 approved subset:18 health/config unit tests PASS after missing-module RED;
+  isolated PG readonly/staleness/terminal/no-writer-lock regression PASS. Compose
+  failed-exit restart bounded to3; unhealthy status alone does not restart a container.
+  Operational/risk latches are never automatically cleared. No existing service restarted.
+- F06: two regressions RED then GREEN. History.last_at orders submitted commands;
+  Effect.at and receipt execution time retain simulated latency. Pause/poll can occur
+  during that latency. Focused36PASS; logs /private/tmp/atl-f06-{red,green}.log.
+- F07: two worker error-path unit regressions RED then GREEN. Known rejected source
+  results record a safe failure; concurrent operator stop returns stopped state.
+  Integrity/lease/persistence errors remain fatal. Real PG cases/full gate pending.
+
+F03 user decision: larger-limit proposal explicitly approved, maximum configurable
+canonical journal512MiB, explicit session settings and worst-case admission budget;
+no existing session limits silently widened. Actual database footprint is measured
+separately. Compact/incremental journal implementation and realistic benchmark
+validation remain in progress; no throughput/capacity result claimed yet.
+
+Automatic repair accounting so far: round1 F02 CLI local-variable type correction;
+round2 F04 database-row mapping type correction; round3 F03 test type narrowing.
+After round3 verification, further failures require user direction; do not silently
+reset the counter or weaken assertions. Full gate/production/restore/review results
+and complete finding dispositions will be recorded after actual execution.
+
+
+### Repair pass verification and stop — 2026-10-23
+
+Detailed dispositions for all22findings, exact commands, limitations and next steps:
+[document28](28-review-repair-status.md). Full pytest1078PASS/1FAIL/95.13%; all9
+Chromium tests and6000tick real-reducer benchmark ran. Formatting PASS200files;
+lint FAIL1unusedimport; mypy FAIL4testtypingerrors. Pytest failure is a deliberate
+pending migration-head assertion update (expects0010, new0011isapplied). Coverage
+0.07points below supplied review baseline explained in document28; no weakening.
+
+Production image build (approved locked dependency downloads), Compose validation,
+production migration up→down→up/schema parity and actual private backup/new isolated
+restore/full runtime checkpoint replay PASS. Initial no-network build lacked cached
+dependencies; helper first needed explicit repository PYTHONPATH. Final successful
+commands/evidence recorded in document28. No existing demo services changed.
+
+Fresh independent interim review INCOMPLETE: confirmed HIGH midnight risk-baseline
+rewind during control/in-flight latency and MEDIUM capacity reason lost atdeadline;
+F07 real-PG coverage and benchmark latency assertions remain missing. No further
+application/test repairs after round3; user direction required. Remaining original
+findings, historical-read/report labels and unverified capture work remain pending.
+No shipping/activation is implied. Disposable test server removal recorded below.
+
+Cleanup verified: stopped only disposable container
+2613639fd49d09dabc578fb0a6c591f5ebeadede17118ae208006f52d27ca5f9
+(atl-fixes-20261022); its automatic removal completed after a short asynchronous
+wait, and a bounded inspect confirmed it no longer exists. Its tmpfs data was
+discarded; private backup artifact remains outside Git. Existing services/volumes
+untouched. Local Markdown targets41files and final diff whitespace PASS. All work
+remains unstaged/uncommitted. Next action requires user direction under repair cap.
+
+## 2026-10-25 — CODEX_FIXES repair continuation (verified state)
+
+Continued the repair on the same uncommitted tree after Codex stopped at its repair limit.
+Fixed and tested: F-09, F-13 (store, report and CLI), F-14, F-15, F-16, F-19, F-21; added the F-12 mark-only
+label, F-10 ordering contract test, F-03 benchmark time budgets, worker bound tests, and an
+F-18 reporting fixture correction. Gate on this tree: ruff format/check and mypy clean; 1117
+pytest passed before the final F-13 guard tests were added, coverage 95.12%. Not repeated:
+production image build, Compose validation, backup/restore production verification. Open
+decisions (F-04 auto-clear, F-08 risk unification, F-11 chaining, F-12 exit path) and unverified
+live-shape questions (F-10, F-17, F-22) are listed in document 28. M8B remains blocked; nothing
+committed or shipped.
+
+## 2026-10-25 — DEC-039 bounded automatic recovery (F-04)
+
+User approved auto-clearing of `collection_failure` and `clock_gap` only: three consecutive fresh
+qualified ticks (non-duplicate, VALID, advancing event time, within `max_gap_seconds`; the gap-detecting
+tick is not counted), never a pause, risk latch, capacity or stop, with a breaker of 5 clears per session
+and 3 per rolling hour. Implemented in the runtime reducer, with a queued `recovery` notification and
+state fields `recovery_ticks`, `auto_clears`, `auto_clear_breaker`, `auto_clear_times`. ADR-0011 and
+documents 06/12/25 amended. A gap during a manual pause no longer converts the pause into a gap.
+
+## 2026-10-25 — DEC-040: M8B is a no-trade soak (F-12 decided)
+
+User approved deferring the exit/settlement path. Code review showed the OBSERVED runtime cannot open
+positions (collector supplies no forecast/feature; rules strategies abstain), so exits are unreachable in
+M8A. M8B validates infrastructure only and makes no trading or P&L claim. A forecast/feature source, an
+exit/settlement path using captured resolution evidence, and a chaining decision (F-11) gate any trading
+run; F-08 should be decided before one. Documentation only; no code changed, nothing committed.

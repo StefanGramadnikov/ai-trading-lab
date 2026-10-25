@@ -52,6 +52,10 @@
 
 | DEC-038 | M8A local runtime implementation approved, 2026-10-20 | User approved the M8A plan and repeated continue after quota reset. Bounded local worker, persistent paper portfolio, qualified observed-source simulation, recovery/backup tooling and reporting only. No multi-day run, real Telegram, paid AI, cloud deployment or shipping. See document25 and ADR-0011. |
 
+| DEC-039 | Independent review repair scope and bounded-runtime amendments approved, 2026-10-23 | User authorized regression-first CODEX_FIXES repairs, pinned environment/Chromium restoration, bounded supervised restart and staleness checks, and explicitly approved512MiB maximum configurable journal. Retain per-session limits, manual operational suspension recovery and risk latches. F05 global guards approved without administrative reconciliation override. F11 chaining/F12 new exit-settlement behavior and real source captures remain deferred. No shipping, existing-container changes or operational activation. |
+
+| DEC-040 | M8B is a no-trade infrastructure soak; exit/settlement deferred, 2026-10-25 | User approved (“yes”) after review finding F-12. The OBSERVED runtime cannot open positions (its collector supplies no forecast/feature, so the rules strategies always abstain), so an exit/settlement path is not built before M8B. M8B validates collection, journaling, restart, DEC-039 recovery, notifications and backup over the DEC-016 2–4 day window and carries **no trading, strategy or P&L claim**. Any run that can hold positions first requires (1) an approved independent forecast/feature source, (2) a deterministic exit/settlement path using captured, verified resolution evidence (and a separately approved policy for any latch-driven unwind), and (3) a session-chaining decision (F-11). Narrows document 25's earlier statement that a forecast configuration is an M8B prerequisite: it is now a prerequisite for a trading run only. No multi-day run, shipping or live trading is authorized. |
+
 ## Architecture Decision Records
 
 - [ADR-0001: Modular monolith and shared experiment infrastructure](adr/0001-modular-monolith.md)

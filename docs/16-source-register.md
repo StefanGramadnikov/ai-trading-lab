@@ -60,3 +60,15 @@ accounts are not unique holders. Polymarket contract values retain explicit
 equivalence is assumed. Kalshi complementary asks are marked derived and do not
 prove executable liquidity. No continuous uptime, historical completeness, fee/fill
 realism, legal access or performance result was established by these samples.
+
+## Polymarket reachability from the development machine — 2026-10-25
+
+Two approved bounded `atl-data collect --source polymarket` runs (one from the assistant shell, one from the
+user's terminal) both returned `network_error` with 0 captures. Handshake-only diagnostics (no HTTP request, no
+data) showed that on this machine both `gamma-api.polymarket.com` and `clob.polymarket.com` resolve to
+`127.0.0.1`, other hosts resolve normally, `/etc/hosts` has no such entry, no system proxy is set, and the TLS
+certificate presented on loopback is a local development certificate issued by a local development CA, not
+Polymarket's. Certificate verification therefore fails closed. The resolvers in use are the router and ISP
+resolvers; which one returns the loopback answer was not verified, and whether it is a deliberate block was not
+established. No workaround (alternate DNS, VPN, pinned IPs) was attempted. F-10, F-17 and F-22 remain
+UNVERIFIED and no Polymarket payload has been captured.

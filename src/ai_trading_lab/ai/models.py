@@ -77,7 +77,9 @@ class Usage(FrozenModel):
 
 
 class ProviderResult(FrozenModel):
-    status: Literal["completed", "refused", "invalid", "timeout", "error", "unknown"]
+    # "settled" is never returned by a provider: the live loop records it for a call whose outcome
+    # is unknown, charged at its reserved maximum so the spending cap stays true without freezing.
+    status: Literal["completed", "refused", "invalid", "timeout", "error", "unknown", "settled"]
     answer: ModelAnswer | None = None
     usage: Usage | None = None
     response_id: str | None = Field(default=None, max_length=200)
@@ -96,6 +98,8 @@ class ProviderResult(FrozenModel):
     def completed(self) -> ProviderResult:
         if self.status == "completed" and (self.answer is None or self.usage is None):
             raise ValueError("completed_requires_answer_and_usage")
+        if self.status == "settled" and self.usage is None:
+            raise ValueError("settled_requires_usage")
         if self.status != "completed" and self.answer is not None:
             raise ValueError("failed_call_cannot_propose")
         return self

@@ -10,7 +10,7 @@ from ai_trading_lab.live.engine import LiveEngine
 async def summary(live: LiveEngine, *, recent: int = 8) -> dict[str, Any]:
     """Strategies, their holdings, latest equity and most recent decisions."""
     out: dict[str, Any] = {"paper_only": True, "strategies": []}
-    own = {live.rules_id, live.benchmark_id}
+    own = live.strategy_ids
     for row in await live.store.strategies(enabled_only=False):
         if row.strategy_id not in own:
             continue
@@ -44,6 +44,7 @@ async def summary(live: LiveEngine, *, recent: int = 8) -> dict[str, Any]:
                         "action": d.action,
                         "reason": d.reason,
                         "status": d.status,
+                        "ai": d.detail,
                     }
                     for d in recent_rows
                 ],

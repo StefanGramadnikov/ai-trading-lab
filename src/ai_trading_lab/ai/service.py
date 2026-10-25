@@ -5,14 +5,19 @@ from decimal import Decimal
 from time import monotonic_ns
 from uuid import UUID
 
-from ai_trading_lab.ai.budget import BudgetStore
+from ai_trading_lab.ai.budget import BudgetStore, settled
 from ai_trading_lab.ai.models import AIRequest, PriceSnapshot, ProviderResult
 from ai_trading_lab.ai.providers import Provider
 
 
 class InferenceService:
-    def __init__(self, store: BudgetStore, provider: Provider) -> None:
+    def __init__(
+        self, store: BudgetStore, provider: Provider, *, settle_unknown: bool = False
+    ) -> None:
         self.store, self.provider = store, provider
+        # When set, a call that was sent but has no usable outcome is charged at its reserved
+        # maximum and the envelope stays usable. Otherwise it stays unresolved and blocks it.
+        self.settle_unknown = settle_unknown
 
     async def call(
         self,
@@ -31,6 +36,11 @@ class InferenceService:
             rejected: ProviderResult | None = preflight(request)
             if rejected is not None:
                 return rejected
+        check = getattr(self.provider, "destination", None)
+        if check is not None:
+            blocked: ProviderResult | None = await check(request)
+            if blocked is not None:
+                return blocked
         reservation = await self.store.reserve(
             budget_id, request, price, at=at, run_id=run_id, run_limit=run_limit
         )
@@ -47,6 +57,8 @@ class InferenceService:
                 status="unknown", model=request.model, reason="provider_outcome_unknown"
             )
         result = ProviderResult.model_validate(result.model_dump(mode="json"))
+        if self.settle_unknown and result.status in ("timeout", "error", "unknown"):
+            result = settled(request, result.reason)
         result = result.model_copy(
             update={
                 "elapsed_ms": min(300000, (monotonic_ns() - started) // 1_000_000),

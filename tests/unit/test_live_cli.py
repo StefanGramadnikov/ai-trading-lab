@@ -172,3 +172,47 @@ async def test_a_manual_cycle_takes_the_same_lock_as_the_loop() -> None:
         with pytest.raises(AlreadyRunning):
             await cli.run(args("cycle"))
     live.run_cycle.assert_not_awaited()
+
+
+def ai_settings(**changes: Any) -> Settings:
+    from ai_trading_lab.ai.models import PriceSnapshot
+
+    price = PriceSnapshot(
+        provider="openai",
+        model="gpt-5.6-terra",
+        input_per_million="2.5",
+        output_per_million="12",
+        source_url="https://example.test/pricing",
+        verified_at_utc="2026-10-25T00:00:00Z",
+        version="test",
+    )
+    values: dict[str, Any] = {
+        "ai_enabled": True,
+        "openai_api_key": "synthetic-not-a-key",
+        "ai_total_limit_usd": "10",
+        "ai_reviewed_prices": (price,),
+    }
+    return Settings(_env_file=None, **(values | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "note"),
+    [
+        ({"ai_enabled": False}, "ai_disabled"),
+        ({"openai_api_key": None}, "ai_key_missing"),
+        ({"ai_total_limit_usd": "0"}, "ai_spending_cap_is_zero"),
+        ({"ai_reviewed_prices": ()}, "ai_price_not_reviewed"),
+    ],
+)
+def test_the_ai_strategy_stays_off_unless_fully_and_explicitly_configured(
+    changes: dict[str, Any], note: str
+) -> None:
+    deps, why = cli.build_ai(ai_settings(**changes), MagicMock())
+    assert deps is None and why == note
+
+
+def test_a_fully_configured_ai_strategy_is_built_with_the_reviewed_price() -> None:
+    deps, why = cli.build_ai(ai_settings(), MagicMock())
+    assert why == "ai_enabled" and deps is not None
+    assert deps.price.model == deps.config.model == "gpt-5.6-terra"
+    assert deps.config.provider == "openai" and deps.config.total_limit_usd == 10

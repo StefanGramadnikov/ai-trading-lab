@@ -12,6 +12,37 @@ from ai_trading_lab.notifications.models import Notification
 from ai_trading_lab.notifications.store import NotificationStore
 
 
+async def queue_recovery(
+    engine: AsyncEngine, checkpoint: dict[str, object], received: datetime
+) -> None:
+    """Tell the operator an automatic clear happened (DEC-039); never delivers anything."""
+    state = cast(dict[str, object], checkpoint["state"])
+    event = Notification(
+        event_key=f"runtime:{checkpoint['session_id']}:recovered:{state.get('auto_clears')}",
+        kind="recovery",
+        occurred_at_utc=datetime.fromisoformat(str(checkpoint["last_at"])),
+        text=(
+            f"Runtime {checkpoint['session_id']}; sequence {checkpoint['sequence']}; "
+            f"automatic recovery {state.get('auto_clears')} of at most 5 after "
+            "consecutive fresh qualified ticks. Risk latches and pauses were not cleared; "
+            f"breaker open: {state.get('auto_clear_breaker')}. Inspect the local checkpoint."
+        ),
+    )
+    try:
+        await NotificationStore(engine).enqueue(event, received)
+    except (SQLAlchemyError, TimeoutError, OSError, ValueError):
+        print(
+            json.dumps(
+                {
+                    "status": "warning",
+                    "component": "notification_queue",
+                    "error": "Local notification unavailable; inspect runtime checkpoint",
+                }
+            ),
+            file=sys.stderr,
+        )
+
+
 async def queue_checkpoint(
     engine: AsyncEngine, checkpoint: dict[str, object], received: datetime
 ) -> None:

@@ -1,12 +1,13 @@
-"""Full-tape deterministic reducer for one persistent paper portfolio."""
+"""Streaming deterministic reducer for one persistent paper portfolio."""
 
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, localcontext
 from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, Field
 
-from ai_trading_lab.market_data.models import FrozenModel
+from ai_trading_lab.market_data.models import DataQuality, FrozenModel
 from ai_trading_lab.market_data.storage import content_hash
 from ai_trading_lab.paper_execution.history import History, clock
 from ai_trading_lab.paper_execution.models import ExecutionQuote, OrderIntent, SimulationPolicy
@@ -16,6 +17,14 @@ from ai_trading_lab.runtime.evidence import native_event_id, observed_quote
 from ai_trading_lab.runtime.models import RuntimeConfig
 from ai_trading_lab.strategies.models import Abstain, StrategyFrame, TradeProposal
 from ai_trading_lab.strategies.rules import decide
+
+# DEC-039: only these operational suspensions may clear themselves, and only after fresh,
+# qualified evidence. A pause, a risk latch, capacity and stop never clear automatically.
+RECOVERY_TICKS = 3
+MAX_AUTO_CLEARS = 5
+MAX_CLEARS_PER_HOUR = 3
+AUTO_CLEARABLE = frozenset({"collection_failure", "clock_gap"})
+HOLD = frozenset({"manual_pause", "capacity"})
 
 
 class _Event(FrozenModel):
@@ -176,14 +185,33 @@ def _decision(
     return decide(config.strategy, frame, history.state)
 
 
+class RuntimeReducer:
+    """Verified continuation; originals remain in journal envelopes, never snapshots."""
+
+    def __init__(self, config: dict[str, object], *, compact: bool = True) -> None:
+        self.steps = _steps(RuntimeConfig.model_validate(config), compact=compact)
+        with localcontext() as context:
+            context.prec = 100
+            self.state = next(self.steps)
+
+    def apply(self, event: dict[str, object]) -> dict[str, object]:
+        with localcontext() as context:
+            context.prec = 100
+            self.state = self.steps.send(event)
+        return self.state
+
+
 def reducer(config: dict[str, object], events: tuple[dict[str, object], ...]) -> dict[str, object]:
-    """Rebuild from original funding; reject corrupt tape rather than repairing it."""
-    with localcontext() as context:
-        context.prec = 100
-        return _reduce(RuntimeConfig.model_validate(config), events)
+    """Replay original envelopes; legacy callers may inspect reconstructed commands."""
+    runtime = RuntimeReducer(config, compact=False)
+    for event in events:
+        runtime.apply(event)
+    return runtime.state
 
 
-def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dict[str, object]:
+def _steps(
+    config: RuntimeConfig, *, compact: bool
+) -> Generator[dict[str, object], dict[str, object], None]:
     history = History(
         uuid5(config.session_id, "runtime-portfolio"),
         {
@@ -196,6 +224,7 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
         },
     )
     last_at = config.started_at_utc
+    risk_at = last_at
     day = last_at.date()
     day_open = Decimal(0)
     peak = config.initial_cash
@@ -209,9 +238,23 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
     seen: dict[str, str] = {}
     keys: set[str] = set()
     last_decision: dict[str, object] | None = None
+    history_count = 0
+    history_digest = content_hash([])
+    folded: set[str] = set()
+    recovery = auto_clears = 0
+    clear_times: list[datetime] = []
+    last_event_time: datetime | None = None
+    after_gap = False
+
+    def breaker_open(at: datetime) -> bool:
+        recent = sum(1 for stamp in clear_times if at - stamp < timedelta(hours=1))
+        return auto_clears >= MAX_AUTO_CLEARS or recent >= MAX_CLEARS_PER_HOUR
 
     def update_risk(at: datetime) -> None:
-        nonlocal day, day_open, peak, nav, risk
+        nonlocal day, day_open, peak, nav, risk, risk_at
+        # Controls order by submission time; modeled fills may already be later.
+        risk_at = max(risk_at, clock(at))
+        at = risk_at
         if at.date() != day:
             day, day_open = at.date(), history.state.realized_gross - history.state.fees
         nav = _nav(history, marks, at, config)
@@ -225,7 +268,66 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
             elif nav is not None and peak - nav >= peak * config.profile.drawdown_fraction:
                 risk = "drawdown_limit"
 
-    for raw in events:
+    def snapshot() -> dict[str, object]:
+        reason = ("capacity" if control == "capacity" else risk or control) or (
+            "unavailable_nav" if nav is None else None
+        )
+        status = (
+            "STOPPED"
+            if stopped
+            else "PAUSED"
+            if control == "manual_pause"
+            else "DEGRADED"
+            if control
+            else "RUNNING"
+        )
+        commands = (
+            [
+                {
+                    "kind": effect.kind,
+                    "key": effect.key,
+                    "at": effect.submitted_at.isoformat(),
+                    "payload": effect.payload,
+                }
+                for effect in history.effects.values()
+            ]
+            if not compact
+            else []
+        )
+        result: dict[str, object] = {
+            "status": status,
+            "portfolio": history.state.model_dump(mode="json"),
+            "nav": str(nav) if nav is not None else None,
+            "entry_suspended": stopped or reason is not None,
+            "suspension_reason": reason,
+            "cycles": cycles,
+            "poll_attempts": attempts,
+            "poll_pending": pending,
+            "last_at": last_at.isoformat(),
+            "last_decision": last_decision,
+            "peak_nav": str(peak),
+            "day": day.isoformat(),
+            "risk_at": risk_at.isoformat(),
+            "day_open_realized_net": str(day_open),
+            "risk_latch": risk,
+            "history": commands,
+            "history_hash": history_digest,
+            "history_count": history_count,
+            "native_events": sorted(seen) if not compact else [],
+            "recovery_ticks": recovery,
+            "auto_clears": auto_clears,
+            "auto_clear_breaker": breaker_open(last_at),
+            "auto_clear_times": [stamp.isoformat() for stamp in clear_times],
+            "paper_only": True,
+            "ai_enabled": False,
+        }
+        if compact:
+            result.pop("history")
+            result.pop("native_events")
+        return result
+
+    while True:
+        raw = yield snapshot()
         event = _Event.model_validate(raw)
         at = clock(event.at)
         if event.key in keys or at < last_at or (history.last_at and at < history.last_at):
@@ -235,7 +337,7 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
         allowed = (
             {"action", "frame", "source_entry"}
             if action == "tick"
-            else {"action", "reason", "poll_id"}
+            else {"action", "reason", "poll_id", "refused_event_hash", "refused_event_bytes"}
         )
         if set(event.payload) - allowed:
             raise ValueError("runtime_unknown_payload_fields")
@@ -243,9 +345,27 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
             raise ValueError("runtime_unknown_action")
         if stopped and action != "stop":
             raise ValueError("runtime_session_stopped")
-        if at - last_at > timedelta(seconds=config.max_gap_seconds):
-            control = "clock_gap"
+        if config.data_mode == "OBSERVED":
+            if action == "poll" and event.key != f"poll:{attempts + 1}":
+                raise ValueError("runtime_observed_poll_key_required")
+            if action == "tick" and (not pending or event.key != f"poll:{attempts}:result"):
+                raise ValueError("runtime_observed_poll_result_required")
+            if action == "failure" and (
+                not pending
+                or event.key not in {f"poll:{attempts}:result", f"poll:{attempts}:interrupted"}
+            ):
+                raise ValueError("runtime_observed_poll_result_required")
+        gap_tick = at - last_at > timedelta(seconds=config.max_gap_seconds)
+        if gap_tick:
+            if control not in HOLD:
+                control = "clock_gap"
+            recovery = 0
+            # The worker detects a gap on its poll event; the data tick that follows is the
+            # first evidence after the outage and must not count toward recovery.
+            after_gap = True
         last_at = at
+        if action == "stop" and event.payload.get("reason") == "capacity":
+            control = "capacity"
         if at >= config.deadline_at_utc:
             stopped = True
             pending = False
@@ -253,10 +373,14 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
             continue
         if action == "stop":
             stopped, pending = True, False
+            if event.payload.get("reason") == "capacity":
+                control = "capacity"
         elif action == "pause":
             control = "manual_pause"
+            recovery = 0
         elif action == "resume":
             control = None
+            recovery = 0
         elif action == "poll":
             if pending or attempts >= config.max_cycles:
                 raise ValueError("runtime_poll_admission_refused")
@@ -264,7 +388,9 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
             pending = True
         elif action == "failure":
             pending = False
-            control = "collection_failure"
+            if control not in HOLD:
+                control = "collection_failure"
+            recovery = 0
             if attempts >= config.max_cycles:
                 stopped = True
         elif action == "tick":
@@ -280,6 +406,12 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
             duplicate = native in seen
             if duplicate and seen[native] != signature:
                 raise ValueError("runtime_native_event_conflict")
+            advancing = (
+                not duplicate
+                and frame.quote.quality == DataQuality.VALID
+                and frame.quote.event_time_utc is not None
+                and (last_event_time is None or frame.quote.event_time_utc > last_event_time)
+            )
             if not duplicate:
                 seen[native] = signature
                 frame = frame.model_copy(
@@ -294,57 +426,44 @@ def _reduce(config: RuntimeConfig, events: tuple[dict[str, object], ...]) -> dic
                 decision = Abstain(reason="duplicate_native_event")
             elif isinstance(decision, TradeProposal) and decision.side == "buy" and block:
                 decision = Abstain(reason=block)
-            if len(history.effects) >= 1000:
+            if history_count >= 1000:
                 stopped = True
                 decision = Abstain(reason="runtime_history_capacity")
             if valuation_at >= config.deadline_at_utc:
                 stopped = True
                 decision = Abstain(reason="runtime_deadline")
             last_decision = _execute(config, history, frame, decision, cycles, entry)
+            for effect in history.effects.values():
+                if effect.key not in folded:
+                    command = {
+                        "kind": effect.kind,
+                        "key": effect.key,
+                        "at": effect.submitted_at.isoformat(),
+                        "payload": effect.payload,
+                    }
+                    history_digest = content_hash([history_digest, command])
+                    history_count += 1
+                    folded.add(effect.key)
+            if compact:
+                history.effects.clear()
             update_risk(valuation_at)
+            if advancing and frame.quote.event_time_utc is not None:
+                last_event_time = frame.quote.event_time_utc
+            skipped = gap_tick or after_gap
+            after_gap = False
+            if control in AUTO_CLEARABLE and not stopped and not skipped:
+                if advancing:
+                    recovery = min(recovery + 1, RECOVERY_TICKS)
+                    if recovery >= RECOVERY_TICKS and not breaker_open(at):
+                        control = None
+                        recovery = 0
+                        auto_clears += 1
+                        clear_times = [*clear_times, at][-MAX_AUTO_CLEARS:]
+                elif not duplicate:
+                    recovery = 0
             if cycles >= config.max_cycles or attempts >= config.max_cycles:
                 stopped = True
         else:
             raise AssertionError("validated action")
         if action != "tick":
             update_risk(at)
-    reason = risk or control or ("unavailable_nav" if nav is None else None)
-    status = (
-        "STOPPED"
-        if stopped
-        else "PAUSED"
-        if control == "manual_pause"
-        else "DEGRADED"
-        if control
-        else "RUNNING"
-    )
-    commands = [
-        {
-            "kind": effect.kind,
-            "key": effect.key,
-            "at": effect.submitted_at.isoformat(),
-            "payload": effect.payload,
-        }
-        for effect in history.effects.values()
-    ]
-    return {
-        "status": status,
-        "portfolio": history.state.model_dump(mode="json"),
-        "nav": str(nav) if nav is not None else None,
-        "entry_suspended": stopped or reason is not None,
-        "suspension_reason": reason,
-        "cycles": cycles,
-        "poll_attempts": attempts,
-        "poll_pending": pending,
-        "last_at": last_at.isoformat(),
-        "last_decision": last_decision,
-        "peak_nav": str(peak),
-        "day": day.isoformat(),
-        "day_open_realized_net": str(day_open),
-        "risk_latch": risk,
-        "history": commands,
-        "history_hash": content_hash(commands),
-        "native_events": sorted(seen),
-        "paper_only": True,
-        "ai_enabled": False,
-    }

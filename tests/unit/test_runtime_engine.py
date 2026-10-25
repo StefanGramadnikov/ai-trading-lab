@@ -190,11 +190,11 @@ def test_observed_raw_binding_and_native_identity_ignore_capture_uuid() -> None:
             "resolution_terms_hash": entry.resolution_terms_hash,
         }
     )
-    state = reducer(cfg, (tick(frame, 1, entry),))
+    state = reducer(cfg, observed_events(frame, entry))
     assert state["last_decision"]["decision"]["reason"] == "forecast_required"
     forged = frame.model_copy(update={"quote": quote.model_copy(update={"asks": ()})})
     with pytest.raises(ValueError, match="raw_quote"):
-        reducer(cfg, (tick(forged, 1, entry),))
+        reducer(cfg, observed_events(forged, entry))
     forged_capture = entry.model_copy(
         update={
             "book_capture": entry.book_capture.model_copy(update={"data_mode": DataMode.FIXTURE})
@@ -265,7 +265,7 @@ def test_observed_forecast_executes_only_with_raw_bound_history() -> None:
             "resolution_terms_hash": entry.resolution_terms_hash,
         }
     )
-    state = reducer(cfg, (tick(frame, 1, entry),))
+    state = reducer(cfg, observed_events(frame, entry))
     assert state["portfolio"]["positions"]
     assert state["last_decision"]["receipt"]["quote"]["data_mode"] == "OBSERVED"
     assert state["history"][0]["payload"]["source_entry"] == entry.model_dump(mode="json")
@@ -294,3 +294,12 @@ def test_public_revalidation_and_payload_conflicts() -> None:
     changed = first.model_copy(update={"quote": first.quote.model_copy(update={"bids": ()})})
     with pytest.raises(ValueError, match="native_event_conflict"):
         reducer(cfg, (tick(first, 1), tick(changed, 2)))
+
+
+def observed_events(frame: StrategyFrame, entry: ReplayEntry) -> tuple[dict[str, Any], ...]:
+    """Exercise observed protocol structurally; synthetic captures are not run evidence."""
+    at = frame.at_utc.isoformat()
+    return (
+        {"key": "poll:1", "at": at, "payload": {"action": "poll"}},
+        {**tick(frame, 1, entry), "key": "poll:1:result"},
+    )

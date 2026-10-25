@@ -32,6 +32,8 @@ class Reports(Protocol):
 class ReportingService:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
+        # One journal keeps its verified-continuation cache across dashboard requests.
+        self._journal = Journal(engine, reducer)
 
     async def list_experiments(self, limit: int = 20, offset: int = 0) -> dict[str, object]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
@@ -207,7 +209,7 @@ class ReportingService:
         }
 
     async def runtime_detail(self, session_id: UUID) -> dict[str, object]:
-        checkpoint = await Journal(self.engine, reducer).get(session_id)
+        checkpoint = await self._journal.get(session_id)
         state = cast(dict[str, object], checkpoint["state"])
         # Full source evidence remains in the local journal, not browser diagnostics.
         visible = {
@@ -235,6 +237,10 @@ class ReportingService:
             **checkpoint,
             "state": visible,
             "heartbeat_basis": "last durable progress; not a live process probe",
+            # The runtime has no settlement or discretionary exit path (CODEX_FIXES F-12), so
+            # NAV is a full-liquidation mark. It is never a realized or final result.
+            "economic_basis": "mark_only_no_realization",
+            "final_pnl_claim": False,
         }
 
     async def status(self) -> dict[str, object]:

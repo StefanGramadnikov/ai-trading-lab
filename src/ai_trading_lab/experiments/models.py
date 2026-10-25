@@ -108,6 +108,9 @@ class ExperimentConfig(FrozenModel):
             raise ValueError("unique cells and existing baseline required")
         if len({c.research.run_id for c in self.cells}) != len(self.cells):
             raise ValueError("cell run IDs must be independent")
+        budget_ids = [c.ai.budget.budget_id for c in self.cells if c.ai is not None]
+        if len(set(budget_ids)) != len(budget_ids):
+            raise ValueError("AI cell budget IDs must be independent")
         if (
             len(self.expenses)
             + sum(
@@ -151,6 +154,19 @@ class ExperimentConfig(FrozenModel):
                 ai_signatures.append(signature)
         if any(s != ai_signatures[0] for s in ai_signatures[1:]):
             raise ValueError("undeclared AI configuration difference")
+        values: list[object] = []
+        for cell in self.cells:
+            if self.dimension == "architecture":
+                value: object = cell.ai.flow.mode if cell.ai else "rules"
+            elif self.dimension == "activation":
+                value = (cell.ai.activation, cell.ai.interval_seconds) if cell.ai else None
+            elif self.dimension == "provider":
+                value = (cell.ai.provider, cell.ai.model) if cell.ai else None
+            else:
+                value = cell.profile.model_dump(mode="json")
+            values.append(value)
+        if all(value == values[0] for value in values[1:]):
+            raise ValueError("declared comparison dimension must vary")
         return self
 
     @property

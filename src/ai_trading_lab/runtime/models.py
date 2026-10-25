@@ -9,6 +9,13 @@ from pydantic import AwareDatetime, Field, field_validator, model_validator
 from ai_trading_lab.experiments.models import RiskProfile
 from ai_trading_lab.market_data.models import FrozenModel
 from ai_trading_lab.paper_execution.models import PaperInstrument, PositiveAmount, SimulationPolicy
+from ai_trading_lab.runtime.capacity import (
+    CREATION_RESERVE_BYTES,
+    MAX_JOURNAL_BYTES,
+    MIN_EVENT_BYTES,
+    TERMINAL_RESERVE_BYTES,
+    cycle_overhead,
+)
 from ai_trading_lab.strategies.models import StrategyConfig
 
 
@@ -26,10 +33,13 @@ class RuntimeConfig(FrozenModel):
     started_at_utc: AwareDatetime
     deadline_at_utc: AwareDatetime
     poll_interval_seconds: int = Field(ge=1, le=3600, strict=True)
-    max_gap_seconds: int = Field(ge=1, le=604800, strict=True)
+    max_gap_seconds: int = Field(ge=1, le=345600, strict=True)
     max_cycles: int = Field(ge=1, le=10000, strict=True)
-    max_journal_bytes: int = Field(ge=1, le=64 * 1024 * 1024, strict=True)
+    max_journal_bytes: int = Field(ge=1, le=MAX_JOURNAL_BYTES, strict=True)
     instrument: PaperInstrument | None = None
+    max_event_bytes: int | None = Field(
+        default=None, ge=MIN_EVENT_BYTES, le=MAX_JOURNAL_BYTES, strict=True
+    )
 
     @field_validator("started_at_utc", "deadline_at_utc")
     @classmethod
@@ -38,6 +48,22 @@ class RuntimeConfig(FrozenModel):
 
     @model_validator(mode="after")
     def bounded(self) -> "RuntimeConfig":
+        available = self.max_journal_bytes - TERMINAL_RESERVE_BYTES - CREATION_RESERVE_BYTES
+        derived = available // self.max_cycles - cycle_overhead()
+        envelope = self.max_event_bytes if self.max_event_bytes is not None else derived
+        if (
+            envelope < MIN_EVENT_BYTES
+            or self.max_cycles * (envelope + cycle_overhead()) > available
+        ):
+            raise ValueError("runtime_declared_journal_budget_too_small")
+        object.__setattr__(self, "max_event_bytes", envelope)
+        if self.poll_interval_seconds > self.max_gap_seconds:
+            raise ValueError("runtime_cadence_poll_exceeds_gap")
+        if self.data_mode == "OBSERVED" and self.poll_interval_seconds > (
+            self.simulation.max_age_seconds
+        ):
+            # Between polls the held mark would age out, hiding NAV and the loss controls.
+            raise ValueError("runtime_cadence_exceeds_quote_freshness")
         if self.deadline_at_utc <= self.started_at_utc:
             raise ValueError("runtime_deadline_must_follow_start")
         if self.deadline_at_utc - self.started_at_utc > timedelta(days=4):

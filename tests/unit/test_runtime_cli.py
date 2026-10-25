@@ -35,6 +35,7 @@ async def test_commands_and_cleanup(command: str, tmp_path: Path, capsys: Any) -
     if command == "step":
         path.write_text('{"action":"tick","frame":{}}')
     engine, journal = AsyncMock(), AsyncMock()
+    journal.config.return_value = raw
     journal.create.return_value = journal.get.return_value = journal.append.return_value = {
         "state": {"status": "RUNNING"}
     }
@@ -70,3 +71,16 @@ def test_main_sanitized(capsys: Any) -> None:
             cli.main()
         assert error.value.code == 2
     assert "private-url" not in capsys.readouterr().out
+
+
+def test_control_clock_defaults_now_and_rejects_skew() -> None:
+    from datetime import UTC, timedelta
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert cli.control_at(None, now=now) == now
+    assert cli.control_at(now + timedelta(seconds=30), now=now) == now + timedelta(seconds=30)
+    for stamp in (now + timedelta(days=1), now - timedelta(seconds=31), now.replace(tzinfo=None)):
+        with pytest.raises(ValueError, match="control_clock"):
+            cli.control_at(stamp, now=now)
+    args = cli.parser().parse_args(["pause", str(UUID(int=1)), "--key", "pause"])
+    assert args.at is None

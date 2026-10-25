@@ -61,7 +61,8 @@ async def test_worker_records_attempts_and_recovery_before_any_network_retry(
     )
     journal = Journal(engine, reducer)
     await journal.create(spec.session_id, spec.model_dump(mode="json"), spec.started_at_utc)
-    await journal.append(spec.session_id, "poll:1", {"action": "poll"}, spec.started_at_utc)
+    async with journal.worker(spec.session_id) as active:
+        await active.append(spec.session_id, "poll:1", {"action": "poll"}, spec.started_at_utc)
     calls = 0
 
     async def failure(_: RuntimeConfig) -> dict[str, object]:
@@ -183,3 +184,45 @@ async def test_notification_outage_does_not_stop_qualified_monitoring(
     assert restarted["state"]["status"] == "STOPPED"
     assert restarted["state"]["portfolio"]["cash"] == str(spec.initial_cash)
     assert "private" not in capsys.readouterr().err
+
+
+async def test_observed_poll_result_is_owned_by_worker_connection(engine: AsyncEngine) -> None:
+    """Synthetic protocol acceptance only; no observed source claims or network."""
+    from ai_trading_lab.runtime.evidence import observed_quote
+
+    spec, entry = observed_config()
+    at = entry.book_capture.received_at_utc
+    spec = spec.model_copy(update={"started_at_utc": at})
+    journal = Journal(engine, reducer)
+    await journal.create(spec.session_id, spec.model_dump(mode="json"), at)
+    frame = (
+        research()
+        .frames[0]
+        .model_copy(
+            update={
+                "quote": observed_quote(entry),
+                "at_utc": at,
+                "forecast": None,
+                "resolution_terms_hash": entry.resolution_terms_hash,
+            }
+        )
+    )
+    payload = tick(frame, 1, entry)["payload"]
+    with pytest.raises(ValueError, match="worker lease"):
+        await journal.append(spec.session_id, "poll:1", {"action": "poll"}, at)
+    async with journal.worker(spec.session_id) as active:
+        with pytest.raises(ValueError, match="poll_result_required"):
+            await active.append(spec.session_id, "poll:1:result", payload, at)
+        await active.append(spec.session_id, "poll:1", {"action": "poll"}, at)
+        with pytest.raises(ValueError, match="worker lease"):
+            await journal.append(spec.session_id, "poll:1:result", payload, at)
+        with pytest.raises(ValueError, match="poll_result_required"):
+            await active.append(spec.session_id, "wrong", payload, at)
+        accepted: Any = await active.append(spec.session_id, "poll:1:result", payload, at)
+        assert accepted["state"]["cycles"] == 1
+        assert accepted["state"]["poll_pending"] is False
+        assert await active.append(spec.session_id, "poll:1:result", payload, at) == accepted
+    with pytest.raises(ValueError, match="worker lease"):
+        await journal.append(spec.session_id, "poll:1:result", payload, at)
+    stopped: Any = await journal.append(spec.session_id, "operator-stop", {"action": "stop"}, at)
+    assert stopped["state"]["status"] == "STOPPED"

@@ -304,7 +304,8 @@ class HTTPProvider:
         if self._owned:
             await self._client.aclose()
 
-    async def analyze(self, request: AIRequest) -> ProviderResult:
+    def preflight(self, request: AIRequest) -> ProviderResult | None:
+        """Local rejection before any reservation: nothing is sent, nothing can be billed."""
         if request.provider != self.name:
             return ProviderResult(status="invalid", model=request.model, reason="provider_mismatch")
         if self.name == "xai" and request.model != "grok-4.3":
@@ -313,12 +314,23 @@ class HTTPProvider:
             return ProviderResult(
                 status="invalid", model=request.model, reason="unsupported_billing_bound"
             )
+        secret = self._key.get_secret_value()
+        if not secret.isascii() or any(ord(c) < 33 or ord(c) == 127 for c in secret):
+            return ProviderResult(
+                status="invalid", model=request.model, reason="invalid_key_format"
+            )
         try:
-            body = _body(request)
+            _body(request)
         except ValueError:
             return ProviderResult(
                 status="invalid", model=request.model, reason="input_budget_exceeded"
             )
+        return None
+
+    async def analyze(self, request: AIRequest) -> ProviderResult:
+        if (rejected := self.preflight(request)) is not None:
+            return rejected
+        body = _body(request)
         headers = {"content-type": "application/json", "accept-encoding": "identity"}
         if self.name == "anthropic":
             headers.update(

@@ -43,7 +43,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    restart: "no"
+    restart: "on-failure:3"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-m", "ai_trading_lab.runtime.health", "${ATL_RUNTIME_SESSION_ID:-00000000-0000-0000-0000-000000000000}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     read_only: true
     logging:
       driver: json-file

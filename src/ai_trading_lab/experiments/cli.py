@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ai_trading_lab.config import Settings
 from ai_trading_lab.database import create_database_engine
+from ai_trading_lab.experiments.costs import Expense
 from ai_trading_lab.experiments.models import ExperimentConfig
 from ai_trading_lab.experiments.store import ExperimentStore
 from ai_trading_lab.market_data.models import parse_json
@@ -24,6 +25,14 @@ def read_config(path: Path) -> ExperimentConfig:
     if len(data) > 2_000_000:
         raise ValueError("experiment input exceeds 2MB")
     return ExperimentConfig.model_validate(parse_json(data.decode("utf-8")))
+
+
+def read_expense(path: Path) -> Expense:
+    with path.open("rb") as handle:
+        data = handle.read(100_001)
+    if len(data) > 100_000:
+        raise ValueError("expense input exceeds 100KB")
+    return Expense.model_validate(parse_json(data.decode("utf-8")))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -40,6 +49,15 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--at", type=datetime.fromisoformat, required=True)
         if name not in ("create", "run", "report"):
             command.add_argument("--reason", required=True)
+    attach = commands.add_parser("attach-expense")
+    attach.add_argument("experiment_id", type=UUID)
+    attach.add_argument("expense", type=Path)
+    complete = commands.add_parser("complete-expenses")
+    complete.add_argument("experiment_id", type=UUID)
+    complete.add_argument("--reason", required=True)
+    for command in (attach, complete):
+        command.add_argument("--key", required=True)
+        command.add_argument("--at", type=datetime.fromisoformat, required=True)
     return result
 
 
@@ -59,6 +77,17 @@ async def run(arguments: argparse.Namespace) -> int:
             output = await store.report(arguments.experiment_id)
         elif arguments.command == "run":
             output = await store.advance(arguments.experiment_id, arguments.key, arguments.at)
+        elif arguments.command == "attach-expense":
+            output = await store.attach_expense(
+                arguments.experiment_id,
+                arguments.key,
+                arguments.at,
+                await asyncio.to_thread(read_expense, arguments.expense),
+            )
+        elif arguments.command == "complete-expenses":
+            output = await store.complete_expenses(
+                arguments.experiment_id, arguments.key, arguments.at, arguments.reason
+            )
         else:
             output = await store.command(
                 arguments.experiment_id,

@@ -30,6 +30,7 @@ from ai_trading_lab.ai.service import InferenceService
 from ai_trading_lab.backtesting.models import DecisionRecord, Evaluation, runtime_fingerprint
 from ai_trading_lab.backtesting.reporting import report
 from ai_trading_lab.backtesting.runner import execute_decision, portfolio_config
+from ai_trading_lab.config import Settings
 from ai_trading_lab.market_data.storage import content_hash, metadata
 from ai_trading_lab.paper_execution.history import History
 from ai_trading_lab.paper_execution.models import decimal_amount
@@ -76,15 +77,21 @@ def projection_hash(history: History) -> str:
 
 class AIRunStore:
     def __init__(
-        self, engine: AsyncEngine, provider: Provider, clock: Callable[[], datetime] | None = None
+        self,
+        engine: AsyncEngine,
+        provider: Provider,
+        clock: Callable[[], datetime] | None = None,
+        *,
+        settings: Settings | None = None,
     ) -> None:
         self.engine, self.provider = engine, provider
+        self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
 
     async def run(self, spec: AIRunInput) -> dict[str, object]:
         spec = AIRunInput.model_validate(spec.model_dump(mode="json"))
         await self._bind_start(spec)
-        budget = BudgetStore(self.engine)
+        budget = BudgetStore(self.engine, self.settings)
         await budget.create(spec.budget)
         run_id = spec.research.run_id
         # A run lock serializes concurrent identical runs. Budget reservations use

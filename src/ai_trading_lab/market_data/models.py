@@ -109,7 +109,7 @@ class Capture(FrozenModel):
     body: str
     status_code: int = Field(default=200, ge=100, le=599)
     received_at_utc: AwareDatetime
-    data_mode: DataMode = DataMode.OBSERVED
+    data_mode: DataMode
     origin_capture_id: UUID | None = None
     schema_version: str = "1"
 

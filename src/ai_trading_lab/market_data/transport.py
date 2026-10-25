@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import ipaddress
 import math
 import re
+import socket
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -13,11 +15,36 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from types import MappingProxyType
 from typing import Literal
+from urllib.parse import urlsplit
 
 import httpx2
 from pydantic import JsonValue
 
 from ai_trading_lab.market_data.models import Capture, DataMode, Source, TransportError
+
+Resolver = Callable[[str], Awaitable[list[str]]]
+
+
+def is_public_address(text: str) -> bool:
+    """True only for a globally routable unicast address.
+
+    OBSERVED evidence must come from the public internet. Loopback, private, link-local,
+    carrier-grade NAT, documentation, reserved, multicast and malformed values are refused,
+    including IPv4-mapped IPv6 spellings of them.
+    """
+    try:
+        address = ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_global and not address.is_multicast
+
+
+async def _system_resolver(host: str) -> list[str]:
+    infos = await asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    return sorted({str(info[4][0]) for info in infos})
+
 
 _BASE58 = r"[1-9A-HJ-NP-Za-km-z]{32,44}"
 _TICKER = r"[A-Za-z0-9_-]{1,200}"
@@ -154,11 +181,15 @@ class HttpTransport:
         client: httpx2.AsyncClient | None = None,
         *,
         limits: TransportLimits | None = None,
-        data_mode: DataMode = DataMode.OBSERVED,
+        data_mode: DataMode | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        resolver: Resolver | None = None,
     ) -> None:
+        mode = data_mode or (DataMode.OBSERVED if client is None else DataMode.FIXTURE)
+        if client is not None and mode != DataMode.FIXTURE:
+            raise ValueError("Injected HTTP clients require FIXTURE provenance, never OBSERVED")
         self._client = (
             client
             if client is not None
@@ -169,8 +200,9 @@ class HttpTransport:
             )
         )
         self._owned = client is None
+        self._resolve: Resolver = resolver or _system_resolver
         self._limits = limits or TransportLimits()
-        self._mode, self._clock, self._sleep, self._monotonic = data_mode, clock, sleep, monotonic
+        self._mode, self._clock, self._sleep, self._monotonic = mode, clock, sleep, monotonic
         self._deadline = monotonic() + self._limits.total_seconds
         self._semaphore = asyncio.Semaphore(self._limits.concurrency)
         self._source_locks = {source: asyncio.Lock() for source in Source}
@@ -201,6 +233,27 @@ class HttpTransport:
         if remaining <= 0:
             raise TransportError(source, "time_budget_exhausted")
         return remaining
+
+    async def _require_public_destination(self, source: Source, url: str) -> None:
+        """Refuse to connect when the fixed host resolves anywhere but the public internet."""
+        host = urlsplit(url).hostname or ""
+        try:
+            async with asyncio.timeout(min(self._limits.timeout_seconds, self._remaining(source))):
+                addresses = await self._resolve(host)
+        except (OSError, TimeoutError):
+            return  # unresolvable: the request itself fails as an ordinary network error
+        if not addresses or not all(is_public_address(address) for address in addresses):
+            raise TransportError(source, "unsafe_destination")
+
+    @staticmethod
+    def _require_public_peer(source: Source, response: httpx2.Response) -> None:
+        """Verify who actually answered; DNS may differ between the check and the connect."""
+        stream = response.extensions.get("network_stream")
+        lookup = getattr(stream, "get_extra_info", None)
+        server = lookup("server_addr") if callable(lookup) else None
+        peer = server[0] if isinstance(server, tuple) and server else None
+        if not isinstance(peer, str) or not is_public_address(peer):
+            raise TransportError(source, "unsafe_destination")
 
     async def _pause(self, source: Source, delay: float) -> None:
         if delay >= self._remaining(source):
@@ -270,6 +323,8 @@ class HttpTransport:
                 await self._pause(
                     source, max(0, last + self._limits.min_interval_seconds - self._monotonic())
                 )
+            if self._mode == DataMode.OBSERVED:
+                await self._require_public_destination(source, url)
             if self._request_count >= self._limits.max_requests:
                 raise TransportError(source, "request_budget_exhausted")
             timeout = min(self._limits.timeout_seconds, self._remaining(source))
@@ -292,6 +347,8 @@ class HttpTransport:
                         follow_redirects=False,
                         auth=None,
                     ) as response:
+                        if self._mode == DataMode.OBSERVED:
+                            self._require_public_peer(source, response)
                         raw = bytearray()
                         async for chunk in response.aiter_bytes(chunk_size=65_536):
                             if len(raw) + len(chunk) > self._limits.max_response_bytes:

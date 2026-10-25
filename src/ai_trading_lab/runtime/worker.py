@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from ai_trading_lab.market_data.models import DataMode, TransportError
 from ai_trading_lab.market_data.transport import HttpTransport, TransportLimits
 from ai_trading_lab.runtime.journal import Journal
 from ai_trading_lab.runtime.models import RuntimeConfig
-from ai_trading_lab.runtime.notifications import queue_checkpoint
+from ai_trading_lab.runtime.notifications import queue_checkpoint, queue_recovery
 from ai_trading_lab.runtime.source import collect_frame
 
 Collector = Callable[[RuntimeConfig], Awaitable[dict[str, object]]]
@@ -53,6 +55,11 @@ async def run_worker(
         if config.data_mode != DataMode.OBSERVED:
             raise ValueError("Use explicit fixture steps, not a wall-clock fixture worker")
         checkpoint = await active.get(session_id)
+        announced = int(cast(dict[str, Any], checkpoint["state"]).get("auto_clears", 0))
+        if announced:
+            # The event key is idempotent: re-offer the latest clear in case a previous
+            # worker stopped after committing it but before queueing its notice.
+            await queue_recovery(journal.engine, checkpoint, clock())
         await queue_checkpoint(journal.engine, checkpoint, clock())
         for _ in range(cycles):
             if monotonic() >= deadline:
@@ -92,13 +99,47 @@ async def run_worker(
                 # Provider bodies, arbitrary URLs and credentials are never diagnostics.
                 payload = {"action": "failure", "reason": "collection_unavailable"}
             result_at = clock()
-            if payload.get("action") == "tick":
-                from ai_trading_lab.strategies.models import StrategyFrame
+            try:
+                if payload.get("action") == "tick":
+                    from ai_trading_lab.strategies.models import StrategyFrame
 
-                result_at = StrategyFrame.model_validate(payload.get("frame")).at_utc
-            checkpoint = await active.append(
-                session_id, f"poll:{number}:result", payload, result_at
-            )
+                    result_at = StrategyFrame.model_validate(payload.get("frame")).at_utc
+                checkpoint = await active.append(
+                    session_id, f"poll:{number}:result", payload, result_at
+                )
+            except ValueError as error:
+                rejected = isinstance(error, ValidationError) or str(error) in {
+                    "runtime_session_stopped",
+                    "runtime_native_event_conflict",
+                    "runtime_raw_quote_mismatch",
+                    "runtime_frame_clock_or_mode_mismatch",
+                    "runtime_unknown_payload_fields",
+                    "runtime_unknown_action",
+                    "runtime_duplicate_key_or_clock_conflict",
+                }
+                if not rejected:
+                    # Integrity/lease/persistence errors remain fatal and fail closed.
+                    raise
+                current = await active.get(session_id)
+                current_state = cast(dict[str, Any], current["state"])
+                if current_state["status"] == "STOPPED":
+                    checkpoint = current
+                    break
+                if not current_state.get("poll_pending"):
+                    raise
+                stamp = clock()
+                if isinstance(current.get("last_at"), str):
+                    stamp = max(stamp, datetime.fromisoformat(str(current["last_at"])))
+                checkpoint = await active.append(
+                    session_id,
+                    f"poll:{number}:result",
+                    {"action": "failure", "reason": "rejected_source_result"},
+                    stamp,
+                )
+            cleared = int(cast(dict[str, Any], checkpoint["state"]).get("auto_clears", 0))
+            if cleared > announced:
+                announced = cleared
+                await queue_recovery(journal.engine, checkpoint, clock())
             await queue_checkpoint(journal.engine, checkpoint, clock())
             remaining = deadline - monotonic()
             if remaining <= 0:

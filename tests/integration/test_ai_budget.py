@@ -1,18 +1,36 @@
 """Real PostgreSQL call reservations; no provider HTTP or credentials."""
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ai_trading_lab.ai.budget import BudgetStore, Reservation, budgets, calls
 from ai_trading_lab.ai.models import ProviderResult, Usage
+from tests.ai_budget_helpers import isolated_budgets
 from tests.unit.test_ai_budget import AT, completed, policy, pricing, request
 
 pytestmark = pytest.mark.integration
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def synthetic_paid_settings(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[None]:
+    monkeypatch.setenv("ATL_AI_TOTAL_LIMIT_USD", "1")
+    monkeypatch.setenv("ATL_AI_REVIEWED_PRICES", json.dumps([pricing().model_dump(mode="json")]))
+    engine = create_async_engine(database_url)
+    try:
+        async with isolated_budgets(engine):
+            yield
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

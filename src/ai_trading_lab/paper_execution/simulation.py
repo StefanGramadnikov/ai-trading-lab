@@ -108,7 +108,7 @@ def _simulate(
         return result("quantity_step")
     if intent.limit_price % instrument.tick_size:
         return result("price_tick")
-    if intent.quantity * intent.limit_price > policy.max_order_notional:
+    if intent.side == "buy" and intent.quantity * intent.limit_price > policy.max_order_notional:
         return result("max_order_notional")
 
     buy = intent.side == "buy"
@@ -178,7 +178,7 @@ def _simulate(
             break
     if not quantity:
         return result("no_executable_liquidity", "CANCELLED")
-    if notional > policy.max_order_notional:
+    if buy and notional > policy.max_order_notional:
         return result("max_order_notional")
     fee = _round(notional * policy.fee_bps / BPS, instrument.cash_step, up=True)
     # Effective cash price includes depth, impact and adverse tick/cash rounding.

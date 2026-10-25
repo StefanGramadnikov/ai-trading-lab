@@ -101,3 +101,68 @@ def test_invalid_input_is_sanitized(
         cli.main()
     assert exc.value.code == 2
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_f13_attach_and_complete_expense_dispatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from datetime import UTC, datetime
+
+    from ai_trading_lab.experiments.costs import CostAllocation, Expense
+
+    seen: list[tuple[str, Any]] = []
+
+    class Engine:
+        async def dispose(self) -> None:
+            seen.append(("dispose", None))
+
+    class Store:
+        def __init__(self, engine: Any) -> None:
+            pass
+
+        async def attach_expense(
+            self, eid: Any, key: str, at: Any, expense: Expense
+        ) -> dict[str, str]:
+            seen.append(("attach", expense.expense_id))
+            return {"state": "EVALUATING"}
+
+        async def complete_expenses(
+            self, eid: Any, key: str, at: Any, reason: str
+        ) -> dict[str, str]:
+            seen.append(("complete", reason))
+            return {"state": "EVALUATING"}
+
+    monkeypatch.setattr(cli, "create_database_engine", lambda _: Engine())
+    monkeypatch.setattr(cli, "ExperimentStore", Store)
+    expense = Expense(
+        expense_id="invoice-1",
+        cost_key="ai:1",
+        category="ai",
+        kind="actual",
+        amount="0.02",
+        currency="USD",
+        incurred_at_utc=datetime(2026, 1, 1, tzinfo=UTC),
+        source="operator-supplied-invoice-reference",
+        evidence="observed",
+        allocations=(CostAllocation(cell_id="hybrid", weight="1"),),
+    )
+    path = tmp_path / "expense.json"
+    path.write_text(expense.model_dump_json())
+    eid = str(uuid4())
+    stamp = ["--key", "one", "--at", "2026-10-20T00:00:00Z"]
+    assert await cli.run(cli.parser().parse_args(["attach-expense", eid, str(path), *stamp])) == 0
+    assert (
+        await cli.run(
+            cli.parser().parse_args(
+                ["complete-expenses", eid, *stamp, "--reason", "all bills checked"]
+            )
+        )
+        == 0
+    )
+    assert [name for name, _ in seen if name != "dispose"] == ["attach", "complete"]
+    assert ("attach", "invoice-1") in seen and ("complete", "all bills checked") in seen
+    path.write_bytes(b" " * 100_001)
+    with pytest.raises(ValueError, match="100KB"):
+        cli.read_expense(path)
+    capsys.readouterr()

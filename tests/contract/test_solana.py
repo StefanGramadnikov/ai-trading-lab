@@ -125,6 +125,7 @@ async def test_bad_limits(limit: int) -> None:
 @pytest.mark.asyncio
 async def test_transport_failure_retains_capture_and_partial_success() -> None:
     failed = Capture(
+        data_mode="FIXTURE",
         source=Source.SOLANA,
         method="POST",
         path="/",
@@ -171,6 +172,7 @@ async def test_inconsistent_accounts(values: list[JsonValue]) -> None:
 @pytest.mark.parametrize("status,source", [(503, Source.SOLANA), (200, Source.DEXSCREENER)])
 async def test_capture_validation(status: int, source: Source) -> None:
     capture = Capture(
+        data_mode="FIXTURE",
         source=source,
         method="POST",
         path="/",

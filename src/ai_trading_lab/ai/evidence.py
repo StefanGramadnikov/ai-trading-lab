@@ -1,10 +1,23 @@
 """Build a bounded data-only packet from already qualified local evidence."""
 
+import hashlib
+import json
+
 from ai_trading_lab.ai.models import Evidence
 from ai_trading_lab.market_data.models import DataQuality
 from ai_trading_lab.market_data.storage import content_hash
 from ai_trading_lab.paper_execution.accounting import PortfolioState
 from ai_trading_lab.strategies.models import StrategyFrame
+
+MAX_PAYLOAD_CHARS = 16000
+TOO_LARGE = "evidence_too_large"
+# Canonical keys are sorted, so this reason is always the packet's first member.
+_TOO_LARGE_PREFIX = '{"failure_reason":"' + TOO_LARGE + '"'
+
+
+def evidence_failure(evidence: Evidence) -> str | None:
+    """Reason a locally built packet must not be sent to any provider, if any."""
+    return TOO_LARGE if evidence.payload.startswith(_TOO_LARGE_PREFIX) else None
 
 
 def build_evidence(frame: StrategyFrame, state: PortfolioState) -> Evidence:
@@ -27,8 +40,6 @@ def build_evidence(frame: StrategyFrame, state: PortfolioState) -> Evidence:
         raise ValueError("unavailable_history_evidence")
     # Full frame identity and immutable content hashes constrain cited evidence.
     ids = (str(quote.snapshot_id), content_hash(frame.model_dump(mode="json")))
-    import json
-
     payload = json.dumps(
         {
             "frame": frame.model_dump(mode="json"),
@@ -38,6 +49,21 @@ def build_evidence(frame: StrategyFrame, state: PortfolioState) -> Evidence:
         sort_keys=True,
         separators=(",", ":"),
     )
+    if len(payload) > MAX_PAYLOAD_CHARS:
+        # Never truncate silently or abort the run: record the complete-input digest and
+        # let the caller abstain without transmitting an incomplete packet to a provider.
+        encoded = payload.encode()
+        payload = json.dumps(
+            {
+                "failure_reason": TOO_LARGE,
+                "full_payload_bytes": len(encoded),
+                "full_payload_sha256": hashlib.sha256(encoded).hexdigest(),
+                "label": "untrusted_data_only",
+                "omitted_sections": ["frame", "portfolio"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     return Evidence(
         instrument_key=quote.instrument.key,
         snapshot_id=quote.snapshot_id,

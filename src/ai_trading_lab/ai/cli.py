@@ -67,7 +67,7 @@ async def run(arguments: argparse.Namespace) -> int:
         provider = FixtureProvider(spec.fixture_results)
     engine = create_database_engine(settings)
     try:
-        output = await AIRunStore(engine, provider).run(spec)
+        output = await AIRunStore(engine, provider, settings=settings).run(spec)
     finally:
         if isinstance(provider, HTTPProvider):
             await provider.aclose()

@@ -55,3 +55,12 @@ def test_invalid_database_url_is_redacted_in_error() -> None:
     with pytest.raises(ValidationError) as exc:
         Settings(database_url="postgresql://user:example_password@localhost/db", _env_file=None)
     assert "example_password" not in str(exc.value)
+
+
+def test_paid_ceiling_and_reviewed_prices_default_disabled() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.ai_total_limit_usd == 0
+    assert settings.ai_reviewed_prices == ()
+    for value in ("-1", "NaN", "Infinity", 0.1):
+        with pytest.raises(ValueError):
+            Settings(_env_file=None, ai_total_limit_usd=value)

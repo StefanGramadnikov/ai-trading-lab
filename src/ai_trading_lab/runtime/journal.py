@@ -16,6 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ai_trading_lab.backtesting.models import runtime_fingerprint
 from ai_trading_lab.market_data.storage import content_hash, metadata
 from ai_trading_lab.notifications.store import bounded
+from ai_trading_lab.runtime.capacity import (
+    MAX_CHECKPOINT_BYTES,
+    MAX_JOURNAL_BYTES,
+    TERMINAL_RESERVE_BYTES,
+)
+from ai_trading_lab.runtime.engine import RuntimeReducer
+from ai_trading_lab.runtime.engine import reducer as runtime_reducer
+from ai_trading_lab.runtime.models import RuntimeConfig
 
 Reducer = Callable[[dict[str, object], tuple[dict[str, object], ...]], dict[str, object]]
 
@@ -30,6 +38,7 @@ sessions = Table(
     Column("checkpoint", JSONB, nullable=False),
     Column("checkpoint_hash", String(64), nullable=False),
     Column("chain_hash", String(64), nullable=False),
+    Column("mutation_generation", Integer, nullable=False, server_default="0"),
 )
 events = Table(
     "runtime_events",
@@ -89,7 +98,7 @@ def _limits(config: dict[str, object]) -> tuple[int, int]:
     cycles, size = config.get("max_cycles", 10000), config.get("max_journal_bytes", 8 * 1024 * 1024)
     if type(cycles) is not int or not 1 <= cycles <= 10000:
         raise ValueError("invalid runtime max_cycles")
-    if type(size) is not int or not 1 <= size <= 64 * 1024 * 1024:
+    if type(size) is not int or not 1 <= size <= MAX_JOURNAL_BYTES:
         raise ValueError("invalid runtime max_journal_bytes")
     return 2 * cycles + 32, size
 
@@ -128,6 +137,7 @@ class Journal:
         self._connection: AsyncConnection | None = None
         self._worker_session: UUIDValue | None = None
         self._worker_active = False
+        self._cache: dict[UUIDValue, tuple[int, str, RuntimeReducer]] = {}
 
     @asynccontextmanager
     async def _transaction(
@@ -137,7 +147,9 @@ class Journal:
         if self._connection is None:
             async with self.engine.begin() as connection:
                 if readonly:
-                    await connection.execute(text("SET TRANSACTION READ ONLY"))
+                    await connection.execute(
+                        text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+                    )
                 yield connection
             return
         connection = self._connection
@@ -151,7 +163,9 @@ class Journal:
         try:
             async with connection.begin():
                 if readonly:
-                    await connection.execute(text("SET TRANSACTION READ ONLY"))
+                    await connection.execute(
+                        text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+                    )
                 yield connection
         except (SQLAlchemyError, TimeoutError, asyncio.CancelledError, OSError):
             self._worker_active = False
@@ -194,9 +208,30 @@ class Journal:
             or row["engine_hash"] != runtime_fingerprint()
         ):
             raise ValueError("runtime config or code integrity conflict")
+        marker = content_hash(
+            [
+                row["config"],
+                row["created_at"],
+                row["checkpoint"],
+                row["checkpoint_hash"],
+                row["chain_hash"],
+            ]
+        )
+        cached = self._cache.get(session_id)
+        if cached is not None and cached[:2] == (row["mutation_generation"], marker):
+            return config, [], _copy(row["checkpoint"])
+        self._cache.pop(session_id, None)
+        continuation = RuntimeReducer(config) if self.reducer is runtime_reducer else None
         created = _stored_at(row["created_at"])
         checkpoint = _checkpoint(
-            session_id, config, row["engine_hash"], created, self._reduce(config, ()), 0, 0, config
+            session_id,
+            config,
+            row["engine_hash"],
+            created,
+            continuation.state if continuation else self._reduce(config, ()),
+            0,
+            0,
+            config,
         )
         chain = content_hash(checkpoint)
         saved = [
@@ -214,50 +249,63 @@ class Journal:
         ]
         if len(saved) > max_events:
             raise ValueError("runtime event capacity integrity conflict")
-        tape: list[dict[str, object]] = []
-        keys: set[str] = set()
-        for sequence, entry in enumerate(saved, 1):
-            item = entry["event"]
-            if not isinstance(item, dict) or set(item) != {"key", "at", "payload"}:
-                raise ValueError("runtime event integrity conflict")
-            if not isinstance(entry["checkpoint"], dict) or not isinstance(
-                entry["checkpoint"].get("state"), dict
-            ):
-                raise ValueError("runtime checkpoint schema integrity conflict")
-            key, at = item["key"], item["at"]
-            if (
-                entry["session_id"] != session_id
-                or entry["sequence"] != sequence
-                or not isinstance(key, str)
-                or not 1 <= len(key) <= 200
-                or key in keys
-                or entry["event_key"] != key
-                or not isinstance(item["payload"], dict)
-                or not isinstance(at, str)
-                or _stored_at(at) != at
-                or at < str(checkpoint["last_at"])
-            ):
-                raise ValueError("runtime event identity or clock integrity conflict")
-            keys.add(key)
-            tape.append(item)
-            checkpoint = _checkpoint(
-                session_id,
-                config,
-                row["engine_hash"],
-                at,
-                entry["checkpoint"]["state"],
-                sequence,
-                int(str(checkpoint["journal_bytes"])),
-                item,
-            )
-            chain = content_hash([chain, item, content_hash(checkpoint)])
-            if (
-                entry["checkpoint"] != checkpoint
-                or entry["checkpoint_hash"] != content_hash(checkpoint)
-                or entry["chain_hash"] != chain
-            ):
-                raise ValueError("runtime event checkpoint integrity conflict")
-        if checkpoint["state"] != self._reduce(config, tuple(tape)):
+
+        def verify(
+            checkpoint: dict[str, object], chain: str
+        ) -> tuple[list[dict[str, object]], dict[str, object], str]:
+            tape: list[dict[str, object]] = []
+            keys: set[str] = set()
+            for sequence, entry in enumerate(saved, 1):
+                item = entry["event"]
+                if not isinstance(item, dict) or set(item) != {"key", "at", "payload"}:
+                    raise ValueError("runtime event integrity conflict")
+                if not isinstance(entry["checkpoint"], dict) or not isinstance(
+                    entry["checkpoint"].get("state"), dict
+                ):
+                    raise ValueError("runtime checkpoint schema integrity conflict")
+                key, at = item["key"], item["at"]
+                if (
+                    entry["session_id"] != session_id
+                    or entry["sequence"] != sequence
+                    or not isinstance(key, str)
+                    or not 1 <= len(key) <= 200
+                    or key in keys
+                    or entry["event_key"] != key
+                    or not isinstance(item["payload"], dict)
+                    or not isinstance(at, str)
+                    or _stored_at(at) != at
+                    or at < str(checkpoint["last_at"])
+                ):
+                    raise ValueError("runtime event identity or clock integrity conflict")
+                keys.add(key)
+                tape.append(item)
+                if continuation is not None:
+                    expected_state = continuation.apply(item)
+                    if entry["checkpoint"]["state"] != expected_state:
+                        raise ValueError("runtime deterministic replay integrity conflict")
+                checkpoint = _checkpoint(
+                    session_id,
+                    config,
+                    row["engine_hash"],
+                    at,
+                    entry["checkpoint"]["state"],
+                    sequence,
+                    int(str(checkpoint["journal_bytes"])),
+                    item,
+                )
+                chain = content_hash([chain, item, content_hash(checkpoint)])
+                if (
+                    entry["checkpoint"] != checkpoint
+                    or entry["checkpoint_hash"] != content_hash(checkpoint)
+                    or entry["chain_hash"] != chain
+                ):
+                    raise ValueError("runtime event checkpoint integrity conflict")
+            return tape, checkpoint, chain
+
+        # Replay is CPU-bound and has no awaits: run it off the event loop so a shared loop
+        # (API health, worker heartbeat) is never stalled for the length of the tape.
+        tape, checkpoint, chain = await asyncio.to_thread(verify, checkpoint, chain)
+        if continuation is None and checkpoint["state"] != self._reduce(config, tuple(tape)):
             raise ValueError("runtime deterministic replay integrity conflict")
         if (
             int(str(checkpoint["journal_bytes"])) > max_bytes
@@ -266,6 +314,8 @@ class Journal:
             or row["chain_hash"] != chain
         ):
             raise ValueError("runtime checkpoint integrity conflict")
+        if continuation is not None:
+            self._cache[session_id] = (row["mutation_generation"], marker, continuation)
         return config, saved, checkpoint
 
     @bounded
@@ -273,6 +323,8 @@ class Journal:
         self, session_id: UUIDValue, config: dict[str, object], at: datetime
     ) -> dict[str, object]:
         config, stamp = _copy(config), _at(at)
+        if self.reducer is runtime_reducer:
+            config = RuntimeConfig.model_validate(config).model_dump(mode="json")
         _, max_bytes = _limits(config)
         async with self._transaction(session_id) as connection:
             await self._lock(connection, session_id)
@@ -289,7 +341,16 @@ class Journal:
                 return checkpoint
             engine_hash = runtime_fingerprint()
             checkpoint = _checkpoint(
-                session_id, config, engine_hash, stamp, self._reduce(config, ()), 0, 0, config
+                session_id,
+                config,
+                engine_hash,
+                stamp,
+                RuntimeReducer(config).state
+                if self.reducer is runtime_reducer
+                else self._reduce(config, ()),
+                0,
+                0,
+                config,
             )
             if int(str(checkpoint["journal_bytes"])) > max_bytes:
                 raise ValueError("runtime journal capacity exceeded")
@@ -318,36 +379,150 @@ class Journal:
         async with self._transaction(session_id) as connection:
             await self._lock(connection, session_id)
             config, saved, previous = await self._load(connection, session_id)
-            for old in saved:
-                if old["event_key"] == key:
-                    if old["event"] != item:
-                        raise ValueError("runtime event key conflict")
-                    return dict(old["checkpoint"])
+            if config.get("data_mode") == "OBSERVED" and payload.get("action") in {
+                "poll",
+                "tick",
+                "failure",
+            }:
+                if (
+                    self._connection is not connection
+                    or not self._worker_active
+                    or self._worker_session != session_id
+                    or connection.closed
+                    or connection.invalidated
+                ):
+                    raise ValueError("OBSERVED writes require an active runtime worker lease")
+            old = (
+                (
+                    await connection.execute(
+                        select(events).where(
+                            events.c.session_id == session_id, events.c.event_key == key
+                        )
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if old is not None:
+                stored = old["event"]
+                # Operator controls are stamped with the wall clock, so a retry after a lost
+                # response legitimately carries a new time; replay by key and payload only.
+                same_control = (
+                    isinstance(stored, dict)
+                    and payload.get("action") in {"pause", "resume", "stop"}
+                    and stored.get("key") == key
+                    and stored.get("payload") == item["payload"]
+                )
+                if stored != item and not same_control:
+                    raise ValueError("runtime event key conflict")
+                return _copy(old["checkpoint"])
             max_events, max_bytes = _limits(config)
-            if len(saved) >= max_events:
+            sequence = int(str(previous["sequence"])) + 1
+            if sequence > max_events:
                 raise ValueError("runtime event capacity exceeded")
             if str(item["at"]) < str(previous["last_at"]):
                 raise ValueError("runtime clock moved backwards")
+            cached = self._cache.pop(session_id, None)
+            # A continuation is reusable only if it is exactly the state just loaded; a slower
+            # concurrent reader must never leave an older reducer to be extended.
+            if cached is not None and cached[2].state != previous["state"]:
+                rebuilt = RuntimeReducer(config)
+                originals = (
+                    await connection.execute(
+                        select(events.c.event)
+                        .where(events.c.session_id == session_id)
+                        .order_by(events.c.sequence)
+                    )
+                ).scalars()
+                for original in originals:
+                    rebuilt.apply(original)
+                cached = (cached[0], cached[1], rebuilt)
+            continuation = cached[2] if cached else None
             tape = tuple(entry["event"] for entry in saved) + (item,)
+            if continuation is not None:
+                previous_state = previous["state"]
+                if (
+                    isinstance(previous_state, dict)
+                    and previous_state.get("suspension_reason") == "capacity"
+                ):
+                    return previous
+                config_spec = RuntimeConfig.model_validate(config)
+                envelope_bytes = len(_json(item).encode())
+                if (
+                    envelope_bytes > int(str(config_spec.max_event_bytes))
+                    or sequence >= max_events
+                    or int(str(previous["journal_bytes"])) + envelope_bytes + MAX_CHECKPOINT_BYTES
+                    > max_bytes - TERMINAL_RESERVE_BYTES
+                ):
+                    item = {
+                        "key": f"capacity:{sequence}",
+                        "at": item["at"],
+                        "payload": {
+                            "action": "stop",
+                            "reason": "capacity",
+                            "refused_event_hash": content_hash(item),
+                            "refused_event_bytes": envelope_bytes,
+                        },
+                    }
+                    key = str(item["key"])
+                next_state = continuation.apply(item)
+            else:
+                next_state = self._reduce(config, tape)
             checkpoint = _checkpoint(
                 session_id,
                 config,
                 str(previous["engine_hash"]),
                 str(item["at"]),
-                self._reduce(config, tape),
-                len(tape),
+                next_state,
+                sequence,
                 int(str(previous["journal_bytes"])),
                 item,
             )
+            if continuation is not None and len(_json(checkpoint).encode()) > MAX_CHECKPOINT_BYTES:
+                # A novel unusually large derived state cannot consume the terminal reserve.
+                continuation = RuntimeReducer(config)
+                originals = (
+                    await connection.execute(
+                        select(events.c.event)
+                        .where(events.c.session_id == session_id)
+                        .order_by(events.c.sequence)
+                    )
+                ).scalars()
+                for original in originals:
+                    continuation.apply(original)
+                refused = item
+                item = {
+                    "key": f"capacity:{sequence}",
+                    "at": item["at"],
+                    "payload": {
+                        "action": "stop",
+                        "reason": "capacity",
+                        "refused_event_hash": content_hash(refused),
+                        "refused_event_bytes": len(_json(refused).encode()),
+                    },
+                }
+                key = str(item["key"])
+                checkpoint = _checkpoint(
+                    session_id,
+                    config,
+                    str(previous["engine_hash"]),
+                    str(item["at"]),
+                    continuation.apply(item),
+                    sequence,
+                    int(str(previous["journal_bytes"])),
+                    item,
+                )
             if int(str(checkpoint["journal_bytes"])) > max_bytes:
                 raise ValueError("runtime journal capacity exceeded")
-            prior_chain = saved[-1]["chain_hash"] if saved else content_hash(previous)
+            prior_chain = await connection.scalar(
+                select(sessions.c.chain_hash).where(sessions.c.session_id == session_id)
+            )
             digest = content_hash(checkpoint)
             chain = content_hash([prior_chain, item, digest])
             await connection.execute(
                 events.insert().values(
                     session_id=session_id,
-                    sequence=len(tape),
+                    sequence=sequence,
                     event_key=key,
                     event=item,
                     checkpoint=checkpoint,
@@ -360,18 +535,30 @@ class Journal:
                 .where(sessions.c.session_id == session_id)
                 .values(checkpoint=checkpoint, checkpoint_hash=digest, chain_hash=chain)
             )
+            if continuation is not None:
+                stored = (
+                    (
+                        await connection.execute(
+                            select(sessions).where(sessions.c.session_id == session_id)
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                marker = content_hash(
+                    [stored["config"], stored["created_at"], checkpoint, digest, chain]
+                )
+                self._cache[session_id] = (stored["mutation_generation"], marker, continuation)
             return checkpoint
 
     @bounded
     async def get(self, session_id: UUIDValue) -> dict[str, object]:
         async with self._transaction(session_id, readonly=True) as connection:
-            await self._lock(connection, session_id)
             return (await self._load(connection, session_id))[2]
 
     @bounded
     async def config(self, session_id: UUIDValue) -> dict[str, object]:
         async with self._transaction(session_id, readonly=True) as connection:
-            await self._lock(connection, session_id)
             return _copy((await self._load(connection, session_id))[0])
 
     @asynccontextmanager

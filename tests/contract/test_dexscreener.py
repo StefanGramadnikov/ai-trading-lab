@@ -145,6 +145,7 @@ async def test_invalid_array(body: object) -> None:
 @pytest.mark.asyncio
 async def test_errors_and_bad_seeds_remain_failures() -> None:
     failed = Capture(
+        data_mode="FIXTURE",
         source=Source.DEXSCREENER,
         method="GET",
         path="/token-profiles/latest/v1",
@@ -183,6 +184,7 @@ async def test_bounds(limit: int) -> None:
 )
 async def test_capture_errors(status: int, source: Source, body: str) -> None:
     capture = Capture(
+        data_mode="FIXTURE",
         source=source,
         method="GET",
         path=f"/token-pairs/v1/solana/{MINT}",

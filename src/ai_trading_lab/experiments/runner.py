@@ -49,6 +49,15 @@ def suspension(
     return None
 
 
+def cell_inference_expenses(reports: tuple[dict[str, object], ...]) -> tuple[Expense, ...]:
+    """Estimated/actual inference expenses already frozen into completed cell reports."""
+    return tuple(
+        Expense.model_validate(item)
+        for report_ in reports
+        for item in (report_.get("inference_expenses") or [])  # type: ignore[attr-defined]
+    )
+
+
 async def inference_expenses(
     engine: AsyncEngine, cell: Cell, *, snapshot: AsyncConnection | None = None
 ) -> tuple[Expense, ...]:

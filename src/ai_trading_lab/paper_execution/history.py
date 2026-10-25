@@ -171,7 +171,8 @@ class History:
             kinds = [("SETTLE", payload)]
         effect = Effect(command_id, kind, key, at, payload, self.state, end, lines, kinds, receipt)
         self.effects[command_id] = effect
-        self.last_at = end
+        # Submission clocks order commands; simulated fills retain their own time.
+        self.last_at = at
         return effect
 
     def _order(

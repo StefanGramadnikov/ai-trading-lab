@@ -175,7 +175,7 @@ def allocate_costs(
                 or previous.kind != "estimated"
                 or previous.cost_key != item.cost_key
                 or previous.category != item.category
-                or previous.evidence != item.evidence
+                or (previous.evidence == "observed" and item.evidence != "observed")
                 or dict((p.cell_id, p.weight) for p in previous.allocations)
                 != dict((p.cell_id, p.weight) for p in item.allocations)
                 or previous.expense_id in excluded

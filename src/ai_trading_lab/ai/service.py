@@ -23,6 +23,14 @@ class InferenceService:
         price: PriceSnapshot,
         at: datetime,
     ) -> ProviderResult:
+        # Requests the adapter can already prove unsendable never reserve budget. A reserved
+        # call with no response would otherwise be indistinguishable from an unknown outcome
+        # and would block the whole envelope.
+        preflight = getattr(self.provider, "preflight", None)
+        if preflight is not None:
+            rejected: ProviderResult | None = preflight(request)
+            if rejected is not None:
+                return rejected
         reservation = await self.store.reserve(
             budget_id, request, price, at=at, run_id=run_id, run_limit=run_limit
         )

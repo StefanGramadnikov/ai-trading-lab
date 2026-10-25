@@ -596,3 +596,107 @@ async def test_legacy_ai_report_without_calls_or_start_keeps_identity(engine: As
         await ExperimentStore(engine).create(spec, "create", AT)
     with pytest.raises(ValueError, match="legacy AI"):
         await ResearchStore(engine).run(ai.research)
+
+
+async def test_f13_append_invoice_and_completion_are_durable_and_immutable(
+    engine: AsyncEngine,
+) -> None:
+    from decimal import Decimal
+
+    from ai_trading_lab.experiments.costs import Expense
+
+    spec = experiment().model_copy(update={"expenses_complete": False})
+    store = ExperimentStore(engine)
+    await store.create(spec, "create", AT)
+    await store.command(spec.experiment_id, "start", "start", AT, "")
+    await store.advance(spec.experiment_id, "first", AT)
+    await store.advance(spec.experiment_id, "second", AT)
+    report: Any = await store.report(spec.experiment_id)
+    estimate = report["costs"]["expenses"][0]
+    invoice = Expense.model_validate(
+        estimate
+        | {
+            "expense_id": "invoice-observed",
+            "kind": "actual",
+            "amount": "0.02",
+            "evidence": "observed",
+            "source": "operator-supplied-invoice-reference",
+            "replaces_expense_id": estimate["expense_id"],
+        }
+    )
+    attached = await store.attach_expense(spec.experiment_id, "invoice", AT, invoice)
+    restarted = ExperimentStore(engine)
+    assert await restarted.attach_expense(spec.experiment_id, "invoice", AT, invoice) == attached
+    report = await restarted.report(spec.experiment_id)
+    assert report["configuration"] == spec.model_dump(mode="json")
+    assert report["config_hash"] == spec.fingerprint
+    assert report["expenses_complete"] is False
+    assert report["empirical_performance_claim"] is False
+    assert report["costs"]["excluded_estimate_ids"] == [estimate["expense_id"]]
+    assert Decimal(report["costs"]["consolidated"]["actual_cost"]) == Decimal("0.02")
+    assert Decimal(report["costs"]["consolidated"]["total_cost"]) == Decimal("0.02")
+    with pytest.raises(ValueError, match="Duplicate expense"):
+        await restarted.attach_expense(spec.experiment_id, "duplicate", AT, invoice)
+    with pytest.raises(ValueError, match="conflict"):
+        await restarted.attach_expense(
+            spec.experiment_id, "invoice", AT, invoice.model_copy(update={"amount": Decimal(1)})
+        )
+    complete = await restarted.complete_expenses(
+        spec.experiment_id, "complete", AT, "all bills checked"
+    )
+    assert (
+        await ExperimentStore(engine).complete_expenses(
+            spec.experiment_id, "complete", AT, "all bills checked"
+        )
+        == complete
+    )
+    assert (await restarted.report(spec.experiment_id))["expenses_complete"] is True
+    async with engine.connect() as connection:
+        stored = await connection.scalar(
+            select(experiments.c.config).where(experiments.c.experiment_id == spec.experiment_id)
+        )
+    assert stored == spec.model_dump(mode="json")
+
+
+async def test_f13_completion_guards_and_post_completion_attach_refused(
+    engine: AsyncEngine,
+) -> None:
+    from ai_trading_lab.experiments.costs import CostAllocation, Expense
+
+    spec = experiment().model_copy(update={"expenses_complete": False})
+    store = ExperimentStore(engine)
+    await store.create(spec, "create", AT)
+    await store.command(spec.experiment_id, "start", "start", AT, "")
+    invoice = Expense(
+        expense_id="hosting-1",
+        cost_key="host-month",
+        category="hosting",
+        kind="actual",
+        amount="1",
+        currency="USD",
+        incurred_at_utc=AT,
+        source="operator-supplied-invoice-reference",
+        evidence="observed",
+        allocations=(CostAllocation(cell_id="rules", weight="1"),),
+    )
+    # Completeness cannot be declared while cells are still outstanding, or with no reason.
+    with pytest.raises(ValueError, match="all cells must report"):
+        await store.complete_expenses(spec.experiment_id, "early", AT, "too soon")
+    with pytest.raises(ValueError, match="reason required"):
+        await store.complete_expenses(spec.experiment_id, "blank", AT, " ")
+    # An invoice for an unknown cell is refused before anything is committed.
+    bad = invoice.model_copy(
+        update={"expense_id": "bad", "allocations": (CostAllocation(cell_id="nope", weight="1"),)}
+    )
+    with pytest.raises(ValueError, match="unknown cell"):
+        await store.attach_expense(spec.experiment_id, "bad", AT, bad)
+    await store.attach_expense(spec.experiment_id, "ok", AT, invoice)
+    await store.advance(spec.experiment_id, "first", AT)
+    await store.advance(spec.experiment_id, "second", AT)
+    await store.complete_expenses(spec.experiment_id, "done", AT, "all bills checked")
+    with pytest.raises(ValueError, match="already declared complete"):
+        await store.attach_expense(
+            spec.experiment_id, "late", AT, invoice.model_copy(update={"expense_id": "late"})
+        )
+    with pytest.raises(ValueError, match="already declared complete"):
+        await store.complete_expenses(spec.experiment_id, "again", AT, "twice")

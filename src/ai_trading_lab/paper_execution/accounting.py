@@ -121,14 +121,15 @@ def admit(state: PortfolioState, intent: OrderIntent, policy: SimulationPolicy) 
         ):
             return "instrument_identity_mismatch"
         notional = _round(intent.quantity * intent.limit_price, state.cash_step, up=True)
-        if notional > policy.max_order_notional:
-            return "max_order_notional"
         if intent.side == "sell":
             return (
                 None
                 if position and position.quantity >= intent.quantity
                 else "insufficient_quantity"
             )
+        # Reducing an existing holding is not admission of new exposure.
+        if notional > policy.max_order_notional:
+            return "max_order_notional"
         if state.paused:
             return "portfolio_paused"
         fee = _round(notional * policy.fee_bps / Decimal(10000), state.cash_step, up=True)

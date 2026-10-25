@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from decimal import Decimal, localcontext
+from uuid import uuid4
 
 import pytest
 
@@ -167,16 +168,20 @@ def test_failed_sell_leaves_position_open_and_records_cancelled_order() -> None:
     spec = research()
     first = spec.frames[0]
     assert first.forecast is not None
+    later = first.at_utc + timedelta(seconds=1)
+    # A changed book is a later venue event (F-19: same-event redelivery cannot renew depth).
     quote = first.quote.model_copy(
         update={
             "snapshot_id": uuid4(),
+            "event_time_utc": later,
+            "received_at_utc": later,
             "bids": (first.quote.bids[0].model_copy(update={"quantity": Decimal("0.001")}),),
         }
     )
     second = first.model_copy(
         update={
             "quote": quote,
-            "at_utc": first.at_utc + timedelta(seconds=1),
+            "at_utc": later,
             "forecast": first.forecast.model_copy(update={"probability": Decimal("0.1")}),
         }
     )
@@ -292,3 +297,25 @@ def test_documented_synthetic_examples_have_entry_and_exit(name: str) -> None:
     )
     assert not result.final_state.positions
     assert result.final_state.fees > 0
+
+
+@pytest.mark.parametrize("mode", ["same_event_new_snapshot", "same_snapshot_repeat"])
+def test_f19_repeat_delivery_cannot_renew_depth(mode: str) -> None:
+    spec = research()
+    frame = spec.frames[0]
+    later = frame.model_copy(update={"at_utc": frame.at_utc + timedelta(seconds=1)})
+    if mode == "same_event_new_snapshot":
+        # Same venue event and book, re-delivered under a fresh snapshot ID: it would be
+        # treated as new consumable depth unless rejected as a duplicate native event.
+        later = later.model_copy(
+            update={"quote": frame.quote.model_copy(update={"snapshot_id": uuid4()})}
+        )
+        with pytest.raises(ValueError, match="duplicate_native_event_cannot_renew_depth"):
+            ResearchInput.model_validate(
+                spec.model_copy(update={"frames": (frame, later)}).model_dump(mode="json")
+            )
+    else:
+        again = ResearchInput.model_validate(
+            spec.model_copy(update={"frames": (frame, later)}).model_dump(mode="json")
+        )
+        assert again.frames[0].quote.snapshot_id == again.frames[1].quote.snapshot_id

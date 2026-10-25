@@ -10,12 +10,13 @@ from typing import Literal
 from uuid import UUID as PyUUID
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
-from sqlalchemy import Column, DateTime, ForeignKey, String, Table, select, update
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, UUID, insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ai_trading_lab.ai.models import AIRequest, PriceSnapshot, ProviderName, ProviderResult
+from ai_trading_lab.config import Settings
 from ai_trading_lab.market_data.models import FrozenModel
 from ai_trading_lab.market_data.storage import content_hash, metadata
 from ai_trading_lab.paper_execution.models import NonnegativeAmount
@@ -145,8 +146,39 @@ def _outcome(call: _Call, result: ProviderResult | None) -> tuple[Decimal, bool]
 
 
 class BudgetStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, settings: Settings | None = None) -> None:
         self.engine = engine
+        # Library callers never implicitly read personal activation/key files.
+        self.settings = settings if settings is not None else Settings(_env_file=None)
+
+    @staticmethod
+    async def _spending_lock(connection: AsyncConnection) -> None:
+        # Two-key namespace is distinct from the one-key run/portfolio locks.
+        # Every reservation and finish uses this ordering before envelope locks.
+        await connection.execute(text("SELECT pg_advisory_xact_lock(1095322697, 1)"))
+
+    async def _admit_paid(self, connection: AsyncConnection, proposed: _Call) -> str | None:
+        if proposed.request.provider == "fixture":
+            return None
+        if self.settings.ai_total_limit_usd == 0:
+            return "paid_spending_disabled"
+        if proposed.price not in self.settings.ai_reviewed_prices:
+            return "pricing_not_reviewed"
+        # Include legacy envelopes: a new UUID must not reset paid history.
+        identities = (await connection.execute(select(budgets.c.budget_id))).scalars().all()
+        amounts: list[Decimal] = []
+        for budget_id in identities:
+            _, history = await self._load(connection, budget_id, for_update=False)
+            for call, result in history:
+                if call.request.provider == "fixture":
+                    continue
+                amount, unresolved = _outcome(call, result)
+                if unresolved and call.request.provider == proposed.request.provider:
+                    return "provider_unresolved_call"
+                amounts.append(amount)
+        if _total(amounts, proposed.reservation) > self.settings.ai_total_limit_usd:
+            return "global_spending_limit"
+        return None
 
     async def create(self, policy: BudgetPolicy) -> None:
         payload = policy.model_dump(mode="json")
@@ -254,6 +286,7 @@ class BudgetStore:
         run_limit: Decimal,
     ) -> Reservation:
         async with self.engine.begin() as connection:
+            await self._spending_lock(connection)
             policy, history = await self._load(connection, budget_id)
             for call, result in history:
                 if call.call_id == request.call_id:
@@ -286,6 +319,8 @@ class BudgetStore:
                 reservation=amount,
             )
             reason = self._admit(policy, history, proposed)
+            if reason is None:
+                reason = await self._admit_paid(connection, proposed)
             if reason:
                 return Reservation(status="blocked", reason=reason, reserved_amount=amount)
             payload = proposed.model_dump(mode="json")
@@ -360,6 +395,7 @@ class BudgetStore:
         self, budget_id: PyUUID, call_id: PyUUID, request_hash: str, result: ProviderResult
     ) -> ProviderResult:
         async with self.engine.begin() as connection:
+            await self._spending_lock(connection)
             _, history = await self._load(connection, budget_id)
             for call, previous in history:
                 if call.call_id != call_id:

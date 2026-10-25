@@ -46,7 +46,8 @@ For every change:
 ## Git / review rules
 
 - The repo is **private**. Before Git commands, check whether a repo/remote already exists. The user has created a repo and specifically wants an explicit instruction if `git init` is still required.
-- Work on a `feature/*`, `fix/*` or `experiment/*` branch when appropriate. Avoid force-push, history rewrites, destructive cleanup, or modifying unrelated changes without asking.
+- **One slice, one branch, one PR (DEC-041).** Never work on `main`. Before starting each new slice: `git fetch origin`, check out `main`, fast-forward it to `origin/main` (`git pull --ff-only`), then create a **fresh** branch from it (`feature/<slice>-<name>`). Do the slice there, commit and push after each green step, and open a PR (reuse the open one for that branch). **Stop when the PR is open**: the user merges it into `main`, and only then does the next slice begin, on a new branch cut from the updated `main`. Do not stack a new slice on an unmerged branch unless the user explicitly says so. The default branch is `main`.
+- Avoid force-push, history rewrites, destructive cleanup, or modifying unrelated changes without asking.
 - **Commit and push after each green slice (DEC-041):** once a slice passes the full gate (format, lint, types, tests) and its docs are updated, commit it, push the feature branch and open or update the PR without waiting for `/ship`. Never commit a red gate, secrets or unrelated changes. Merging into `main` stays with the user. This supersedes the `/ship` gate in DEC-029.
 - Open a PR for each `feature/*`, `fix/*` or `experiment/*` branch, reusing its existing open PR where applicable. Keep its scope, description and CI evidence current. Never include unrelated changes or merge without separate explicit approval.
 - Never commit a change that has failed required tests. Report exact checks in commit/PR descriptions.

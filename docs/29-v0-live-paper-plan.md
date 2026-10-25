@@ -107,6 +107,10 @@ user's approval. Do not invent defaults.
   monthly limit** on the VPS.
 - **Network:** public read-only GETs only, through `HttpTransport`, which refuses non-public destinations. The
   provider and Telegram clients do not have that guard yet (slice 3 / 7).
+- **Branches and PRs:** every slice is built on a fresh branch cut from the latest `main`
+  (`git fetch origin && git checkout main && git pull --ff-only && git checkout -b feature/<slice>-<name>`),
+  committed and pushed after each green step, and finished with a PR. The user merges the PR; only then does the
+  next slice start, on a new branch from the updated `main`. The default branch is `main`.
 - **Review:** substantive logic gets an independent fresh-context review (`.codex/agents/code-reviewer.toml`
   or a read-only subagent). It found real defects in this project; do not skip it.
 - **Docs:** after every slice update this document's table, `docs/13-progress.md`, and any ADR/decision the

@@ -116,6 +116,15 @@ user's approval. Do not invent defaults.
 - **Docs:** after every slice update this document's table, `docs/13-progress.md`, and any ADR/decision the
   slice changes. A new session must be able to continue from the docs alone.
 
+## 6b. Known limits
+
+- **Cold recovery time of the runtime journal grows linearly** with the number of cycles and has a fixed 10 s
+  bound (`notifications/store.py`, `bounded`). Measured on a GitHub runner: about 3.2 ms per cycle (6.5 s at 2000
+  cycles; 6000 exceeds the bound). A cheap VPS will behave like the runner, not like a Mac. A V0 loop that polls every
+  15 minutes makes about 1350 cycles in two weeks (about 4 s), which is fine, but design slice 2's persistence so it
+  does not depend on whole-history replay, or raise the bound deliberately. The opt-in full benchmark is
+  `ATL_BENCH_FULL=1 pytest tests/integration/test_runtime_benchmark.py -s`.
+
 ## 7. Takeaways from the GRONK guide (third-party, untrusted)
 
 The user's original idea came from a promotional guide ("GRONK BOT TEAM GUIDE"). It describes a desk of seven

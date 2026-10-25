@@ -77,6 +77,40 @@ async def test_when_asked_an_unknown_outcome_is_charged_at_its_maximum_and_the_n
     assert second.status == "settled"  # reserved and sent again, not refused as unresolved
 
 
+@pytest.mark.parametrize("status", ["invalid", "refused"])
+async def test_a_reply_without_usage_is_settled_not_left_unresolved(
+    paid_settings: AsyncEngine, status: str
+) -> None:
+    store, envelope = BudgetStore(paid_settings), policy(total_limit="0.01")
+    await store.create(envelope)
+    undecodable = ProviderResult(
+        status=status, model="test-model", reason="invalid_provider_response"
+    )
+    service = InferenceService(store, provider_returning(undecodable), settle_unknown=True)
+    first = await run(service, envelope.budget_id, request())
+    assert first.status == "settled"
+    assert (await store.summary(envelope.budget_id))["unresolved"] == 0
+    assert (await run(service, envelope.budget_id, request())).status == "settled"
+
+
+async def test_a_provider_cannot_claim_a_cheap_settlement(paid_settings: AsyncEngine) -> None:
+    from ai_trading_lab.ai.models import Usage
+
+    store, envelope = BudgetStore(paid_settings), policy(total_limit="0.01")
+    await store.create(envelope)
+    claim = ProviderResult(
+        status="settled",
+        usage=Usage(input_tokens=1, output_tokens=1),
+        model="test-model",
+        reason="x",
+    )
+    result = await run(
+        InferenceService(store, provider_returning(claim)), envelope.budget_id, request()
+    )
+    assert result.status == "settled" and result.usage is not None
+    assert (result.usage.input_tokens, result.usage.output_tokens) == (1000, 1000)  # the maximum
+
+
 async def test_settled_charges_count_toward_the_cap_so_money_stays_bounded(
     paid_settings: AsyncEngine,
 ) -> None:

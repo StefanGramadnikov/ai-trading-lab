@@ -159,7 +159,12 @@ def _code(exc: Exception) -> str:
 
 
 def _failure(code: str, detail: dict[str, JsonValue] | None = None) -> Proposal:
-    return Proposal(action="hold", reason=f"ai_unavailable_{code}"[:100], detail=detail)
+    # A failure that reached the provider path counts as a review (it may have cost money and is
+    # retried at the next interval); one that stopped locally is retried at the next cycle.
+    reached = detail is not None and "provider_status" in detail
+    return Proposal(
+        action="hold", reason=f"ai_unavailable_{code}"[:100], detail=detail, reviewed=reached
+    )
 
 
 class Proposer:
@@ -205,7 +210,8 @@ class Proposer:
             roles=("strategy",),
             max_steps=1,
             max_rounds=1,
-            timeout_seconds=cfg.timeout_seconds + 5,
+            # DNS check and the call each get the call timeout, so the flow must outlast both.
+            timeout_seconds=min(120, 2 * cfg.timeout_seconds + 10),
             total_input_tokens=cfg.max_input_tokens,
             total_output_tokens=cfg.max_output_tokens,
         )
@@ -222,13 +228,16 @@ class Proposer:
         slot: int,
         live: LiveConfig,
     ) -> Proposal:
-        evidence = build_snapshot(
-            pair=pair, now=now, market=market, candles=candles, held=held, config=live
-        )
-        if evidence is None:
-            return _failure("no_recent_candles")
         cfg = self.deps.config
         call_id = uuid5(NAMESPACE_URL, f"ai-trading-lab/live/{strategy_id}/{pair}/{slot}")
+        try:
+            evidence = build_snapshot(
+                pair=pair, now=now, market=market, candles=candles, held=held, config=live
+            )
+        except Exception as exc:  # e.g. a zero price in the history
+            return _failure(_code(exc))
+        if evidence is None:
+            return _failure("no_recent_candles")
         try:
             if (paused := await self._housekeeping(now)) is not None:
                 return _failure(paused)
@@ -287,7 +296,10 @@ class Proposer:
                 if last is not None and flow.reason.startswith("provider_")
                 else flow.reason
             )
-            return _failure(reason.replace(" ", "_")[:60], detail)
+            # The provider path was entered, so this is a review even if no outcome came back.
+            return _failure(reason.replace(" ", "_")[:60], detail).model_copy(
+                update={"reviewed": True}
+            )
         action = flow.final.action
         if action in ("buy", "sell"):
             return Proposal(action=action, reason=f"ai_{action}", detail=detail)

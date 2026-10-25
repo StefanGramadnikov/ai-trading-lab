@@ -300,15 +300,24 @@ async def test_a_call_a_crash_left_unfinished_is_settled_and_does_not_freeze_the
 
 
 async def test_a_stop_loss_still_exits_while_the_model_is_down(engine: AsyncEngine) -> None:
-    stub = Stub(lambda body: "buy" if len(stub.requests) <= 3 else "error")
+    def decide(_body: dict[str, object]) -> str:
+        if len(stub.requests) > 3:
+            raise RuntimeError("model down")
+        return "buy"
+
+    stub = Stub(decide)
     r = await start(engine, stub)
     await r.cycle()
-    assert len((await r.portfolio()).positions) == 3 - 1
+    assert len((await r.portfolio()).positions) == 2  # the third buy has no room left
     r.venue.scale = D("0.9")  # a 10% drop, past the 5% stop
-    await r.cycle(minutes_later=15)
+    # Four hours later every pair is due for a review (and the model would raise if asked).
+    report = await r.cycle(minutes_later=240)
+    assert report.errors == []
     assert (await r.portfolio()).positions == ()
     stops = [d for d in await r.decisions() if d.reason == "stop_loss"]
     assert len(stops) == 2 and all(d.status == "filled" for d in stops)
+    # The exits went out first; the 10% loss then suspended entries, so nothing more was asked.
+    assert len(stub.requests) == 3
 
 
 async def test_the_spending_cap_stops_paid_calls_before_they_are_sent(
@@ -329,8 +338,10 @@ async def test_the_spending_cap_stops_paid_calls_before_they_are_sent(
     ]
     later = await r.cycle(minutes_later=240)
     assert later.errors == [] and len(stub.requests) == 2  # still capped
-    summary_ = await BudgetStore(engine, settings).summary(r.live.proposer.budget_id)  # type: ignore[union-attr]
-    assert summary_ is not None
+    assert r.live.proposer is not None
+    totals = await BudgetStore(engine, settings).summary(r.live.proposer.budget_id)
+    assert D(str(totals["spent_estimated"])) == D("0.0396")  # two calls, 6000 in and 400 out each
+    assert D(str(totals["spent_estimated"])) <= D("0.05")
 
 
 async def test_paid_calls_are_refused_while_spending_is_disabled_or_the_price_unreviewed(
@@ -384,3 +395,27 @@ async def test_status_lists_the_ai_strategy_with_its_reasoning(engine: AsyncEngi
     ai = next(s for s in out["strategies"] if s["strategy_id"] == r.live.ai_id)
     assert ai["kind"] == "ai" and len(ai["positions"]) == 1
     assert any(d["ai"] and d["ai"]["answer"]["action"] == "buy" for d in ai["recent_decisions"])
+
+
+async def test_a_review_that_was_never_put_is_asked_again_next_cycle(engine: AsyncEngine) -> None:
+    stub = Stub(lambda _body: "abstain")
+    r = await start(engine, stub)
+    r.venue.time_down = False
+    stale = {p: flat_history(200, end_open_offset=-9000) for p in PAIRS}
+    for pair, rows in stale.items():
+        await r.store.upsert_candles(pair, rows)
+    await r.store.upsert_candles("XBTUSD", [])  # no-op: keep history as seeded
+    # Replace the seeded fresh history with an old one by clearing it first.
+    async with engine.begin() as connection:
+        await connection.execute(delete(live_candles))
+    for pair, rows in stale.items():
+        await r.store.upsert_candles(pair, rows)
+    r.venue.rows = []  # the venue returns no new candles
+    first = await r.cycle()
+    assert first.errors == [] and stub.requests == []
+    reasons = {d.reason for d in await r.decisions()}
+    assert reasons == {"ai_unavailable_no_recent_candles"}
+    # Fresh candles arrive: the pairs are asked at once, not four hours later.
+    r.venue.rows = None
+    await r.cycle(minutes_later=15)
+    assert len(stub.requests) == 3

@@ -78,6 +78,8 @@ class Proposal(FrozenModel):
     action: Literal["buy", "sell", "hold"]
     reason: str
     detail: dict[str, JsonValue] | None = None
+    # False when the question was never put (no data, a local refusal): it is asked again soon.
+    reviewed: bool = True
 
 
 def liquidation(

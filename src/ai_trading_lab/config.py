@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     ai_total_limit_usd: NonnegativeAmount = Decimal(0)
     # How long a reviewed price may be used after its verification date (the default is one day;
     # an unattended multi-day run needs the owner to raise it deliberately).
-    ai_price_max_age_days: int = Field(default=1, ge=1, le=30, strict=True)
+    ai_price_max_age_days: int = Field(default=1, ge=1, le=30)
     ai_reviewed_prices: tuple[PriceSnapshot, ...] = Field(default=(), max_length=100)
     openai_api_key: SecretStr | None = None
     xai_api_key: SecretStr | None = None

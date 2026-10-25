@@ -82,3 +82,18 @@ operating costs/FX/allocation/calibration are unresolved. Synthetic tests do not
 establish model quality, account eligibility or profitable strategies. The final
 real-provider smoke is separate acceptance evidence and may legitimately abstain
 or be refused by deterministic risk. Shipping, M6 and deployment remain gated.
+
+## Amendment 2026-10-25 (V0 slice 3, DEC-044)
+
+- **Direction-only origination.** In the live paper loop the model may propose buy, sell or hold, no longer only a veto.
+  It still never sizes, prices, sets limits or touches risk: the deterministic code sizes every order from its own
+  evidence and the mechanical exits (stop, take-profit, time) run first and never wait for the model. Its only inputs are
+  numbers computed locally; its answer is validated against the supplied evidence ids and instrument key.
+- **Unknown outcomes are settled, not frozen.** With `InferenceService(settle_unknown=True)` a sent call with no usable
+  outcome is recorded as status `settled`, charged at its reserved maximum, so the spending cap holds without freezing
+  the envelope. Without that flag (the experiment runner) the original freeze-until-resolved rule is unchanged.
+- **Price window.** `reserve_cost` takes the maximum age of a reviewed price (`ATL_AI_PRICE_MAX_AGE_DAYS`, default 1 day).
+  Stored-call integrity no longer depends on the clock at reload time.
+- **Destination guard.** An `HTTPProvider` that builds its own HTTP client resolves the fixed provider host before any
+  reservation and refuses to send the key unless every address is public; after connecting it also checks the peer when
+  the transport exposes it. A refusal is local and costs nothing.

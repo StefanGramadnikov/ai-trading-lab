@@ -57,7 +57,11 @@ class InferenceService:
                 status="unknown", model=request.model, reason="provider_outcome_unknown"
             )
         result = ProviderResult.model_validate(result.model_dump(mode="json"))
-        if self.settle_unknown and result.status in ("timeout", "error", "unknown"):
+        # "settled" is ours to record, never a provider's to claim.
+        no_outcome = result.status in ("timeout", "error", "unknown") or (
+            result.status in ("invalid", "refused") and result.usage is None
+        )
+        if result.status == "settled" or (self.settle_unknown and no_outcome):
             result = settled(request, result.reason)
         result = result.model_copy(
             update={

@@ -121,6 +121,7 @@ def test_the_peer_that_actually_answered_must_be_public() -> None:
     assert _peer_is_public(_response(("10.1.2.3", 443))) is False
     assert _peer_is_public(_response("not-a-tuple")) is False
     assert _peer_is_public(_response(None)) is True  # an in-process transport has no socket
+    assert _peer_is_public(_response(None), strict=True) is False  # a real client must show it
 
 
 @pytest.mark.asyncio

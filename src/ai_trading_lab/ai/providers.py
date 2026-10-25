@@ -286,15 +286,16 @@ def _decode(request: AIRequest, raw: bytes) -> ProviderResult:
         )
 
 
-def _peer_is_public(response: httpx2.Response) -> bool:
+def _peer_is_public(response: httpx2.Response, strict: bool = False) -> bool:
     """Who actually answered; DNS may differ between the check and the connect.
 
-    A transport that exposes no socket (an in-process test transport) cannot be checked.
+    A transport that exposes no socket (an in-process test transport) cannot be checked, so it
+    passes unless `strict` (a provider that built its own client must show who answered).
     """
     stream = response.extensions.get("network_stream")
     lookup = getattr(stream, "get_extra_info", None)
     if not callable(lookup):
-        return True
+        return not strict
     server = lookup("server_addr")
     peer = server[0] if isinstance(server, tuple) and server else None
     return isinstance(peer, str) and is_public_address(peer)
@@ -395,7 +396,7 @@ class HTTPProvider:
                     follow_redirects=False,
                     timeout=request.timeout_seconds,
                 ) as response:
-                    if self._resolver is not None and not _peer_is_public(response):
+                    if self._resolver is not None and not _peer_is_public(response, self._owned):
                         return ProviderResult(
                             status="unknown",
                             model=request.model,

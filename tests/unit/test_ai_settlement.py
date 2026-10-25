@@ -42,6 +42,13 @@ def test_the_price_window_defaults_to_one_day_and_can_be_widened_but_never_into_
         reserve_cost(req, pricing(), AT + timedelta(days=8), timedelta(days=7))
 
 
+def test_the_price_window_can_be_set_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ATL_AI_PRICE_MAX_AGE_DAYS", "14")
+    assert Settings(_env_file=None).ai_price_max_age_days == 14
+
+
 @pytest.mark.parametrize("days", [0, 31, -1])
 def test_the_configured_price_window_is_bounded(days: int) -> None:
     with pytest.raises(ValidationError):

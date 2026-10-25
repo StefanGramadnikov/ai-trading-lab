@@ -28,6 +28,12 @@ def parser() -> argparse.ArgumentParser:
     )
     live.add_argument("--source", type=Source, choices=list(Source), required=True)
     live.add_argument("--mint", action="append", default=[])
+    live.add_argument(
+        "--pair",
+        action="append",
+        default=[],
+        help="Kraken trading pair such as XBTUSD (repeatable); stored with the explicit-ID list",
+    )
     live.add_argument("--limit", type=int, choices=range(1, 11), default=5)
     live.add_argument("--max-pages", type=int, choices=range(1, 4), default=2)
     live.add_argument("--capture-file", type=Path)
@@ -61,21 +67,24 @@ async def run(arguments: argparse.Namespace) -> int:
         output: Path | None = arguments.capture_file
         if output is not None and await asyncio.to_thread(output.exists):
             raise ValueError("Capture output already exists; refusing overwrite")
-        if len(arguments.mint) > 10:
-            raise ValueError("At most ten mints are allowed")
+        if arguments.pair and Source(arguments.source) != Source.KRAKEN:
+            raise ValueError("--pair is only valid with --source kraken")
+        identifiers = [*arguments.mint, *arguments.pair]
+        if len(identifiers) > 10:
+            raise ValueError("At most ten mints or pairs are allowed")
         source = Source(arguments.source)
         async with HttpTransport() as transport:
             batch = await collect(
                 source,
                 transport,
-                mint_addresses=arguments.mint,
+                mint_addresses=identifiers,
                 limit=arguments.limit,
                 max_pages=arguments.max_pages,
             )
         if output is not None:
             archive = CaptureArchive(
                 source=source,
-                mint_addresses=tuple(arguments.mint),
+                mint_addresses=tuple(identifiers),
                 limit=arguments.limit,
                 max_pages=arguments.max_pages,
                 captures=batch.captures,

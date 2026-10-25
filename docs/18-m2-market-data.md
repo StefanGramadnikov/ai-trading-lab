@@ -82,3 +82,40 @@ The user explicitly invoked the ship skill. Implementation `625b5b0` is pushed i
 shipping repair re-review PASS and implementation push CI PASS. Earlier statements
 about uncommitted/pending shipping describe the development snapshot. Final-head
 checks and merge status belong to that PR; no merge or M3 approval is implied.
+
+
+## Kraken spot adapter (V0 slice 1, 2026-10-25)
+
+`market_data/adapters/kraken.py` collects BTC, ETH and SOL against USD (default pairs `XBTUSD`, `ETHUSD`,
+`SOLUSD`; up to eight explicit pairs via `atl-data collect --source kraken --pair XBTUSD ...`). It is read-only,
+keyless, and allow-listed in the transport to exactly five public GETs: `/0/public/Time`, `AssetPairs`, `Ticker`,
+`Depth` and `OHLC`. Nothing under `/0/private` and no POST is reachable (tested).
+
+Request plan per collection (2 + 3 per pair requests, at most 26): AssetPairs (all pairs), Ticker (all pairs), then,
+per pair in turn, Time, Depth and OHLC. A rate-limit error (even at HTTP 200) stops the whole collection; Kraken
+"W" warnings are not errors. Output per pair is one `Observation` (kind `spot`, USD): last trade price, a best-first
+order book (25 levels per side by default), 24 h volume/vwap/high/low in `facts`, and the last **closed** 15-minute
+candle. `parse_candles()` returns closed candles only, for the live loop's history.
+
+Design rules that matter:
+- **Identity** follows Kraken's `altname` (the pair requested), never response order. The instrument's stored
+  metadata holds only stable pair rules (tick size, minimum order and cost, lot/pair decimals, status, fee
+  schedule if published); all volatile numbers live in the snapshot, so a second poll reuses the same market row
+  (integration-tested).
+- **Event time** is Kraken's server time from `/0/public/Time`, requested for each pair immediately before its book
+  (basis recorded in `facts`). The book has no snapshot timestamp of its own. A book level stamped later than the time
+  labelling it is rejected (`book_newer_than_time`, look-ahead), and a time more than 5 s older than the book's receipt
+  makes the observation PARTIAL (`time_basis_stale`). `newest_book_level_unix` is kept, and is null for an empty book.
+- **Book order is validated, never repaired**: unordered or crossed books are failures. Real Kraken books arrive
+  best-first (confirmed on a live capture).
+- A non-empty `error` list is a failure even at HTTP 200; rate-limit messages map to `rate_limited`.
+- A missing ticker or candles, an empty or one-sided book, or a stale time basis degrades the observation to PARTIAL
+  with an explicit issue; it never invents a price. Numbers must be plain fixed-point strings (no exponents, signs,
+  whitespace or underscores) and timestamps must be plausible (before 2100).
+
+**Observed against the live API on 2026-10-25** (fixture `tests/fixtures/kraken_real_sample.json`, candle rows
+trimmed to the last 6 of 721): (1) `AssetPairs` returns **empty fee schedules**, also with `info=fees`, so fees
+cannot come from public market data and must be a configured, approved fee model in the paper broker; (2) a candle
+window is 721 rows (720 closed plus the one forming); (3) Kraken sets a tracking cookie on the first response, which
+exposed a transport bug: the "no credentials" guard refused every later request. The transport now accepts no
+cookies at all. None of this is trading evidence.

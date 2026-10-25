@@ -37,7 +37,7 @@ tests, coverage ~95%. Branch `feature/m8-local-runtime`, PR #9 (open, not merged
 
 | Module | Purpose | State for V0 |
 | --- | --- | --- |
-| `market_data` | Read-only collectors (DexScreener, Solana RPC, Polymarket, Kalshi), raw capture log, destination guard | Built and tested on fixtures. **No Kraken adapter yet.** Polymarket is blocked on the user's network (DNS to loopback). |
+| `market_data` | Read-only collectors (DexScreener, Solana RPC, Polymarket, Kalshi, **Kraken**), raw capture log, destination guard, no-cookie transport | Kraken adapter built and verified on a real capture (slice 1). Polymarket is blocked on the user's network (DNS to loopback). |
 | `paper_execution` | Virtual ledger, order book simulation, fees, risk caps, recovery | Built and tested. Reusable as the paper broker. |
 | `strategies` | Rule strategies (momentum, probability) and the `StrategyFrame` / `TradeProposal` contracts | Built for offline tapes. Needs a candle-based strategy for Kraken. |
 | `ai` | OpenAI/xAI/Anthropic adapters, spend reservations, bounded multi-step flow | Built. **Today the AI can only veto or lower the price of a rule-proposed buy; it cannot originate trades.** V0 must change this (slice 3). |
@@ -72,6 +72,11 @@ input / output tokens, about $0.009 per decision. Calling the AI every 15 minute
 two weeks, so the AI is called only for flagged candidates (target 10–20 calls/day, roughly 10–20 cents/day).
 Re-check the current price and model list before activation.
 
+**Fees are not available from Kraken's anonymous API** (slice 1 finding: the schedule arrives empty). The paper
+broker therefore needs a configured fee model. Slice 2 must propose it from Kraken's published fee page (to be
+fetched and cited, not remembered) for the user's approval, and may use the pair's real `ordermin`, `costmin` and
+tick size, which the adapter does provide.
+
 **Numeric risk limits are not yet approved** (docs/12, "proposed choices"). Slice 2 starts by proposing
 concrete values (per-trade size, total exposure, daily loss, drawdown halt, stop and time exits) for the
 user's approval. Do not invent defaults.
@@ -80,7 +85,7 @@ user's approval. Do not invent defaults.
 
 | # | Slice | Done when |
 | --- | --- | --- |
-| 1 | Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
+| 1 | **Done (PR pending merge)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
 | 2 | Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |

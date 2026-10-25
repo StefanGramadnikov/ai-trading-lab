@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import http.cookiejar
 import ipaddress
 import math
 import re
@@ -23,6 +24,30 @@ from pydantic import JsonValue
 from ai_trading_lab.market_data.models import Capture, DataMode, Source, TransportError
 
 Resolver = Callable[[str], Awaitable[list[str]]]
+
+
+class _RefuseCookies(http.cookiejar.CookiePolicy):
+    """Accept and send no cookie, ever: public reads carry no session state or credentials.
+
+    Installing it replaces the cookie policy of the HTTP client handed to the transport (clients
+    the transport builds itself are the production case; injected ones are fixtures).
+    """
+
+    netscape = True
+    rfc2965 = False
+    hide_cookie2 = False
+
+    def set_ok(self, cookie: http.cookiejar.Cookie, request: object) -> bool:
+        return False
+
+    def return_ok(self, cookie: http.cookiejar.Cookie, request: object) -> bool:
+        return False
+
+    def domain_return_ok(self, domain: str, request: object) -> bool:
+        return False
+
+    def path_return_ok(self, path: str, request: object) -> bool:
+        return False
 
 
 def is_public_address(text: str) -> bool:
@@ -46,6 +71,7 @@ async def _system_resolver(host: str) -> list[str]:
     return sorted({str(info[4][0]) for info in infos})
 
 
+_KRAKEN_PAIRS = r"[A-Z0-9]{5,12}(,[A-Z0-9]{5,12}){0,9}"
 _BASE58 = r"[1-9A-HJ-NP-Za-km-z]{32,44}"
 _TICKER = r"[A-Za-z0-9_-]{1,200}"
 
@@ -127,6 +153,44 @@ def validate_request(
             or re.fullmatch(r"/markets/" + _TICKER + "/orderbook", path) is not None
         )
         allowed = {"limit", "cursor", "status"} if path == "/markets" else {"depth"}
+    elif source == Source.KRAKEN:
+        origin = "https://api.kraken.com"
+        # Five public reads only. Nothing under /0/private is reachable, and no POST exists.
+        kraken_params = {
+            "/0/public/Time": set(),
+            "/0/public/AssetPairs": {"pair"},
+            "/0/public/Ticker": {"pair"},
+            "/0/public/Depth": {"pair", "count"},
+            "/0/public/OHLC": {"pair", "interval", "since"},
+        }
+        permitted = method == "GET" and path in kraken_params
+        allowed = kraken_params.get(path, set())
+        if any(not isinstance(value, str) for value in query.values()):
+            deny()
+        if path in kraken_params and path != "/0/public/Time" and "pair" not in query:
+            deny()  # a pair is always required; AssetPairs without one returns the whole universe
+        if "pair" in query and not re.fullmatch(_KRAKEN_PAIRS, query["pair"]):
+            deny()
+        if path == "/0/public/Depth" and "pair" in query and "," in query["pair"]:
+            deny()  # Kraken's depth and candle endpoints are single-pair
+        if path == "/0/public/OHLC" and "pair" in query and "," in query["pair"]:
+            deny()
+        if "count" in query and not (
+            re.fullmatch(r"[0-9]{1,3}", query["count"]) and 1 <= int(query["count"]) <= 500
+        ):
+            deny()
+        if "interval" in query and query["interval"] not in {
+            "1",
+            "5",
+            "15",
+            "30",
+            "60",
+            "240",
+            "1440",
+        }:
+            deny()
+        if "since" in query and not re.fullmatch(r"[0-9]{1,12}", query["since"]):
+            deny()
     if not permitted or set(query) - allowed or (method != "POST" and json_body is not None):
         deny()
     for key, value in query.items():
@@ -200,6 +264,9 @@ class HttpTransport:
             )
         )
         self._owned = client is None
+        # Real hosts set tracking cookies on the first response; refuse them all so the
+        # credentials guard in request() cannot trip on a later call and no state is kept.
+        self._client.cookies.jar.set_policy(_RefuseCookies())
         self._resolve: Resolver = resolver or _system_resolver
         self._limits = limits or TransportLimits()
         self._mode, self._clock, self._sleep, self._monotonic = mode, clock, sleep, monotonic

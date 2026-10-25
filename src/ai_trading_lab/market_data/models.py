@@ -48,6 +48,7 @@ class Source(StrEnum):
     SOLANA = "solana"
     POLYMARKET = "polymarket"
     KALSHI = "kalshi"
+    KRAKEN = "kraken"
 
 
 class DataMode(StrEnum):

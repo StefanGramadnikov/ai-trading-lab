@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from ai_trading_lab.market_data.adapters.dexscreener import DexScreenerAdapter
 from ai_trading_lab.market_data.adapters.kalshi import KalshiAdapter
+from ai_trading_lab.market_data.adapters.kraken import DEFAULT_PAIRS, KrakenAdapter
 from ai_trading_lab.market_data.adapters.polymarket import PolymarketAdapter
 from ai_trading_lab.market_data.adapters.solana import SolanaAdapter
 from ai_trading_lab.market_data.models import Batch, Failure, Source, Transport
@@ -31,6 +32,10 @@ async def collect(
         batch = await SolanaAdapter(transport).collect(mint_addresses, limit=limit)
     elif source == Source.POLYMARKET:
         batch = await PolymarketAdapter(transport).collect(limit=limit, max_pages=max_pages)
+    elif source == Source.KRAKEN:
+        # For Kraken the explicit list carries trading pairs (e.g. XBTUSD), not Solana mints.
+        pairs = tuple(mint_addresses) or DEFAULT_PAIRS
+        batch = await KrakenAdapter(transport).collect(pairs)
     else:
         batch = await KalshiAdapter(transport).collect(limit=limit, max_pages=max_pages)
     return batch.model_copy(

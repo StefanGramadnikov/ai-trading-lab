@@ -1656,3 +1656,16 @@ push after each green slice. Public reads verified reachable from the user's net
 Solana RPC, Kalshi, Kraken, Coinbase; Polymarket remains blocked. Committed and pushed the green repair work
 (1170 tests, coverage 95.19%) to PR #9. New plan and handoff: document 29. AGENTS.md updated (scope, commit/push
 rule, no repair-round cap). No application code changed in this step.
+
+## 2026-10-25 — V0 slice 1: Kraken public data adapter
+
+Branch `feature/s1-kraken-adapter`, cut from `main` after PR #9 merged. Added `Source.KRAKEN`, a five-endpoint
+read-only allow-list, `KrakenAdapter` (pair rules, ticker, validated best-first book, closed candles, server-time
+event time), collector/CLI wiring (`--pair`), 37 contract tests, a real-capture fixture test and a persistence/identity
+integration test. A real read-only capture exposed three things synthetic tests had missed: empty fee schedules,
+721-row candle windows, and a tracking cookie that tripped the transport's credentials guard (now fixed: the transport
+accepts no cookies). Live capture: 9 GETs, then 11 after the request plan changed, replayed offline to 3 VALID observations. An
+independent review then drove: per-pair adjacent server time with look-ahead and staleness checks, strict plain
+decimals, plausible-timestamp bounds (a huge candle timestamp used to crash the whole collection), one-sided books
+marked PARTIAL, rate limits that stop the collection, `pair` required by the transport, `--pair` only for Kraken, and
+an identity-stability test that goes through the adapter. See docs/18, docs/16, ADR-0006 and docs/29.

@@ -1644,3 +1644,15 @@ positions (collector supplies no forecast/feature; rules strategies abstain), so
 M8A. M8B validates infrastructure only and makes no trading or P&L claim. A forecast/feature source, an
 exit/settlement path using captured resolution evidence, and a chaining decision (F-11) gate any trading
 run; F-08 should be decided before one. Documentation only; no code changed, nothing committed.
+
+## 2026-10-25 — Course correction to a fast live-paper experiment (DEC-041, DEC-042)
+
+The user restated the goal: test whether an AI-driven system can make a profit, deploy fast and cheaply,
+paper money for 1–2 weeks, easy dashboard with strategy on/off, and learn from mistakes. A review of the built
+system found it was a well-guarded engine with no live loop: the runtime cannot trade, the AI can only veto,
+the dashboard is read-only. Chosen: Kraken public data (BTC/ETH/SOL), OpenAI with a €10 cap (a key already
+exists in the git-ignored `.env`), a cheap VPS, 1–2 week evaluation, one-slice-at-a-time process with commit and
+push after each green slice. Public reads verified reachable from the user's network on 2026-10-25: DexScreener,
+Solana RPC, Kalshi, Kraken, Coinbase; Polymarket remains blocked. Committed and pushed the green repair work
+(1170 tests, coverage 95.19%) to PR #9. New plan and handoff: document 29. AGENTS.md updated (scope, commit/push
+rule, no repair-round cap). No application code changed in this step.

@@ -102,3 +102,10 @@ M7 PR #8 merged as `7d4562f`. User approved local runtime foundation in
 [document25](25-m8-local-runtime.md). M8B local multi-day activation and M8C cloud
 deployment remain separate approval gates; no operating risk numbers or paid
 provider envelope are chosen by implementation approval.
+
+
+## Course correction — 2026-10-25
+
+M8B/M8C are superseded by the V0 live-paper plan in [document 29](29-v0-live-paper-plan.md) (DEC-041, DEC-042):
+one-slice-at-a-time delivery of a Kraken-based live paper loop, strategy on/off, a cheap VPS deployment and a 1–2 week
+evaluation. M9 becomes the 1–2 week evaluation; M10 (live pilot) remains separately gated.

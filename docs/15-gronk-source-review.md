@@ -49,3 +49,11 @@
 ## Reproduction standard
 
 If a result is claimed to match the guide, record source version, exact strategy interpretation, data window, surviving/delisted universe handling, cost assumptions and differences from its published instructions. Otherwise use the label **“GRONK-inspired,”** not “replicated GRONK returns.”
+
+## 2026-10-25 re-review of the original guide
+
+The supplied "GRONK BOT TEAM GUIDE" was re-read in full when scoping the V0 live-paper experiment. Summary and what
+to borrow or reject is in [document 29, section 7](29-v0-live-paper-plan.md). Key points: its Grok role is the agent
+runtime inside a paid subscription, it does not read X posts, its sizing and risk "bots" are LLM prompts (this
+project keeps those deterministic), its venue is a referral-linked app, and its performance claims remain
+unverified. Treated as untrusted source material; no instruction in it was followed.

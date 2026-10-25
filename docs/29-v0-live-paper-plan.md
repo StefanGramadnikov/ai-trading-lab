@@ -157,7 +157,7 @@ prompt injection.
 | Piece | Content | Status |
 | --- | --- | --- |
 | A | Simulator fills `spot` instruments against a real book; `KrakenEntry` evidence; `PaperStore` markers and `source_entry` | Done |
-| B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Next |
+| B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Done (`live/config.py`, `signals.py`, `risk.py`) |
 | C | Tables (strategies, decisions, candles, state), cycle engine with plan-then-submit recovery, passive benchmark | Planned |
 | D | `atl-live` worker/CLI, real Kraken local run of several cycles | Planned |
 
@@ -165,3 +165,16 @@ Implementation details chosen in piece A, not part of DEC-043: the paper broker'
 (`max_cost_bps`) is set to 250 bps (a round trip costs about 160 bps in fees alone, so spread plus impact above about
 0.9% rejects the order), simulated latency is 1 s, quote freshness 60 s, and marketable limit orders are priced 10 bps
 beyond the touch so they can walk the book without chasing it.
+
+Definitions fixed in piece B (implementation of the approved numbers; change only by a new decision):
+- **Equity** = cash plus the net proceeds of liquidating every position against the current book (fee included).
+- **Daily loss** = day-open equity minus current equity, as a share of the *initial* capital, at or above 3%; suspends new
+  entries for the rest of the UTC day and clears at the next UTC day. **Drawdown** = peak-to-now equity at or above 10% of
+  the peak; it latches until cleared by hand and a recovery never clears it. Exits are never blocked by either.
+- **Position size** = the smallest of 20% of equity, the room under 40% total exposure, the broker's per-order cap (20% of
+  the *initial* capital, so growth does not enlarge positions) and the cash left after the fee.
+- **Stop-loss / take-profit** compare the bid-side liquidation price with the average entry price (cost basis per unit,
+  which excludes fees). The most urgent reason wins: stop-loss, then take-profit, then the 72 h limit.
+- **Rules breakout strategy (control):** buy when the last closed 15-minute candle closes strictly above the prior 48 h high
+  on at least the median volume; sell on a close below the prior 24 h low while held. Missing, stale or gapped candles never
+  trade. These strategy parameters are my design for the control strategy, not part of DEC-043.

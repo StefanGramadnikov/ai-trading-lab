@@ -77,16 +77,18 @@ broker therefore needs a configured fee model. Slice 2 must propose it from Krak
 fetched and cited, not remembered) for the user's approval, and may use the pair's real `ordermin`, `costmin` and
 tick size, which the adapter does provide.
 
-**Numeric risk limits are not yet approved** (docs/12, "proposed choices"). Slice 2 starts by proposing
-concrete values (per-trade size, total exposure, daily loss, drawdown halt, stop and time exits) for the
-user's approval. Do not invent defaults.
+**Numbers approved (DEC-043, 2026-10-25), paper only:** EUR pairs XBTEUR/ETHEUR/SOLEUR long-only; €100 virtual capital;
+0.80% fee per side; 20% per position, 40% total exposure, 3% daily-loss and 10% drawdown suspensions; stop −5%,
+take-profit +8%, 72 h maximum hold, 6 h cooldown after a stop-out, one entry per symbol per 24 h; prices every
+15 min and an AI review every 4 h per symbol; portfolios: AI, rules breakout, passive buy-and-hold benchmark. Any
+change needs a new decision.
 
 ## 5. Slice plan (one at a time; commit + push after each green slice)
 
 | # | Slice | Done when |
 | --- | --- | --- |
 | 1 | **Done (PR pending merge)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
-| 2 | Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
+| 2 | **In progress on `feature/s2-live-paper-loop`** — piece A done (spot fills against real books; Kraken evidence verified by the history layer), pieces B–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
@@ -149,3 +151,17 @@ social volume as a ranking input. Borrow the skeleton, not the config:
 Grok / X news as a second analyst is a possible later slice. It needs separate paid xAI billing and a deliberate
 exception to the project's rule that provider tools are disabled, because posts are untrusted and can contain
 prompt injection.
+
+## 8. Slice 2 pieces (live paper loop)
+
+| Piece | Content | Status |
+| --- | --- | --- |
+| A | Simulator fills `spot` instruments against a real book; `KrakenEntry` evidence; `PaperStore` markers and `source_entry` | Done |
+| B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Next |
+| C | Tables (strategies, decisions, candles, state), cycle engine with plan-then-submit recovery, passive benchmark | Planned |
+| D | `atl-live` worker/CLI, real Kraken local run of several cycles | Planned |
+
+Implementation details chosen in piece A, not part of DEC-043: the paper broker's per-trade cost gate
+(`max_cost_bps`) is set to 250 bps (a round trip costs about 160 bps in fees alone, so spread plus impact above about
+0.9% rejects the order), simulated latency is 1 s, quote freshness 60 s, and marketable limit orders are priced 10 bps
+beyond the touch so they can walk the book without chasing it.

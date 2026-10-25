@@ -114,11 +114,12 @@ def _simulate(
     buy = intent.side == "buy"
     levels: tuple[tuple[Decimal, Decimal], ...]
     reference: Decimal
-    if instrument.kind == "spot":
+    # A spot instrument with explicit order-book levels fills against that book exactly like a
+    # prediction contract does. Without levels it uses the spot-price/impact assumptions model.
+    # Supplying both is ambiguous and rejected below.
+    if instrument.kind == "spot" and not (quote.bids or quote.asks):
         if quote.spot_price is None or quote.spot_capacity is None or quote.impact_bps is None:
             return result("spot_assumptions_missing")
-        if quote.bids or quote.asks:
-            return result("ambiguous_quote")
         impact = quote.impact_bps / BPS
         price = quote.spot_price * (1 + impact if buy else 1 - impact)
         levels = ((price, quote.spot_capacity),)

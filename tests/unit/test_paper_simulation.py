@@ -4,6 +4,7 @@ from decimal import Decimal, localcontext
 import pytest
 
 from ai_trading_lab.market_data.models import DataQuality
+from ai_trading_lab.paper_execution.models import ExecutionQuote, PaperInstrument
 from ai_trading_lab.paper_execution.simulation import simulate
 from tests.unit.test_paper_models import NOW, instrument, intent, policy, quote
 
@@ -318,3 +319,95 @@ def test_deep_book_review_regression_never_uses_best_ask_as_fill_cost() -> None:
     assert result.reason == "max_cost_bps"
     assert result.quantity == result.notional == result.fee == 0
     assert result.consumed == ()
+
+
+def kraken_like(**changes: object) -> PaperInstrument:
+    return instrument(
+        kind="spot",
+        source="kraken",
+        venue="kraken",
+        native_id="XXBTZEUR",
+        base_unit="XBT",
+        cash_unit="EUR",
+        market_id=None,
+        outcome=None,
+        tick_size="0.1",
+        quantity_step="0.00000001",
+        cash_step="0.00001",
+        **changes,
+    )
+
+
+def spot_book(**changes: object) -> ExecutionQuote:
+    levels: dict[str, object] = {
+        "bids": [
+            {"price": "66999.9", "quantity": "0.002"},
+            {"price": "66990.0", "quantity": "0.050"},
+        ],
+        "asks": [
+            {"price": "67000.1", "quantity": "0.002"},
+            {"price": "67010.0", "quantity": "0.050"},
+        ],
+    }
+    return quote(instrument=kraken_like(), **(levels | changes))
+
+
+def test_spot_instrument_fills_against_a_real_order_book_walking_levels() -> None:
+    order = intent(instrument=kraken_like(), quantity="0.003", limit_price="67020.0", side="buy")
+    result = simulate(order, spot_book(), policy(fee_bps="80", max_cost_bps="1000"), NOW)
+    assert result.status == "FILLED"
+    # 0.002 at 67000.1 then 0.001 at 67010.0, each level rounded adversely to the tick.
+    assert result.notional == Decimal("0.002") * Decimal("67000.1") + Decimal("0.001") * Decimal(
+        "67010.0"
+    )
+    assert result.fee == (result.notional * Decimal("80") / Decimal(10000)).quantize(
+        Decimal("0.00001"), rounding="ROUND_UP"
+    )
+    assert result.consumed == (Decimal("0.002"), Decimal("0.001"))
+
+
+def test_spot_sell_walks_bids_best_first_and_respects_the_limit() -> None:
+    order = intent(instrument=kraken_like(), quantity="0.003", limit_price="66995.0", side="sell")
+    result = simulate(order, spot_book(), policy(fee_bps="80", max_cost_bps="1000"), NOW)
+    # The 66990.0 level is below the limit, so only the best level can fill.
+    assert result.status == "PARTIALLY_FILLED" and result.quantity == Decimal("0.002")
+    assert result.notional == Decimal("0.002") * Decimal("66999.9")
+
+
+def test_spot_book_with_spot_assumptions_is_ambiguous() -> None:
+    data = spot_book().model_copy(
+        update={"spot_price": Decimal("67000"), "spot_capacity": Decimal(1)}
+    )
+    order = intent(instrument=kraken_like(), quantity="0.001", limit_price="67020.0")
+    assert simulate(order, data, policy(max_cost_bps="1000"), NOW).reason == "ambiguous_quote"
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"bids": [{"price": "67001.0", "quantity": "1"}]}, "invalid_spread"),
+        ({"asks": []}, "cost_reference_missing"),
+        (
+            {
+                "asks": [
+                    {"price": "67010.0", "quantity": "1"},
+                    {"price": "67000.1", "quantity": "1"},
+                ]
+            },
+            "unordered_book",
+        ),
+    ],
+)
+def test_spot_book_failures_are_closed(changes: dict[str, object], reason: str) -> None:
+    data = spot_book(**changes)
+    order = intent(instrument=kraken_like(), quantity="0.001", limit_price="67020.0")
+    assert simulate(order, data, policy(max_cost_bps="1000"), NOW).reason == reason
+
+
+def test_spot_without_a_book_still_uses_the_spot_assumptions_model() -> None:
+    asset = kraken_like()
+    data = quote(
+        instrument=asset, bids=[], asks=[], spot_price="67000.0", spot_capacity="1", impact_bps="10"
+    )
+    order = intent(instrument=asset, quantity="0.001", limit_price="67100.0")
+    assert simulate(order, data, policy(max_cost_bps="1000"), NOW).status == "FILLED"

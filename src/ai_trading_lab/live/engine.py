@@ -185,8 +185,10 @@ class LiveEngine:
     # ---- the cycle --------------------------------------------------------------------
 
     async def run_cycle(self) -> CycleReport:
-        now = self.clock()
         batch = await self._collect()
+        # Decide only after the evidence exists: the cycle time can never precede a capture it uses,
+        # or the broker would (rightly) treat that quote as not yet available.
+        now = max([self.clock(), *(c.received_at_utc for c in batch.captures)])
         markets = build_markets(batch, self.config)
         failures = [f"{f.target}:{f.code}" for f in batch.failures]
         failures += [

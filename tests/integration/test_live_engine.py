@@ -401,3 +401,39 @@ async def test_an_unreadable_or_unsubmittable_planned_decision_is_finished_not_s
     assert await r.store.planned(r.bench_id) == []
     statuses = {d.status for d in await r.store.decisions(r.bench_id) if d.reason == "x"}
     assert statuses == {"rejected"}
+
+
+async def test_decisions_are_stamped_after_the_evidence_they_rest_on(engine: AsyncEngine) -> None:
+    """Found on the first real run: the cycle clock was read before collection, so the first
+    order's quote looked like it came from the future and was rejected as unavailable."""
+    r = await rig(engine)
+    r.now = RECEIVED - timedelta(seconds=5)  # the wall clock lags the captures' receipt times
+    report = await r.live.run_cycle()
+    assert report.failures == []
+    bench = await r.portfolio(r.bench_id)
+    assert len(bench.positions) == 3, "every pair must fill, including the first one processed"
+    statuses = {d.status for d in await r.store.decisions(r.bench_id) if d.action == "buy"}
+    assert statuses == {"filled"}
+    assert report.strategies[r.bench_id].equity is not None
+    assert report.cycle_at >= RECEIVED
+
+
+async def test_status_summary_reports_holdings_equity_and_recent_decisions(
+    engine: AsyncEngine,
+) -> None:
+    from ai_trading_lab.live.status import summary
+
+    r = await rig(engine)
+    await r.cycle()
+    data = await summary(r.live, recent=2)
+    assert data["paper_only"] is True
+    by_id = {s["strategy_id"]: s for s in data["strategies"]}
+    bench = by_id[r.bench_id]
+    assert bench["kind"] == "benchmark" and bench["enabled"] is True
+    assert len(bench["positions"]) == 3 and D(bench["fees_paid"]) > 0
+    assert D(bench["equity"]) < D(100) and bench["decisions_logged"] == 3
+    assert len(bench["recent_decisions"]) == 2
+    assert by_id[r.rules_id]["positions"] == [] and by_id[r.rules_id]["equity"] is not None
+    await r.store.set_enabled(r.bench_id, False)
+    again = {s["strategy_id"]: s for s in (await summary(r.live))["strategies"]}
+    assert again[r.bench_id]["enabled"] is False  # disabled strategies stay visible

@@ -88,7 +88,7 @@ change needs a new decision.
 | # | Slice | Done when |
 | --- | --- | --- |
 | 1 | **Done (PR pending merge)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
-| 2 | **In progress on `feature/s2-live-paper-loop`** — piece A done (spot fills against real books; Kraken evidence verified by the history layer), pieces B–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
+| 2 | **Built on `feature/s2-live-paper-loop` (PR pending merge)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
@@ -159,7 +159,7 @@ prompt injection.
 | A | Simulator fills `spot` instruments against a real book; `KrakenEntry` evidence; `PaperStore` markers and `source_entry` | Done |
 | B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Done (`live/config.py`, `signals.py`, `risk.py`) |
 | C | Tables (strategies, decisions, candles, state, equity), cycle engine with plan-then-submit recovery, passive benchmark | Done (`live/store.py`, `strategies.py`, `engine.py`, migration 0012) |
-| D | `atl-live` worker/CLI, real Kraken local run of several cycles | Planned |
+| D | `atl-live` worker/CLI, real Kraken local run of several cycles | Done (`live/worker.py`, `cli.py`, `status.py`); real runs below |
 
 Implementation details chosen in piece A, not part of DEC-043: the paper broker's per-trade cost gate
 (`max_cost_bps`) is set to 250 bps (a round trip costs about 160 bps in fees alone, so spread plus impact above about
@@ -178,3 +178,36 @@ Definitions fixed in piece B (implementation of the approved numbers; change onl
 - **Rules breakout strategy (control):** buy when the last closed 15-minute candle closes strictly above the prior 48 h high
   on at least the median volume; sell on a close below the prior 24 h low while held. Missing, stale or gapped candles never
   trade. These strategy parameters are my design for the control strategy, not part of DEC-043.
+
+## 9. Running the live loop (slice 2)
+
+Paper only. `atl-live` needs `ATL_DATABASE_URL` (migrated: `alembic upgrade head`) and `ATL_EXECUTION_MODE=PAPER_ONLY`.
+Until the console script is reinstalled in your environment, use `python -m ai_trading_lab.live.cli`.
+
+| Command | What it does |
+| --- | --- |
+| `atl-live setup` | Creates the two paper portfolios (EUR 100 each) and registers the strategies; safe to repeat, never mutates |
+| `atl-live cycle` | One live cycle against real Kraken data, then prints the report |
+| `atl-live run --cycles N` / `--until-stopped` | The loop. Runs just after each quarter hour (the newest 15-minute candle has closed), holds a single-instance database lock, contains a failing cycle and exits non-zero after 10 in a row so a supervisor restarts it; SIGINT/SIGTERM stop it after the current cycle |
+| `atl-live status` | Strategies, holdings, fees paid, latest equity and recent decisions as JSON |
+
+How a cycle works: collect pair rules, one ticker and, per pair, server time, a 25-level book and candles; store the raw
+captures and new closed candles; build each pair's evidence (`KrakenEntry`; a pair whose evidence does not hold together is
+treated as having no data); evaluate every **enabled** strategy (rules breakout, passive benchmark); write each order as a
+`planned` decision with its intent and raw evidence, submit it to the paper broker, finish the decision, fold the fill into
+the loop state and record equity after the fills. Every hold is logged with its reason.
+
+Behaviour worth knowing:
+- **Slots.** An order's idempotency key includes the 15-minute slot, so a restart inside a slot never doubles an order, and
+  an order that was rejected is retried in the next slot, not repeatedly within the same one.
+- **Cycle time** is read after collection (never before a capture it uses); orders in one cycle are stamped 2 s apart because
+  the paper ledger's clock cannot move backwards and includes the 1 s simulated latency.
+- **Crash recovery.** A `planned` decision found at the start of a cycle is resubmitted with the same key; the broker answers
+  a completed order without a second fill and the loop state is restored from the fill.
+- **Disabled strategies** are skipped entirely (no decisions); existing positions stay until slice 4 defines switching off.
+- **Candles** are fetched incrementally (`since` the last stored candle) and kept as first seen.
+
+First real runs, 2026-10-25 against live Kraken (throwaway database): all three EUR pairs observed with verified evidence and
+no failures; the benchmark filled ETH/EUR and SOL/EUR at about EUR 33 each with 0.80% fees and marked equity at EUR 98.88 after
+fees and spread. The first run exposed a real bug the fake venue had hidden (the cycle read its clock before collecting, so the
+first order's quote looked like it came from the future); it is fixed and has a regression test.

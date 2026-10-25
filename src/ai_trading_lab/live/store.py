@@ -484,6 +484,29 @@ class LiveStore:
                 .on_conflict_do_nothing()
             )
 
+    async def latest_equity(self, strategy_id: str) -> EquityPoint | None:
+        async with self.engine.connect() as connection:
+            r = (
+                (
+                    await connection.execute(
+                        select(live_equity)
+                        .where(live_equity.c.strategy_id == strategy_id)
+                        .order_by(live_equity.c.at_utc.desc())
+                        .limit(1)
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if r is None:
+            return None
+        return EquityPoint(
+            at_utc=r["at_utc"],
+            equity=r["equity"],
+            cash=r["cash"],
+            positions_value=r["positions_value"],
+        )
+
     async def equity_curve(self, strategy_id: str, limit: int = 5000) -> list[EquityPoint]:
         async with self.engine.connect() as connection:
             rows = (

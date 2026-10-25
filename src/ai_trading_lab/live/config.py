@@ -57,6 +57,7 @@ class LiveConfig(FrozenModel):
     pairs: tuple[str, ...] = ("XBTEUR", "ETHEUR", "SOLEUR")
     cash_unit: str = "EUR"
     initial_cash: PositiveAmount = Decimal(100)
+    cash_step: PositiveAmount = Decimal("0.00001")
     fee_bps: Decimal = Field(default=Decimal(80), ge=0, le=1000)
     cycle_seconds: int = Field(default=900, ge=60, le=86400, strict=True)
     max_cost_bps: Decimal = Field(default=Decimal(250), gt=0, le=10000)

@@ -129,6 +129,10 @@ class PlannedDecision(FrozenModel):
     decision_id: UUID
     status: str
     created: bool
+    pair: str = ""
+    action: str = ""
+    reason: str = ""
+    cycle_at_utc: AwareDatetime | None = None
     idempotency_key: str | None = None
     intent: dict[str, Any] | None = None
     evidence: dict[str, Any] | None = None
@@ -340,6 +344,10 @@ class LiveStore:
             decision_id=row["decision_id"],
             status=row["status"],
             created=added is not None,
+            pair=row["pair"],
+            action=row["action"],
+            reason=row["reason"],
+            cycle_at_utc=row["cycle_at_utc"],
             idempotency_key=key,
             intent=row["intent"],
             evidence=row["evidence"],
@@ -400,6 +408,10 @@ class LiveStore:
                 decision_id=r["decision_id"],
                 status=r["status"],
                 created=False,
+                pair=r["pair"],
+                action=r["action"],
+                reason=r["reason"],
+                cycle_at_utc=r["cycle_at_utc"],
                 idempotency_key=r["idempotency_key"],
                 intent=r["intent"],
                 evidence=r["evidence"],

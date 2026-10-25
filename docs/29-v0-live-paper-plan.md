@@ -158,7 +158,7 @@ prompt injection.
 | --- | --- | --- |
 | A | Simulator fills `spot` instruments against a real book; `KrakenEntry` evidence; `PaperStore` markers and `source_entry` | Done |
 | B | Pure rules breakout strategy, deterministic exits (stop −5%, take-profit +8%, 72 h, 6 h cooldown), sizing and risk gates | Done (`live/config.py`, `signals.py`, `risk.py`) |
-| C | Tables (strategies, decisions, candles, state, equity), cycle engine with plan-then-submit recovery, passive benchmark | In progress: tables + store (migration 0012) and the pure rules/benchmark decisions are done; the cycle engine is next |
+| C | Tables (strategies, decisions, candles, state, equity), cycle engine with plan-then-submit recovery, passive benchmark | Done (`live/store.py`, `strategies.py`, `engine.py`, migration 0012) |
 | D | `atl-live` worker/CLI, real Kraken local run of several cycles | Planned |
 
 Implementation details chosen in piece A, not part of DEC-043: the paper broker's per-trade cost gate

@@ -1700,3 +1700,10 @@ See docs/29 section 11.
 Cut from `main` after PR #12 merged. `atl-live enable|disable <strategy> --reason` and `atl-live audit`, migration 0014
 (`live_strategy_audit`), a toggle and its audit row in one transaction, and wind-down semantics for a disabled strategy
 (exits still run, no entries, no model calls). The old "frozen when disabled" test was rewritten. See docs/29 section 12.
+
+## 2026-10-26 — V0 slice 5: deployment files (branch `feature/s5-deployment`)
+
+Cut from `main` after PR #13 merged. Vendor and backup target chosen with the user (Hetzner Cloud EU; backups pulled to the Mac).
+Adds `compose.prod.yaml` (db, one-shot migrate, `atl-live` loop; no published ports, read-only, capabilities dropped, fixed
+`PAPER_ONLY`), `atl-live health`, `deploy/` (bootstrap, backup with checksum, restore test, pull-from-Mac, kill switch, systemd timer,
+env template) and docs/30. Rehearsed end to end locally in an isolated Compose project; the server itself is not yet created.

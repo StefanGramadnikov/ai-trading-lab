@@ -1,0 +1,12 @@
+[Unit]
+Description=ATL nightly database backup
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/opt/atl/ai-trading-lab/deploy/backup.sh
+
+[Service]
+Type=oneshot
+# The atl account owns the backups (so scp as atl can read them) and is in the docker group.
+User=atl
+Group=atl
+ExecStart=/opt/atl/ai-trading-lab/deploy/backup.sh

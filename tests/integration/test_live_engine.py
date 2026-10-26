@@ -687,3 +687,22 @@ async def test_a_planned_buy_left_by_a_crash_is_never_sent_once_the_strategy_is_
     assert [(d.status, (d.result or {}).get("error")) for d in decisions] == [
         ("rejected", "strategy_disabled")
     ]
+
+
+async def test_health_follows_the_equity_the_loop_records(engine: AsyncEngine) -> None:
+    from ai_trading_lab.live.status import health
+
+    r = await rig(engine)
+    stale_limit = timedelta(minutes=40)
+    never = await health(r.live, r.now, stale_limit)
+    assert never["healthy"] is False and never["reason"] == "no_equity_recorded_yet"
+    await r.cycle()
+    ok = await health(r.live, r.now, stale_limit)
+    assert ok["healthy"] is True and ok["reason"] == "ok"
+    later = await health(r.live, r.now + timedelta(minutes=41), stale_limit)
+    assert later["healthy"] is False and later["reason"] == "stale"
+    # A switched-off strategy still records equity, so being off is not "unhealthy".
+    await r.store.set_enabled(r.rules_id, False, actor="test", reason="pause")
+    await r.store.set_enabled(r.bench_id, False, actor="test", reason="pause")
+    await r.cycle(minutes_later=15)
+    assert (await health(r.live, r.now, stale_limit))["healthy"] is True

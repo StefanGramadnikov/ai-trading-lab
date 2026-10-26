@@ -242,7 +242,7 @@ class LiveEngine:
         # The strategy that owns the mechanical exits runs first.
         own = self.strategy_ids
         strategies = sorted(
-            (s for s in await self.store.strategies() if s.strategy_id in own),
+            (s for s in await self.store.strategies(enabled_only=False) if s.strategy_id in own),
             key=lambda s: (s.kind != "rules", s.strategy_id),
         )
         for strategy in strategies:
@@ -325,6 +325,12 @@ class LiveEngine:
                     item.decision_id, "rejected", {"error": "unreadable_planned_decision"}, now
                 )
                 continue
+            if intent.side == "buy" and not strategy.enabled:
+                # Switched off after this entry was planned but before it was sent: never open it.
+                await self.store.finish_decision(
+                    item.decision_id, "rejected", {"error": "strategy_disabled"}, now
+                )
+                continue
             stamped = await self._stamp(strategy, now)
             loop, _ = await self._submit(strategy, item, intent, entry, stamped, loop)
 
@@ -345,8 +351,21 @@ class LiveEngine:
             nonlocal submitted
             for decision in decisions:
                 if decision.order is None:
+                    if off:
+                        continue  # nothing to journal every cycle for a strategy that is off
                     await self.store.log_decision(
                         sid, decision.pair, now, decision.action, decision.reason, decision.detail
+                    )
+                    report["holds"] += 1
+                    continue
+                if (
+                    decision.order.side == "buy"
+                    and not off
+                    and not await self.store.is_enabled(sid)
+                ):
+                    # Switched off mid-cycle: the entry is dropped, not sent.
+                    await self.store.log_decision(
+                        sid, decision.pair, now, "hold", "strategy_disabled", decision.detail
                     )
                     report["holds"] += 1
                     continue
@@ -368,6 +387,10 @@ class LiveEngine:
             if await self.paper.command_count(strategy.portfolio_id) >= COMMAND_SOFT_LIMIT
             else None
         )
+        # A switched-off strategy winds down: no new entries and no model calls, but its mechanical
+        # exits still run, so switching it off never leaves a position unmanaged.
+        off = not strategy.enabled
+        capacity = capacity or ("strategy_disabled" if off else None)
         if strategy.kind in ("rules", "ai"):
             if equity is not None:
                 risk, blocked = update_risk(
@@ -403,9 +426,11 @@ class LiveEngine:
                 if exits:
                     state = await self.paper.get(strategy.portfolio_id)
                     equity, marks = self._value(state, markets, policy, now)
-                proposals, loop = await self._review(
-                    strategy, markets, candles, state, loop, marks, equity, blocked, now
-                )
+                proposals: dict[str, Proposal] = {}
+                if not off:
+                    proposals, loop = await self._review(
+                        strategy, markets, candles, state, loop, marks, equity, blocked, now
+                    )
                 later = decide_ai(
                     **common,
                     state=state,
@@ -477,6 +502,8 @@ class LiveEngine:
         slot = int(now.timestamp() // self.config.cycle_seconds)
         proposals: dict[str, Proposal] = {}
         for pair in due:
+            if not await self.store.is_enabled(strategy.strategy_id):
+                break  # switched off mid-cycle: no further model call, no further spend
             market = markets[pair]
             position = held_position(state, market.quote.instrument)
             held = None

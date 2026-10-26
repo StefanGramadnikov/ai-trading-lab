@@ -608,15 +608,82 @@ async def test_the_daily_suspension_clears_at_the_next_utc_day_inside_the_engine
     assert loop is not None and loop.risk.day == r.now.date() and not loop.risk.daily_suspended
 
 
-async def test_a_disabled_strategy_with_a_position_gets_no_exits_until_slice_4_defines_it(
+async def test_a_disabled_strategy_winds_down_it_still_exits_but_never_enters(
     engine: AsyncEngine,
 ) -> None:
-    """Documented current behaviour (docs/29): switching a strategy off freezes it entirely."""
     r = await rig(engine)
     await seed_breakout(r)
     await r.cycle()
-    await r.store.set_enabled(r.rules_id, False)
+    assert len((await r.portfolio(r.rules_id)).positions) == 1
+    await r.store.set_enabled(r.rules_id, False, actor="test", reason="pause")
     before = len(await r.store.decisions(r.rules_id))
-    await r.cycle(minutes_later=72 * 60 + 1)
+    report = await r.cycle(minutes_later=15)
+    assert report.strategies[r.rules_id].blocked == "strategy_disabled"
+    assert report.strategies[r.rules_id].orders == 0
+    # Quiet cycles journal nothing for a strategy that is off, and the position is kept.
     assert len(await r.store.decisions(r.rules_id)) == before
     assert len((await r.portfolio(r.rules_id)).positions) == 1
+    # The 72 h limit is a mechanical exit: it still fires while the strategy is off.
+    await r.cycle(minutes_later=72 * 60)
+    assert (await r.portfolio(r.rules_id)).positions == ()
+    exits = [d for d in await r.store.decisions(r.rules_id) if d.action == "sell"]
+    assert [(d.reason, d.status) for d in exits] == [("max_hold", "filled")]
+
+
+async def test_a_disabled_strategy_makes_no_new_entry_and_resumes_when_enabled(
+    engine: AsyncEngine,
+) -> None:
+    r = await rig(engine)
+    await seed_breakout(r)
+    await r.store.set_enabled(r.rules_id, False, actor="test", reason="pause")
+    report = await r.cycle()
+    assert report.strategies[r.rules_id].orders == 0
+    assert (await r.portfolio(r.rules_id)).positions == ()
+    assert report.strategies[r.rules_id].equity is not None  # the equity curve continues
+    assert await r.store.decisions(r.rules_id) == []
+    await r.store.set_enabled(r.rules_id, True, actor="test", reason="resume")
+    again = await r.cycle()  # the same market: the breakout is still there
+    assert again.strategies[r.rules_id].blocked is None
+    assert again.strategies[r.rules_id].orders == 1
+
+
+async def test_a_planned_buy_left_by_a_crash_is_never_sent_once_the_strategy_is_off(
+    engine: AsyncEngine,
+) -> None:
+    from ai_trading_lab.live.engine import build_markets
+    from ai_trading_lab.market_data.adapters.kraken import KrakenAdapter
+    from ai_trading_lab.paper_execution.models import OrderIntent
+
+    r = await rig(engine)
+    await seed_breakout(r)
+    async with r.live.transport() as transport:
+        batch = await KrakenAdapter(transport).collect(PAIRS, candles_since=1)
+    market = build_markets(batch, CONFIG)["XBTUSD"]
+    row = next(s for s in await r.store.strategies() if s.strategy_id == r.rules_id)
+    intent = OrderIntent(
+        portfolio_id=row.portfolio_id,
+        idempotency_key=f"{r.rules_id}:XBTUSD:buy:crash",
+        instrument=market.quote.instrument,
+        side="buy",
+        quantity=D("0.0002"),
+        limit_price=D("67067.2"),
+        created_at_utc=r.now,
+        expires_at_utc=r.now + timedelta(seconds=60),
+    )
+    await r.store.plan_decision(
+        r.rules_id,
+        "XBTUSD",
+        r.now,
+        "buy",
+        "breakout_above_48h_high",
+        intent.idempotency_key,
+        intent.model_dump(mode="json"),
+        market.entry.model_dump(mode="json"),
+    )
+    await r.store.set_enabled(r.rules_id, False, actor="test", reason="stop before restart")
+    await r.cycle()
+    assert (await r.portfolio(r.rules_id)).positions == ()
+    decisions = await r.store.decisions(r.rules_id)
+    assert [(d.status, (d.result or {}).get("error")) for d in decisions] == [
+        ("rejected", "strategy_disabled")
+    ]

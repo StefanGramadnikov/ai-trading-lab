@@ -89,8 +89,8 @@ change needs a new decision.
 | --- | --- | --- |
 | 1 | **Done (merged, PR #10)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
 | 2 | **Done (merged, PR #11)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
-| 3 | **Built on `feature/s3-ai-proposer` (PR pending merge), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
-| 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
+| 3 | **Done (merged, PR #12), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
+| 4 | **Built on `feature/s4-strategy-toggles` (PR pending merge), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | Dashboard v1: strategy cards, on/off switch, equity curve, P&L, trades, AI cost, plain-language status | Authenticated toggle works; browser tests green |
 | 7 | Real Telegram alerts (needs the user's bot token) | A test alert received |
@@ -226,7 +226,7 @@ first order's quote looked like it came from the future); it is fixed and has a 
 - **Order stamping**: orders are never stamped before the ledger's last activity (`last_activity`), since the ledger clock
   cannot move backwards.
 - **Lock lease** is verified each cycle; a lost lease stops the worker.
-- **Benchmark**: a partial buy counts as held; the rest is retried in the next slot. Disabled strategies make no decisions.
+- **Benchmark**: a partial buy counts as held; the rest is retried in the next slot. Disabled strategies: see section 12 (wind-down, since slice 4).
 - **Known limits**: no retention policy for decisions or observations (about 600 decision rows per day); the benchmark and
   rules portfolios are independent EUR 100 ledgers.
 
@@ -270,3 +270,27 @@ Remaining limits: the destination check resolves DNS separately from the connect
 send the key before the post-connect peer check reports it; non-200 replies (a bad key, rate limiting) are charged at the
 maximum and count toward the daily breaker; the model's free-text reason is stored in the journal and must never be fed back
 into a prompt.
+
+## 12. Strategy on/off (slice 4)
+
+`atl-live disable <rules|ai|benchmark|strategy-id> --reason "..."` and `atl-live enable ...` switch a strategy; `atl-live audit
+[--limit N]` prints the trail, newest first; `atl-live status` shows each strategy's `enabled` flag and last change. The flag
+is persisted in `live_strategies.enabled`, read at the start of every cycle (a running loop obeys within one cycle, no
+restart, no lock needed), and every change is journaled in `live_strategy_audit` (migration 0014: who, when, on/off, reason)
+in the same transaction. Repeating the current state changes and records nothing. The audit actor is `cli:<os user>`; a reason
+of 1 to 200 characters is mandatory.
+
+**Switched off means wind-down, not freeze (my design for your review; it replaces the slice-2 behaviour where a disabled
+strategy was skipped entirely):** it opens no new positions, makes no model call (so it spends nothing), and journals no hold
+rows, but its mechanical exits (stop, take-profit, 72 h, trend break for rules) still run so a switched-off strategy never
+leaves a position unmanaged, and its equity keeps being recorded so the curve and the final comparison stay continuous. The
+benchmark never sells, so switching it off simply stops its (one-time) entries. Re-enabling resumes normally. The reason shown
+in a cycle report is the first gate that applies (`strategy_disabled`, or a risk gate that was already active).
+
+Details from the slice-4 review: the flag is also re-read (one cheap query) before each model call and before each entry order,
+so a `disable` issued during a cycle stops the remaining spend and drops a not-yet-sent entry; a planned entry left by a
+crash is rejected (`strategy_disabled`) instead of sent when its strategy is off, while a planned exit is still sent; an unknown
+strategy id exits with code 2 and `{"status":"failed","error":"unknown strategy"}`. While a strategy is off its data-problem
+holds (for example `no_market_data`) are not journaled either; the cycle report's `failures` still lists them. The audit actor
+is the OS user and informational only (it can be spoofed with an environment variable); the audit table has no tamper
+protection beyond database access control.

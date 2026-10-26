@@ -216,3 +216,94 @@ def test_a_fully_configured_ai_strategy_is_built_with_the_reviewed_price() -> No
     assert why == "ai_enabled" and deps is not None
     assert deps.price.model == deps.config.model == "gpt-5.6-terra"
     assert deps.config.provider == "openai" and deps.config.total_limit_usd == 10
+
+
+def test_toggle_commands_need_a_strategy_and_a_reason() -> None:
+    assert args("disable", "ai", "--reason", " too costly ").reason == "too costly"
+    assert args("enable", "rules", "--reason", "back").strategy == "rules"
+    for bad in (["disable", "ai"], ["disable", "--reason", "x"], ["enable", "ai", "--reason", " "]):
+        with pytest.raises(SystemExit):
+            args(*bad)
+    with pytest.raises(SystemExit):
+        args("enable", "ai", "--reason", "x" * 201)
+    assert args("audit").limit == 20 and args("audit", "--limit", "3").limit == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("argv", "target", "enabled"),
+    [
+        (["disable", "ai", "--reason", "cost"], "ai-id", False),
+        (["enable", "rules", "--reason", "back"], "rules-id", True),
+        (["disable", "benchmark", "--reason", "x"], "bench-id", False),
+        (["disable", "v0-custom", "--reason", "x"], "v0-custom", False),
+    ],
+)
+async def test_toggle_commands_resolve_aliases_and_record_the_actor(
+    argv: list[str], target: str, enabled: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    engine, live = AsyncMock(), MagicMock()
+    live.rules_id, live.ai_id, live.benchmark_id = "rules-id", "ai-id", "bench-id"
+    live.store.set_enabled = AsyncMock(return_value=True)
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+        patch("getpass.getuser", return_value="stefan"),
+    ):
+        assert await cli.run(args(*argv)) == 0
+    live.store.set_enabled.assert_awaited_once_with(
+        target, enabled, actor="cli:stefan", reason=argv[-1]
+    )
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out == {"strategy_id": target, "enabled": enabled, "changed": True}
+    engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_audit_command_prints_the_trail(capsys: pytest.CaptureFixture[str]) -> None:
+    from datetime import UTC, datetime
+
+    from ai_trading_lab.live.store import AuditRow
+
+    row = AuditRow(
+        seq=1,
+        strategy_id="s",
+        at_utc=datetime(2026, 1, 1, tzinfo=UTC),
+        actor="cli:x",
+        action="disable",
+        enabled=False,
+        reason="r",
+    )
+    engine, live = AsyncMock(), MagicMock()
+    live.store.audit = AsyncMock(return_value=[row])
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+    ):
+        assert await cli.run(args("audit", "--limit", "5")) == 0
+    live.store.audit.assert_awaited_once_with(limit=5)
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["audit"][0]["reason"] == "r" and out["audit"][0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_strategy_is_reported_as_such(capsys: pytest.CaptureFixture[str]) -> None:
+    engine, live = AsyncMock(), MagicMock()
+    live.rules_id, live.ai_id, live.benchmark_id = "r", "a", "b"
+    live.store.set_enabled = AsyncMock(side_effect=ValueError("unknown strategy"))
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+    ):
+        assert await cli.run(args("disable", "typo", "--reason", "x")) == 2
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out == {"status": "failed", "error": "unknown strategy", "strategy_id": "typo"}
+    engine.dispose.assert_awaited_once()
+
+
+def test_the_actor_falls_back_to_the_uid_without_a_passwd_entry() -> None:
+    with patch("getpass.getuser", side_effect=KeyError("no entry")):
+        assert cli._user().startswith("uid:")

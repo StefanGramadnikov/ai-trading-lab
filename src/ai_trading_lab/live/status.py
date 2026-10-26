@@ -23,6 +23,10 @@ async def summary(live: LiveEngine, *, recent: int = 8) -> dict[str, Any]:
                 "strategy_id": row.strategy_id,
                 "kind": row.kind,
                 "enabled": row.enabled,
+                "last_change": next(
+                    (a.model_dump(mode="json") for a in await live.store.audit(row.strategy_id, 1)),
+                    None,
+                ),
                 "cash": str(state.cash),
                 "fees_paid": str(state.fees),
                 "realized_gross": str(state.realized_gross),

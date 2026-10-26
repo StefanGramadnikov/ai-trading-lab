@@ -162,3 +162,29 @@ async def test_loop_state_saved_before_reviews_existed_still_loads(engine: Async
     await store.save_state(sid, reviewed, NOW)
     again = await store.load_state(sid)
     assert again is not None and again.last_review_at == {"XBTEUR": NOW}
+
+
+async def test_toggles_are_journaled_atomically_idempotent_and_newest_first(
+    engine: AsyncEngine,
+) -> None:
+    store, sid, other = LiveStore(engine), f"a-{uuid4()}", f"b-{uuid4()}"
+    for strategy in (sid, other):
+        await store.register(strategy, "rules", uuid4(), {"k": 1}, NOW)
+    assert await store.set_enabled(sid, False, actor="cli:me", reason="too noisy", at=NOW) is True
+    assert await store.set_enabled(sid, False, actor="cli:me", reason="again", at=NOW) is False
+    assert await store.set_enabled(sid, True, actor="cli:me", reason="back", at=NOW) is True
+    await store.set_enabled(other, False, actor="cli:me", reason="x", at=NOW)
+    rows = await store.audit(sid)
+    assert [(r.action, r.enabled, r.reason, r.actor) for r in rows] == [
+        ("enable", True, "back", "cli:me"),
+        ("disable", False, "too noisy", "cli:me"),
+    ]  # the repeated disable left no entry, and the other strategy's change is not mixed in
+    assert rows[0].seq > rows[1].seq and rows[0].at_utc == NOW
+    assert len(await store.audit(limit=1)) == 1
+    long = await store.set_enabled(sid, False, actor="a" * 300, reason="r" * 500)
+    assert long is True
+    latest = (await store.audit(sid, 1))[0]
+    assert len(latest.actor) == 100 and len(latest.reason) == 200
+    with pytest.raises(ValueError, match="unknown"):
+        await store.set_enabled("missing-" + sid, True, actor="x", reason="x")
+    assert all(r.strategy_id != "missing-" + sid for r in await store.audit())

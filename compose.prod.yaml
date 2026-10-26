@@ -1,0 +1,88 @@
+# Production-shaped Compose for the V0 paper run on one small server. PAPER ONLY.
+#
+#   docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod up -d --build
+#
+# Nothing here publishes a port: the database and the loop are reachable only from the server itself
+# (docker exec, or an SSH session). The dashboard comes in a later slice.
+name: atl
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-database-url: &database-url
+  ATL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_trading_lab}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@db:5432/${POSTGRES_DB:-ai_trading_lab}
+
+services:
+  db:
+    image: postgres:17.9-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ai_trading_lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_trading_lab}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  # One-shot: brings the schema to the version this image expects, then exits.
+  migrate:
+    build: .
+    image: atl-app:${ATL_IMAGE_TAG:-local}
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    environment:
+      <<: *database-url
+      ATL_EXECUTION_MODE: PAPER_ONLY
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  live:
+    build: .
+    image: atl-app:${ATL_IMAGE_TAG:-local}
+    command: ["/app/.venv/bin/atl-live", "run", "--until-stopped"]
+    environment:
+      <<: *database-url
+      # Fixed here on purpose: a typo in the env file can never enable anything else.
+      ATL_EXECUTION_MODE: PAPER_ONLY
+      # The AI strategy exists only when all four are set deliberately (docs/29 section 11).
+      ATL_AI_ENABLED: ${ATL_AI_ENABLED:-false}
+      ATL_AI_TOTAL_LIMIT_USD: ${ATL_AI_TOTAL_LIMIT_USD:-0}
+      ATL_AI_REVIEWED_PRICES: ${ATL_AI_REVIEWED_PRICES:-[]}
+      ATL_AI_PRICE_MAX_AGE_DAYS: ${ATL_AI_PRICE_MAX_AGE_DAYS:-14}
+      ATL_OPENAI_API_KEY: ${ATL_OPENAI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    # A cycle in flight is allowed to finish after SIGTERM.
+    stop_grace_period: 90s
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/atl-live", "health", "--max-age-minutes", "40"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 10m
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+volumes:
+  postgres_data:

@@ -90,8 +90,8 @@ change needs a new decision.
 | 1 | **Done (merged, PR #10)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
 | 2 | **Done (merged, PR #11)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | **Done (merged, PR #12), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
-| 4 | **Built on `feature/s4-strategy-toggles` (PR pending merge), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
-| 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
+| 4 | **Done (merged, PR #13), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
+| 5 | **Files built on `feature/s5-deployment` (docs/30); the deployment itself is done together with the user:** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | Dashboard v1: strategy cards, on/off switch, equity curve, P&L, trades, AI cost, plain-language status | Authenticated toggle works; browser tests green |
 | 7 | Real Telegram alerts (needs the user's bot token) | A test alert received |
 | 8 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
@@ -294,3 +294,15 @@ strategy id exits with code 2 and `{"status":"failed","error":"unknown strategy"
 holds (for example `no_market_data`) are not journaled either; the cycle report's `failures` still lists them. The audit actor
 is the OS user and informational only (it can be spoofed with an environment variable); the audit table has no tamper
 protection beyond database access control.
+
+## 13. Deployment (slice 5)
+
+Vendor chosen with the user: **Hetzner Cloud, EU**; backups pulled to the user's Mac nightly. The procedure is
+[docs/30-deployment-runbook.md](30-deployment-runbook.md); the files are `compose.prod.yaml` and `deploy/`. `atl-live health`
+(exit 0 when any strategy recorded equity within 40 minutes) is the container health check.
+
+Rehearsed locally on 2026-10-26 in an isolated Compose project (own database volume, no published ports, read-only containers
+with all capabilities dropped): image build, migrations (exit 0), `atl-live setup`, one real read-only Kraken cycle inside the
+container (3 benchmark fills, no errors), `docker compose ps` showing `live` healthy, a backup and a restore test with matching row
+counts, then teardown. **Not rehearsed:** the Hetzner server itself, `bootstrap.sh`, the systemd timer and `pull-backup.sh` over
+SSH, the AI strategy against the real OpenAI API. The 1-2 week clock starts when the loop first runs on the server.

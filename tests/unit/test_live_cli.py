@@ -307,3 +307,31 @@ async def test_an_unknown_strategy_is_reported_as_such(capsys: pytest.CaptureFix
 def test_the_actor_falls_back_to_the_uid_without_a_passwd_entry() -> None:
     with patch("getpass.getuser", side_effect=KeyError("no entry")):
         assert cli._user().startswith("uid:")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("healthy", "code"), [(True, 0), (False, 1)])
+async def test_health_exits_zero_only_when_the_loop_is_alive(
+    healthy: bool, code: int, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from datetime import UTC, datetime
+
+    engine, live = AsyncMock(), MagicMock()
+    live.clock = lambda: datetime(2026, 1, 1, tzinfo=UTC)
+    verdict: dict[str, Any] = {
+        "healthy": healthy,
+        "reason": "ok" if healthy else "stale",
+        "age_seconds": {},
+    }
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+        patch.object(cli, "health", AsyncMock(return_value=verdict)) as probe,
+    ):
+        assert await cli.run(args("health", "--max-age-minutes", "25")) == code
+    assert probe.await_args is not None
+    assert probe.await_args.args[2].total_seconds() == 25 * 60
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["healthy"] is healthy
+    engine.dispose.assert_awaited_once()
+    assert args("health").max_age_minutes == 40

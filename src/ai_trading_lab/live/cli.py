@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import sys
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,7 +23,7 @@ from ai_trading_lab.live.ai_strategy import AIConfig, AIDeps
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.engine import LiveEngine
 from ai_trading_lab.live.errors import CycleErrors, LoopIntegrityError
-from ai_trading_lab.live.status import summary
+from ai_trading_lab.live.status import health, summary
 from ai_trading_lab.live.worker import (
     AlreadyRunning,
     run_loop,
@@ -74,6 +75,8 @@ def parser() -> argparse.ArgumentParser:
         toggle.add_argument(
             "--reason", required=True, type=_reason, help="why (recorded in the audit trail)"
         )
+    probe = commands.add_parser("health", help="exit 0 if the loop recorded equity recently")
+    probe.add_argument("--max-age-minutes", type=_positive, default=40)
     audit = commands.add_parser("audit", help="print the on/off audit trail, newest first")
     audit.add_argument("--limit", type=_positive, default=20)
     loop = commands.add_parser("run", help="run the loop")
@@ -148,6 +151,10 @@ async def run(arguments: argparse.Namespace) -> int:
                 _emit({"status": "failed", "error": "unknown strategy", "strategy_id": strategy_id})
                 return 2
             _emit({"strategy_id": strategy_id, "enabled": enabled, "changed": changed})
+        elif arguments.command == "health":
+            verdict = await health(live, live.clock(), timedelta(minutes=arguments.max_age_minutes))
+            _emit(verdict)
+            return 0 if verdict["healthy"] else 1
         elif arguments.command == "audit":
             rows = await live.store.audit(limit=arguments.limit)
             _emit({"audit": [row.model_dump(mode="json") for row in rows]})

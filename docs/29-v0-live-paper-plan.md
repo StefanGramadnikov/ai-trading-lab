@@ -297,7 +297,7 @@ protection beyond database access control.
 
 ## 13. Deployment (slice 5)
 
-Vendor chosen with the user: **Hetzner Cloud, EU**; backups pulled to the user's Mac nightly. The procedure is
+Vendor chosen with the user: **Hetzner Cloud, EU**; backups pulled to the user's Mac by hand at least daily. The procedure is
 [docs/30-deployment-runbook.md](30-deployment-runbook.md); the files are `compose.prod.yaml` and `deploy/`. `atl-live health`
 (exit 0 when any strategy recorded equity within 40 minutes) is the container health check.
 
@@ -306,3 +306,5 @@ with all capabilities dropped): image build, migrations (exit 0), `atl-live setu
 container (3 benchmark fills, no errors), `docker compose ps` showing `live` healthy, a backup and a restore test with matching row
 counts, then teardown. **Not rehearsed:** the Hetzner server itself, `bootstrap.sh`, the systemd timer and `pull-backup.sh` over
 SSH, the AI strategy against the real OpenAI API. The 1-2 week clock starts when the loop first runs on the server.
+
+Review fixes of slice 5: the timer runs as `atl` (backups readable by scp), `bootstrap.sh` installs the timer (no sudo needed), a backup is kept only if it is a readable archive containing our tables, rotation keeps the newest 7 by count, the restore test fails on a bad restore, and the runbook states the limits of `health`, the restart behaviour and that `restore-test.sh` is a manual weekly check. Re-rehearsed locally after these changes (up --build, migrate exit 0, healthy, backup, restore test ok).

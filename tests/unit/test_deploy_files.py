@@ -97,29 +97,48 @@ def test_scripts_are_strict_executable_and_parse(script: Path) -> None:
     subprocess.run(["bash", "-n", str(script)], check=True)
 
 
-def test_backups_use_the_compose_db_and_never_keep_a_partial_file() -> None:
+def test_backups_verify_before_replacing_and_prune_by_count_never_by_age() -> None:
     backup = (ROOT / "deploy" / "backup.sh").read_text()
-    assert "exec -T db" in backup and "--env-file" in backup
-    assert ".partial" in backup and "mv " in backup and "sha256sum" in backup
-    assert "umask 077" in backup
+    assert "exec -T db" in backup and "--env-file" in backup and "umask 077" in backup
+    assert ".partial" in backup and "trap 'rm -f \"$partial\"' EXIT" in backup
+    # The dump is listed as an archive and must contain our tables before it is kept.
+    assert "pg_restore -l" in backup and "live_decisions" in backup
+    assert backup.index("pg_restore -l") < backup.index('mv "$partial"')
+    # Rotation keeps the newest N by name; a clock jump cannot delete good backups.
+    assert "-mtime" not in backup and "tail -n +$((keep + 1))" in backup
+    assert "free" in backup and "512" in backup
     # The checksum names the file relatively, so it verifies on the Mac as well as the server.
     assert '(cd "$backup_dir" && sha256sum "$(basename "$target")"' in backup
+
+
+def test_the_restore_test_never_touches_live_data_and_fails_on_a_bad_restore() -> None:
     restore = (ROOT / "deploy" / "restore-test.sh").read_text()
     assert "sha256sum -c" in restore and "dropdb" in restore and "restore check ok" in restore
-    # The restore test never writes into the live database.
     (line,) = [ln for ln in restore.splitlines() if "pg_restore" in ln and "dc sh" in ln]
-    assert "-d $scratch" in line and "POSTGRES_DB" not in line
+    assert "-d $scratch" in line and "POSTGRES_DB" not in line and "--exit-on-error" in line
+    assert "restored -gt $live" in restore.replace('"', "") or "-gt" in restore
+    assert "restored empty although" in restore
 
 
-def test_the_bootstrap_opens_ssh_only_and_leaves_ssh_settings_alone() -> None:
+def test_the_bootstrap_opens_ssh_only_installs_the_timer_and_leaves_ssh_settings_alone() -> None:
     text = (ROOT / "deploy" / "bootstrap.sh").read_text()
     assert "ufw default deny incoming" in text and "ufw allow OpenSSH" in text
     assert "ufw allow 80" not in text and "ufw allow 443" not in text
-    assert "sshd_config" not in text and "PasswordAuthentication" not in text.split("\n", 6)[-1]
+    assert "sshd_config" not in text and "PasswordAuthentication" not in text
+    assert "enable --now atl-backup.timer" in text and "force-confold" in text
+    assert "sudoers" not in text  # the deployment account gets no sudo
 
 
-def test_the_timer_runs_the_backup_script() -> None:
+def test_the_timer_runs_the_backup_as_the_deployment_account() -> None:
     service = (ROOT / "deploy" / "atl-backup.service").read_text()
     assert "ExecStart=/opt/atl/ai-trading-lab/deploy/backup.sh" in service
+    assert "User=atl" in service and "Group=atl" in service
     timer = (ROOT / "deploy" / "atl-backup.timer").read_text()
     assert "OnCalendar=" in timer and "Persistent=true" in timer
+
+
+def test_the_runbook_only_asks_for_commands_the_deployment_account_can_run() -> None:
+    text = (ROOT / "docs" / "30-deployment-runbook.md").read_text()
+    commands = [ln for ln in text.splitlines() if ln.strip().startswith("sudo ")]
+    assert commands == []
+    assert "scp -r deploy" in text and "run --rm live" not in text

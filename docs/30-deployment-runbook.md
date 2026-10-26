@@ -32,16 +32,19 @@ On your Mac (replace `SERVER` with the IPv4):
 
 ```bash
 ssh root@SERVER 'mkdir -p /root/atl && echo ok'
-scp deploy/bootstrap.sh root@SERVER:/root/atl/
-ssh root@SERVER 'bash /root/atl/bootstrap.sh'
+scp -r deploy root@SERVER:/root/atl/
+ssh root@SERVER 'bash /root/atl/deploy/bootstrap.sh'
 ```
 
 Read `deploy/bootstrap.sh` first: it updates packages, installs Docker and git from Ubuntu's repositories, opens only SSH in the
-firewall, turns on automatic security updates and creates an unprivileged `atl` account. Then confirm you can log in as that account
-**before** doing anything else: `ssh atl@SERVER`.
+firewall, turns on automatic security updates, creates a non-root `atl` account (it is in the `docker` group, which is effectively root
+on this machine, so guard its key) and installs and starts the nightly backup timer. If it prints that a reboot is required,
+run `ssh root@SERVER reboot` and wait a minute. Then confirm you can log in as that account **before** doing anything else:
+`ssh atl@SERVER`. The `atl` account has no `sudo`; anything that needs root is done through `ssh root@SERVER`.
 
-Optional hardening, only after `ssh atl@SERVER` works: in `/etc/ssh/sshd_config.d/` set `PasswordAuthentication no` and
-`PermitRootLogin no`, then `sudo systemctl reload ssh`. Keep your current session open until a second login works.
+Optional hardening, only after `ssh atl@SERVER` works: as root, in `/etc/ssh/sshd_config.d/` set `PasswordAuthentication no`
+(Hetzner servers created with an SSH key have no root password anyway) and reload with `systemctl reload ssh`. Keep your current
+session open until a second login works. Keep root login while you follow this runbook; it is how you do root steps.
 
 ## 4. Ship the code and start the loop
 
@@ -61,13 +64,16 @@ On the server:
 ```bash
 cd /opt/atl && tar xzf atl.tgz && echo "<the commit id>" > /opt/atl/DEPLOYED_COMMIT
 chmod 600 /opt/atl/.env.prod
-nano /opt/atl/.env.prod        # set POSTGRES_PASSWORD (openssl rand -hex 24) and ATL_IMAGE_TAG (the short commit id)
+nano /opt/atl/.env.prod        # set POSTGRES_PASSWORD to the output of: openssl rand -hex 24  (hex only: other characters break the database URL)
+                               # and ATL_IMAGE_TAG to the short commit id
 cd /opt/atl/ai-trading-lab
 docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod build
-docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod up -d db migrate
-docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod run --rm live /app/.venv/bin/atl-live setup
-docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod up -d live
+docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod up -d
+docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod ps -a
 ```
+
+`ps -a` must show `db` healthy, `migrate` **Exited (0)** and `live` running. If `migrate` exited with another code, `live` never
+starts: read `docker compose ... logs migrate` and stop there. The loop creates its portfolios itself on first start.
 
 Always pass `--env-file /opt/atl/.env.prod` (Compose otherwise reads a `.env` file from the current directory). To save typing:
 `alias dc='docker compose -f /opt/atl/ai-trading-lab/compose.prod.yaml --env-file /opt/atl/.env.prod'`.
@@ -81,7 +87,9 @@ dc exec live /app/.venv/bin/atl-live status
 dc exec live /app/.venv/bin/atl-live health   # {"healthy": true, ...} once the first cycle has run
 ```
 
-The first cycle starts within 15 minutes. The health check turns healthy after the first cycle and `docker compose ps` then
+The first cycle starts within 15 minutes. `health` reports healthy while a recent cycle exists, so after a crash or a kill switch it
+stays green for up to 40 minutes, and it turns unhealthy during a Kraken outage longer than 40 minutes; it is a label for you, Docker
+does not restart on it. The health check turns healthy after the first cycle and `docker compose ps` then
 shows `healthy` for `live`. Rules and benchmark run from the start; the benchmark buys its three positions on the first cycle.
 The rules strategy needs 48 hours of candle history before it can signal (it collects as it runs), and the AI strategy is off
 until section 7.
@@ -91,16 +99,19 @@ The loop holds a database lock, so a second copy cannot trade by accident, and r
 
 ## 6. Backups
 
-Install the nightly timer (as root or with sudo) and take the first backup by hand:
+`bootstrap.sh` already installed the nightly timer (03:15 UTC, runs as `atl`). Check it and take the first backup by hand:
 
 ```bash
-sudo cp /opt/atl/ai-trading-lab/deploy/atl-backup.service /opt/atl/ai-trading-lab/deploy/atl-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now atl-backup.timer
+systemctl list-timers atl-backup.timer            # shows the next run
 /opt/atl/ai-trading-lab/deploy/backup.sh          # prints the file it wrote
 /opt/atl/ai-trading-lab/deploy/restore-test.sh /var/backups/atl/<that file>   # must end with: restore check ok
 ```
 
-The server keeps 7 days of backups. **Pull a copy to your Mac** (agreed backup target) at least once a day while the run lasts:
+`backup.sh` refuses a dump that is not a readable archive containing our tables, never deletes older backups by age (it keeps the
+newest 7) and stops if less than 512 MB is free. The nightly timer only *makes* backups; **run `restore-test.sh` yourself about once a
+week** and after any change to the deployment. The first test, taken before the first trading cycle, may show empty tables; that is fine.
+
+The server keeps the newest 7 backups. **Pull a copy to your Mac** (agreed backup target) at least once a day while the run lasts:
 
 ```bash
 deploy/pull-backup.sh atl@SERVER      # copies the newest dump to ~/atl-backups and verifies its checksum
@@ -117,8 +128,8 @@ Do this only after sections 5 and 6 pass and the loop has run a few hours. The A
    (`gpt-5.6-terra`) comes from a 2026-10-19 note and may be out of date.
 2. Put the separate server key in `/opt/atl/.env.prod` as `ATL_OPENAI_API_KEY`, set `ATL_AI_ENABLED=true`,
    `ATL_AI_TOTAL_LIMIT_USD=10` and the price line. Never paste the key into chat, git or a ticket.
-3. `dc up -d live` (recreates the container), then `dc run --rm live /app/.venv/bin/atl-live setup` (registers the AI strategy),
-   then `dc logs live | head`: the first line must say `{"ai": "ai_enabled"}`. Any other value names what is missing.
+3. `dc up -d live` (recreates the container; the loop registers the AI strategy itself on start), then
+   `dc logs live | grep '"ai"' | tail -1`: it must say `{"ai": "ai_enabled"}`. Any other value names what is missing.
 4. After the first 4-hour review window, `atl-live status` shows the AI decisions with their cost. Check the cost against the
    OpenAI dashboard once; the application's figures are estimates, the invoice is authoritative.
 
@@ -135,7 +146,11 @@ within one cycle and spends nothing from then on). To remove the key entirely, d
 
 ## 9. Stop, update, roll back, tear down
 
-- **Stop trading now:** `deploy/kill-switch.sh`. Paper positions stay in the database; start again with `dc up -d live`.
+- **Stop trading now:** `deploy/kill-switch.sh`. Paper positions stay in the database; start again with `dc up -d live`. Note that
+  any later `dc up -d` (for example when updating) also starts it again.
+- **`live` keeps restarting:** Docker restarts it after every failure, including the two exits that mean "another loop holds the lock"
+  and "the paper ledger failed an integrity check". Neither trades on a bad state (each cycle fails again at once), but if
+  `dc ps` shows it restarting, run `deploy/kill-switch.sh`, keep the logs and a backup, and ask for help.
 - **Pause one strategy:** `atl-live disable <rules|ai|benchmark> --reason "..."`. Exits still run (docs/29 section 12).
 - **Update:** send a new tarball (section 4), `dc build`, then `dc up -d migrate live`. Record the new commit id. Never change
   numbers (risk, fees, intervals) mid-experiment without a new decision; changing the strategy changes the experiment.

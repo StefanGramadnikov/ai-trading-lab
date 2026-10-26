@@ -1694,3 +1694,9 @@ call, answer, usage and cost behind each decision), a provider destination guard
 outcomes with a daily breaker, a configurable price window, and explicit activation (`ATL_AI_ENABLED`, key, cap above zero,
 a reviewed price). No paid or network call was made in this slice: tests use a stub model and the fixture provider.
 See docs/29 section 11.
+
+## 2026-10-26 — V0 slice 4: strategy on/off with an audit trail (branch `feature/s4-strategy-toggles`)
+
+Cut from `main` after PR #12 merged. `atl-live enable|disable <strategy> --reason` and `atl-live audit`, migration 0014
+(`live_strategy_audit`), a toggle and its audit row in one transaction, and wind-down semantics for a disabled strategy
+(exits still run, no entries, no model calls). The old "frozen when disabled" test was rewritten. See docs/29 section 12.

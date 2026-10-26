@@ -419,3 +419,19 @@ async def test_a_review_that_was_never_put_is_asked_again_next_cycle(engine: Asy
     r.venue.rows = None
     await r.cycle(minutes_later=15)
     assert len(stub.requests) == 3
+
+
+async def test_a_disabled_ai_strategy_asks_nothing_but_still_stops_out(engine: AsyncEngine) -> None:
+    stub = Stub(lambda _body: "buy")
+    r = await start(engine, stub)
+    await r.cycle()
+    asked = len(stub.requests)
+    assert asked == 3 and len((await r.portfolio()).positions) == 2
+    await r.store.set_enabled(r.live.ai_id, False, actor="test", reason="cost")
+    r.venue.scale = D("0.9")  # past the 5% stop, and four hours on: every pair would be due
+    report = await r.cycle(minutes_later=240)
+    # The loss gate may name itself first; either way no entry is possible.
+    assert report.errors == [] and report.strategies[r.live.ai_id].blocked is not None
+    assert len(stub.requests) == asked  # no model call and no spend while it is off
+    assert (await r.portfolio()).positions == ()
+    assert {d.reason for d in await r.decisions() if d.action == "sell"} == {"stop_loss"}

@@ -242,7 +242,7 @@ class LiveEngine:
         # The strategy that owns the mechanical exits runs first.
         own = self.strategy_ids
         strategies = sorted(
-            (s for s in await self.store.strategies() if s.strategy_id in own),
+            (s for s in await self.store.strategies(enabled_only=False) if s.strategy_id in own),
             key=lambda s: (s.kind != "rules", s.strategy_id),
         )
         for strategy in strategies:
@@ -345,6 +345,8 @@ class LiveEngine:
             nonlocal submitted
             for decision in decisions:
                 if decision.order is None:
+                    if off:
+                        continue  # nothing to journal every cycle for a strategy that is off
                     await self.store.log_decision(
                         sid, decision.pair, now, decision.action, decision.reason, decision.detail
                     )
@@ -368,6 +370,10 @@ class LiveEngine:
             if await self.paper.command_count(strategy.portfolio_id) >= COMMAND_SOFT_LIMIT
             else None
         )
+        # A switched-off strategy winds down: no new entries and no model calls, but its mechanical
+        # exits still run, so switching it off never leaves a position unmanaged.
+        off = not strategy.enabled
+        capacity = capacity or ("strategy_disabled" if off else None)
         if strategy.kind in ("rules", "ai"):
             if equity is not None:
                 risk, blocked = update_risk(
@@ -403,9 +409,11 @@ class LiveEngine:
                 if exits:
                     state = await self.paper.get(strategy.portfolio_id)
                     equity, marks = self._value(state, markets, policy, now)
-                proposals, loop = await self._review(
-                    strategy, markets, candles, state, loop, marks, equity, blocked, now
-                )
+                proposals: dict[str, Proposal] = {}
+                if not off:
+                    proposals, loop = await self._review(
+                        strategy, markets, candles, state, loop, marks, equity, blocked, now
+                    )
                 later = decide_ai(
                     **common,
                     state=state,

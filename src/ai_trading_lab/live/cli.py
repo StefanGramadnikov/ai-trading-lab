@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import json
 import signal
 import sys
@@ -39,6 +40,13 @@ def _positive(value: str) -> int:
     return number
 
 
+def _reason(value: str) -> str:
+    text = value.strip()
+    if not 1 <= len(text) <= 200:
+        raise argparse.ArgumentTypeError("must be 1 to 200 characters")
+    return text
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="V0 live paper loop (PAPER_ONLY, no real orders)")
     commands = root.add_subparsers(dest="command", required=True)
@@ -48,6 +56,17 @@ def parser() -> argparse.ArgumentParser:
         ("status", "print strategies, holdings, equity and recent decisions"),
     ):
         commands.add_parser(name, help=help_text)
+    for name, help_text in (
+        ("enable", "switch a strategy on (takes effect at the next cycle)"),
+        ("disable", "switch a strategy off: no new entries or AI calls, exits still run"),
+    ):
+        toggle = commands.add_parser(name, help=help_text)
+        toggle.add_argument("strategy", help="rules, ai, benchmark, or a full strategy id")
+        toggle.add_argument(
+            "--reason", required=True, type=_reason, help="why (recorded in the audit trail)"
+        )
+    audit = commands.add_parser("audit", help="print the on/off audit trail, newest first")
+    audit.add_argument("--limit", type=_positive, default=20)
     loop = commands.add_parser("run", help="run the loop")
     bound = loop.add_mutually_exclusive_group(required=True)
     bound.add_argument("--cycles", type=_positive, help="stop after this many cycles")
@@ -100,7 +119,7 @@ async def run(arguments: argparse.Namespace) -> int:
     config = LiveConfig()
     ai, ai_note = build_ai(settings, engine)
     live = LiveEngine(engine, lambda: HttpTransport(), config, ai=ai)
-    if arguments.command != "status":
+    if arguments.command in ("setup", "cycle", "run"):
         _emit({"ai": ai_note})
     try:
         if arguments.command == "setup":
@@ -108,6 +127,20 @@ async def run(arguments: argparse.Namespace) -> int:
             _emit(await summary(live))
         elif arguments.command == "status":
             _emit(await summary(live))
+        elif arguments.command in ("enable", "disable"):
+            aliases = {"rules": live.rules_id, "ai": live.ai_id, "benchmark": live.benchmark_id}
+            strategy_id = aliases.get(arguments.strategy, arguments.strategy)
+            enabled = arguments.command == "enable"
+            changed = await live.store.set_enabled(
+                strategy_id,
+                enabled,
+                actor=f"cli:{getpass.getuser()}",
+                reason=arguments.reason,
+            )
+            _emit({"strategy_id": strategy_id, "enabled": enabled, "changed": changed})
+        elif arguments.command == "audit":
+            rows = await live.store.audit(limit=arguments.limit)
+            _emit({"audit": [row.model_dump(mode="json") for row in rows]})
         elif arguments.command == "cycle":
             # A manual cycle takes the same lock as the loop, so two writers can never overlap.
             async with single_instance(engine):

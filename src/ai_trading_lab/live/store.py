@@ -7,7 +7,7 @@ resubmitting the same idempotency key, which the paper broker answers without a 
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -91,6 +91,20 @@ live_decisions = Table(
 Index(
     "ix_live_decisions_strategy_time", live_decisions.c.strategy_id, live_decisions.c.cycle_at_utc
 )
+live_strategy_audit = Table(
+    "live_strategy_audit",
+    metadata,
+    Column("seq", BigInteger, Identity(always=True), primary_key=True),
+    Column("strategy_id", String(100), nullable=False),
+    Column("at_utc", DateTime(timezone=True), nullable=False),
+    Column("actor", String(100), nullable=False),
+    Column("action", String(20), nullable=False),
+    Column("enabled", Boolean, nullable=False),
+    Column("reason", String(200), nullable=False),
+)
+Index(
+    "ix_live_strategy_audit_strategy", live_strategy_audit.c.strategy_id, live_strategy_audit.c.seq
+)
 live_state = Table(
     "live_state",
     metadata,
@@ -153,6 +167,16 @@ class DecisionRow(FrozenModel):
     status: str
     result: dict[str, Any] | None = None
     detail: dict[str, Any] | None = None
+
+
+class AuditRow(FrozenModel):
+    seq: int
+    strategy_id: str
+    at_utc: AwareDatetime
+    actor: str
+    action: str
+    enabled: bool
+    reason: str
 
 
 class EquityPoint(FrozenModel):
@@ -218,15 +242,55 @@ class LiveStore:
             for r in rows
         ]
 
-    async def set_enabled(self, strategy_id: str, enabled: bool) -> None:
+    async def set_enabled(
+        self,
+        strategy_id: str,
+        enabled: bool,
+        *,
+        actor: str = "system",
+        reason: str = "",
+        at: datetime | None = None,
+    ) -> bool:
+        """Switch a strategy on or off and journal who did it and why, in one transaction.
+
+        Returns whether anything changed. A repeat of the current state changes and records
+        nothing, so a retried command is harmless.
+        """
         async with self.engine.begin() as connection:
-            done = await connection.execute(
+            current = await connection.scalar(
+                select(live_strategies.c.enabled)
+                .where(live_strategies.c.strategy_id == strategy_id)
+                .with_for_update()
+            )
+            if current is None:
+                raise ValueError("unknown strategy")
+            if current == enabled:
+                return False
+            await connection.execute(
                 update(live_strategies)
                 .where(live_strategies.c.strategy_id == strategy_id)
                 .values(enabled=enabled)
             )
-            if done.rowcount != 1:
-                raise ValueError("unknown strategy")
+            await connection.execute(
+                insert(live_strategy_audit).values(
+                    strategy_id=strategy_id,
+                    at_utc=at or datetime.now(UTC),
+                    actor=actor[:100],
+                    action="enable" if enabled else "disable",
+                    enabled=enabled,
+                    reason=reason[:200],
+                )
+            )
+        return True
+
+    async def audit(self, strategy_id: str | None = None, limit: int = 50) -> list[AuditRow]:
+        """Newest first."""
+        statement = select(live_strategy_audit).order_by(live_strategy_audit.c.seq.desc())
+        if strategy_id is not None:
+            statement = statement.where(live_strategy_audit.c.strategy_id == strategy_id)
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement.limit(limit))).mappings().all()
+        return [AuditRow.model_validate(dict(r)) for r in rows]
 
     # ---- candles ----------------------------------------------------------------------
 

@@ -1684,3 +1684,13 @@ Independent review of slice 2 (no critical findings) drove: exits exempt from th
 exhaust the command cap (guard at 900), strategy failure isolation, integrity-error exit codes, lock lease verification,
 own-session strategy filtering, ledger-ordered order stamps, OBSERVED-only fills for live portfolios. Full gate:
 ruff format/check clean, mypy 190 files clean, 1389 tests passed, coverage 95.15%. See docs/29 section 10.
+
+## 2026-10-25 — V0 slice 3: the AI strategy (branch `feature/s3-ai-proposer`)
+
+Cut from `main` after PR #11 merged. Adds a third live strategy that asks the model for a direction every 4 h per pair
+(only when the answer could change what the deterministic code does), through the existing budget guard. New: numeric-only
+snapshots, `Proposal`/`decide_ai`/`review_candidates` (pure), `Proposer`, migration 0013 (`live_decisions.detail`: the AI
+call, answer, usage and cost behind each decision), a provider destination guard, DEC-044 worst-case settlement of unknown
+outcomes with a daily breaker, a configurable price window, and explicit activation (`ATL_AI_ENABLED`, key, cap above zero,
+a reviewed price). No paid or network call was made in this slice: tests use a stub model and the fixture provider.
+See docs/29 section 11.

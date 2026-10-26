@@ -18,6 +18,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_trading_lab.live.ai_strategy import AIDeps, Proposer, held_info
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.errors import LoopIntegrityError
 from ai_trading_lab.live.risk import RiskState, update_risk
@@ -26,10 +27,13 @@ from ai_trading_lab.live.strategies import (
     Decision,
     Mark,
     Market,
+    Proposal,
+    decide_ai,
     decide_benchmark,
     decide_rules,
     held_position,
     liquidation,
+    review_candidates,
 )
 from ai_trading_lab.market_data.adapters.kraken import KrakenAdapter, parse_candles
 from ai_trading_lab.market_data.models import Batch, DataQuality, FrozenModel, Source, Transport
@@ -156,9 +160,12 @@ class LiveEngine:
         *,
         clock: Callable[[], datetime] = _utcnow,
         session: str = "v0",
+        ai: AIDeps | None = None,
     ) -> None:
         self.engine, self.transport, self.config = engine, transport, config
         self.clock, self.session = clock, session
+        # Without AI dependencies the AI strategy does not exist: nothing is asked or paid for.
+        self.proposer = Proposer(ai, session) if ai is not None else None
         self.store, self.paper = LiveStore(engine), PaperStore(engine)
         self.observations = ObservationStore(engine)
 
@@ -170,15 +177,30 @@ class LiveEngine:
     def benchmark_id(self) -> str:
         return f"{self.session}-benchmark"
 
+    @property
+    def ai_id(self) -> str:
+        return f"{self.session}-ai"
+
+    @property
+    def strategy_ids(self) -> set[str]:
+        ids = {self.rules_id, self.benchmark_id}
+        return ids | {self.ai_id} if self.proposer is not None else ids
+
     # ---- setup ------------------------------------------------------------------------
 
     async def setup(self) -> None:
         """Create the strategies' portfolios and registry rows; safe to repeat, never mutates."""
         now = self.clock()
-        for strategy_id, kind, policy in (
+        plan = [
             (self.rules_id, "rules", self.config.policy()),
             (self.benchmark_id, "benchmark", self.config.benchmark_policy()),
-        ):
+        ]
+        extra: dict[str, Any] = {}
+        if self.proposer is not None:
+            await self.proposer.ensure_budget()
+            plan.append((self.ai_id, "ai", self.config.policy()))
+            extra[self.ai_id] = {"ai": self.proposer.deps.config.model_dump(mode="json")}
+        for strategy_id, kind, policy in plan:
             portfolio_id = uuid5(NAMESPACE_URL, f"ai-trading-lab/live/{strategy_id}")
             await self.paper.create(
                 portfolio_id,
@@ -195,6 +217,7 @@ class LiveEngine:
                 {
                     "live": self.config.model_dump(mode="json"),
                     "policy": policy.model_dump(mode="json"),
+                    **extra.get(strategy_id, {}),
                 },
                 now,
             )
@@ -217,7 +240,7 @@ class LiveEngine:
         reports: dict[str, StrategyReport] = {}
         errors: list[str] = []
         # The strategy that owns the mechanical exits runs first.
-        own = {self.rules_id, self.benchmark_id}
+        own = self.strategy_ids
         strategies = sorted(
             (s for s in await self.store.strategies() if s.strategy_id in own),
             key=lambda s: (s.kind != "rules", s.strategy_id),
@@ -312,16 +335,40 @@ class LiveEngine:
         state = await self.paper.get(strategy.portfolio_id)
         loop = await self.store.load_state(sid) or self._new_loop(now)
         policy = (
-            self.config.policy() if strategy.kind == "rules" else self.config.benchmark_policy()
+            self.config.benchmark_policy() if strategy.kind == "benchmark" else self.config.policy()
         )
         equity, marks = self._value(state, markets, policy, now)
+        report = {"orders": 0, "filled": 0, "rejected": 0, "holds": 0}
+        submitted = 0
+
+        async def place(decisions: list[Decision], loop: LoopState) -> LoopState:
+            nonlocal submitted
+            for decision in decisions:
+                if decision.order is None:
+                    await self.store.log_decision(
+                        sid, decision.pair, now, decision.action, decision.reason, decision.detail
+                    )
+                    report["holds"] += 1
+                    continue
+                at = now + submitted * ORDER_SPACING
+                loop, status = await self._execute(
+                    strategy, decision, markets[decision.pair], at, loop, policy
+                )
+                if status == "skipped":
+                    report["holds"] += 1  # refused before submission: no ledger command was spent
+                    continue
+                submitted += 1
+                report["orders"] += 1
+                report["filled" if status in ("filled", "partial") else "rejected"] += 1
+            return loop
+
         blocked: str | None = None
         capacity = (
             "command_capacity"
             if await self.paper.command_count(strategy.portfolio_id) >= COMMAND_SOFT_LIMIT
             else None
         )
-        if strategy.kind == "rules":
+        if strategy.kind in ("rules", "ai"):
             if equity is not None:
                 risk, blocked = update_risk(
                     loop.risk, equity, now, self.config.initial_cash, self.config.risk
@@ -338,17 +385,49 @@ class LiveEngine:
                 )
                 for p in self.config.pairs
             }
-            decisions = decide_rules(
-                config=self.config,
-                now=now,
-                markets=markets,
-                candles=candles,
-                state=state,
-                loop=loop,
-                marks=marks,
-                equity=equity,
-                blocked=blocked,
-            )
+            if strategy.kind == "ai":
+                common: dict[str, Any] = {"config": self.config, "now": now, "markets": markets}
+                # Mechanical exits never wait for the model: place them before any call is made.
+                first = decide_ai(
+                    **common,
+                    state=state,
+                    loop=loop,
+                    marks=marks,
+                    equity=equity,
+                    blocked=blocked,
+                    proposals={},
+                )
+                exits = [d for d in first if d.action == "sell"]
+                loop = await place(exits, loop)
+                exited = {d.pair for d in exits}
+                if exits:
+                    state = await self.paper.get(strategy.portfolio_id)
+                    equity, marks = self._value(state, markets, policy, now)
+                proposals, loop = await self._review(
+                    strategy, markets, candles, state, loop, marks, equity, blocked, now
+                )
+                later = decide_ai(
+                    **common,
+                    state=state,
+                    loop=loop,
+                    marks=marks,
+                    equity=equity,
+                    blocked=blocked,
+                    proposals=proposals,
+                )
+                decisions = [d for d in later if d.pair not in exited]
+            else:
+                decisions = decide_rules(
+                    config=self.config,
+                    now=now,
+                    markets=markets,
+                    candles=candles,
+                    state=state,
+                    loop=loop,
+                    marks=marks,
+                    equity=equity,
+                    blocked=blocked,
+                )
         else:
             blocked = capacity
             decisions = decide_benchmark(
@@ -359,25 +438,7 @@ class LiveEngine:
                 loop=loop,
                 blocked=blocked,
             )
-        report = {"orders": 0, "filled": 0, "rejected": 0, "holds": 0}
-        submitted = 0
-        for decision in decisions:
-            if decision.order is None:
-                await self.store.log_decision(
-                    sid, decision.pair, now, decision.action, decision.reason
-                )
-                report["holds"] += 1
-                continue
-            at = now + submitted * ORDER_SPACING
-            loop, status = await self._execute(
-                strategy, decision, markets[decision.pair], at, loop, policy
-            )
-            if status == "skipped":
-                report["holds"] += 1  # refused before submission: no ledger command was spent
-                continue
-            submitted += 1
-            report["orders"] += 1
-            report["filled" if status in ("filled", "partial") else "rejected"] += 1
+        loop = await place(decisions, loop)
         await self.store.save_state(sid, loop, now)
         if report["orders"]:
             # Record what was actually paid: equity after this cycle's fills, fees and spread.
@@ -386,6 +447,81 @@ class LiveEngine:
         if equity is not None:
             await self.store.record_equity(sid, now, equity, state.cash, equity - state.cash)
         return StrategyReport(equity=equity, blocked=blocked, **report)
+
+    async def _review(
+        self,
+        strategy: StrategyRow,
+        markets: Mapping[str, Market],
+        candles: Mapping[str, Any],
+        state: Any,
+        loop: LoopState,
+        marks: Mapping[str, Mark | None],
+        equity: Decimal | None,
+        blocked: str | None,
+        now: datetime,
+    ) -> tuple[dict[str, Proposal], LoopState]:
+        """Ask the AI about each pair that is due and could change what the rules would do."""
+        assert self.proposer is not None
+        interval = timedelta(hours=self.proposer.deps.config.review_interval_hours)
+        due = review_candidates(
+            config=self.config,
+            now=now,
+            interval=interval,
+            markets=markets,
+            state=state,
+            loop=loop,
+            marks=marks,
+            equity=equity,
+            blocked=blocked,
+        )
+        slot = int(now.timestamp() // self.config.cycle_seconds)
+        proposals: dict[str, Proposal] = {}
+        for pair in due:
+            market = markets[pair]
+            position = held_position(state, market.quote.instrument)
+            held = None
+            if position is not None:
+                mark = marks.get(pair)
+                price = mark.price if mark is not None else market.quote.bids[0].price
+                held = held_info(
+                    cost_basis=position.cost_basis,
+                    quantity=position.quantity,
+                    mark_price=price,
+                    entered_at=loop.entered_at.get(pair, now),
+                    now=now,
+                )
+            # Stamped before the call: a crash during or after a paid call must not pay for the
+            # same review again. A question that was never put is unstamped again below.
+            previous = loop.last_review_at.get(pair)
+            loop = loop.model_copy(update={"last_review_at": {**loop.last_review_at, pair: now}})
+            await self.store.save_state(strategy.strategy_id, loop, now)
+            try:
+                proposal = await self.proposer.propose(
+                    strategy_id=strategy.strategy_id,
+                    pair=pair,
+                    market=market,
+                    candles=list(candles.get(pair, ())),
+                    held=held,
+                    now=now,
+                    slot=slot,
+                    live=self.config,
+                )
+            except LoopIntegrityError:
+                raise
+            except Exception as exc:  # no AI failure may stop this strategy's other work
+                proposal = Proposal(
+                    action="hold",
+                    reason=f"ai_unavailable_{type(exc).__name__.lower()}"[:100],
+                    reviewed=False,
+                )
+            proposals[pair] = proposal
+            if not proposal.reviewed:
+                stamps = {k: v for k, v in loop.last_review_at.items() if k != pair}
+                if previous is not None:
+                    stamps[pair] = previous
+                loop = loop.model_copy(update={"last_review_at": stamps})
+                await self.store.save_state(strategy.strategy_id, loop, now)
+        return proposals, loop
 
     @staticmethod
     def _value(
@@ -447,7 +583,12 @@ class LiveEngine:
                 refusal = outcome.reason
         if refusal is not None:
             await self.store.log_decision(
-                strategy.strategy_id, decision.pair, at, decision.action, f"preflight_{refusal}"
+                strategy.strategy_id,
+                decision.pair,
+                at,
+                decision.action,
+                f"preflight_{refusal}",
+                decision.detail,
             )
             return loop, "skipped"
         planned = await self.store.plan_decision(
@@ -459,6 +600,7 @@ class LiveEngine:
             key,
             intent.model_dump(mode="json"),
             market.entry.model_dump(mode="json"),
+            decision.detail,
         )
         if not planned.created:
             # Handled before a restart, or planned by another writer: never submit it again here.

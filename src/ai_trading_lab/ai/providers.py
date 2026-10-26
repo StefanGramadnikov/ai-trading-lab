@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from typing import Protocol
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx2
@@ -13,6 +15,9 @@ from pydantic import SecretStr
 
 from ai_trading_lab.ai.models import AIRequest, ModelAnswer, ProviderName, ProviderResult, Usage
 from ai_trading_lab.market_data.models import parse_json
+from ai_trading_lab.market_data.transport import _system_resolver, is_public_address
+
+Resolver = Callable[[str], Awaitable[list[str]]]
 
 _ORIGINS = {
     "openai": "https://api.openai.com/v1/responses",
@@ -281,14 +286,39 @@ def _decode(request: AIRequest, raw: bytes) -> ProviderResult:
         )
 
 
+def _peer_is_public(response: httpx2.Response, strict: bool = False) -> bool:
+    """Who actually answered; DNS may differ between the check and the connect.
+
+    A transport that exposes no socket (an in-process test transport) cannot be checked, so it
+    passes unless `strict` (a provider that built its own client must show who answered).
+    """
+    stream = response.extensions.get("network_stream")
+    lookup = getattr(stream, "get_extra_info", None)
+    if not callable(lookup):
+        return not strict
+    server = lookup("server_addr")
+    peer = server[0] if isinstance(server, tuple) and server else None
+    return isinstance(peer, str) and is_public_address(peer)
+
+
 class HTTPProvider:
     def __init__(
-        self, name: ProviderName, key: SecretStr, client: httpx2.AsyncClient | None = None
+        self,
+        name: ProviderName,
+        key: SecretStr,
+        client: httpx2.AsyncClient | None = None,
+        resolver: Resolver | None = None,
     ) -> None:
         if name not in _ORIGINS or not key.get_secret_value().strip():
             raise ValueError("provider_and_key_required")
         self.name = name
         self._key = key
+        # The API key is only ever sent to a publicly routable address. A provider that builds its
+        # own client checks the real DNS answer; an injected client (a test or controlled
+        # transport) is only checked when a resolver is given explicitly.
+        self._resolver = (
+            resolver if resolver is not None else (_system_resolver if client is None else None)
+        )
         self._owned = client is None
         self._client = (
             client
@@ -327,6 +357,24 @@ class HTTPProvider:
             )
         return None
 
+    async def destination(self, request: AIRequest) -> ProviderResult | None:
+        """Local rejection before any reservation: the fixed host must resolve publicly."""
+        if self._resolver is None:
+            return None
+        host = urlsplit(_ORIGINS[self.name]).hostname or ""
+        try:
+            async with asyncio.timeout(request.timeout_seconds):
+                addresses = await self._resolver(host)
+        except (OSError, TimeoutError):
+            return ProviderResult(
+                status="invalid", model=request.model, reason="destination_unresolvable"
+            )
+        if not addresses or not all(is_public_address(address) for address in addresses):
+            return ProviderResult(
+                status="invalid", model=request.model, reason="unsafe_destination"
+            )
+        return None
+
     async def analyze(self, request: AIRequest) -> ProviderResult:
         if (rejected := self.preflight(request)) is not None:
             return rejected
@@ -348,6 +396,12 @@ class HTTPProvider:
                     follow_redirects=False,
                     timeout=request.timeout_seconds,
                 ) as response:
+                    if self._resolver is not None and not _peer_is_public(response, self._owned):
+                        return ProviderResult(
+                            status="unknown",
+                            model=request.model,
+                            reason="unsafe_peer_unknown_billing",
+                        )
                     if response.status_code != 200:
                         return ProviderResult(
                             status="error", model=request.model, reason="http_error_unknown_billing"

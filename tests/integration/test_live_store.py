@@ -131,3 +131,34 @@ async def test_recent_reads_return_the_newest_rows_in_time_order_with_a_true_cou
     assert [d.reason for d in recent] == ["r9", "r10", "r11"]
     curve = await store.equity_curve(sid, limit=4)
     assert [p.equity for p in curve] == [D(108), D(109), D(110), D(111)]
+
+
+async def test_decision_detail_roundtrips_for_holds_and_planned_orders(
+    engine: AsyncEngine,
+) -> None:
+    store, sid = LiveStore(engine), f"detail-{uuid4().hex[:6]}"
+    detail = {"call_id": "c-1", "cost_usd": "0.004", "answer": {"action": "buy"}}
+    await store.log_decision(sid, "XBTEUR", NOW, "hold", "ai_abstain", detail)
+    await store.log_decision(sid, "ETHEUR", NOW, "hold", "no_breakout")
+    planned = await store.plan_decision(
+        sid, "SOLEUR", NOW, "buy", "ai_buy", "k1", {"i": 1}, {"e": 1}, detail
+    )
+    assert planned.created
+    rows = {d.pair: d for d in await store.decisions(sid)}
+    assert rows["XBTEUR"].detail == detail and rows["SOLEUR"].detail == detail
+    assert rows["ETHEUR"].detail is None
+    assert [d.detail for d in await store.recent_decisions(sid, 3)] == [detail, None, detail]
+
+
+async def test_loop_state_saved_before_reviews_existed_still_loads(engine: AsyncEngine) -> None:
+    store, sid = LiveStore(engine), f"old-{uuid4().hex[:6]}"
+    state = LoopState(
+        risk=RiskState(peak_equity=D(100), day=date(2026, 1, 10), day_open_equity=D(100))
+    )
+    await store.save_state(sid, state, NOW)
+    loaded = await store.load_state(sid)
+    assert loaded is not None and loaded.last_review_at == {}
+    reviewed = state.model_copy(update={"last_review_at": {"XBTEUR": NOW}})
+    await store.save_state(sid, reviewed, NOW)
+    again = await store.load_state(sid)
+    assert again is not None and again.last_review_at == {"XBTEUR": NOW}

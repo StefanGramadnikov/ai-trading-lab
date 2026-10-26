@@ -82,6 +82,8 @@ live_decisions = Table(
     Column("intent", JSONB),
     Column("evidence", JSONB),
     Column("result", JSONB),
+    # Why the decision was made beyond the short reason, e.g. the AI call behind it and its answer.
+    Column("detail", JSONB),
     Column("created_at_utc", DateTime(timezone=True), nullable=False),
     Column("finished_at_utc", DateTime(timezone=True)),
     UniqueConstraint("strategy_id", "idempotency_key", name="uq_live_decision_key"),
@@ -116,6 +118,8 @@ class LoopState(FrozenModel):
     entered_at: dict[str, AwareDatetime] = Field(default_factory=dict)
     last_entry_at: dict[str, AwareDatetime] = Field(default_factory=dict)
     last_stop_at: dict[str, AwareDatetime] = Field(default_factory=dict)
+    # When the AI last reviewed each pair (only the AI strategy uses it).
+    last_review_at: dict[str, AwareDatetime] = Field(default_factory=dict)
 
 
 class StrategyRow(FrozenModel):
@@ -148,6 +152,7 @@ class DecisionRow(FrozenModel):
     reason: str
     status: str
     result: dict[str, Any] | None = None
+    detail: dict[str, Any] | None = None
 
 
 class EquityPoint(FrozenModel):
@@ -307,6 +312,7 @@ class LiveStore:
         key: str,
         intent: dict[str, Any],
         evidence: dict[str, Any],
+        detail: dict[str, Any] | None = None,
     ) -> PlannedDecision:
         """Record an order decision before it is submitted; idempotent on its key."""
         decision_id = uuid4()
@@ -324,6 +330,7 @@ class LiveStore:
                     idempotency_key=key,
                     intent=intent,
                     evidence=evidence,
+                    detail=detail,
                     created_at_utc=cycle_at,
                 )
                 .on_conflict_do_nothing(constraint="uq_live_decision_key")
@@ -370,7 +377,13 @@ class LiveStore:
                 raise ValueError("decision already finished or unknown")
 
     async def log_decision(
-        self, strategy_id: str, pair: str, cycle_at: datetime, action: str, reason: str
+        self,
+        strategy_id: str,
+        pair: str,
+        cycle_at: datetime,
+        action: str,
+        reason: str,
+        detail: dict[str, Any] | None = None,
     ) -> None:
         """A decision that places no order (hold, blocked, no data)."""
         async with self.engine.begin() as connection:
@@ -383,6 +396,7 @@ class LiveStore:
                     action=action,
                     reason=reason,
                     status="skipped",
+                    detail=detail,
                     created_at_utc=cycle_at,
                     finished_at_utc=cycle_at,
                 )
@@ -457,6 +471,7 @@ class LiveStore:
             reason=r["reason"],
             status=r["status"],
             result=r["result"],
+            detail=r["detail"],
         )
 
     async def decisions(self, strategy_id: str, limit: int = 1000) -> list[DecisionRow]:
@@ -483,6 +498,7 @@ class LiveStore:
                 reason=r["reason"],
                 status=r["status"],
                 result=r["result"],
+                detail=r["detail"],
             )
             for r in rows
         ]

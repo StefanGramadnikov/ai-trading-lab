@@ -40,7 +40,7 @@ tests, coverage ~95%. Branch `feature/m8-local-runtime`, PR #9 (open, not merged
 | `market_data` | Read-only collectors (DexScreener, Solana RPC, Polymarket, Kalshi, **Kraken**), raw capture log, destination guard, no-cookie transport | Kraken adapter built and verified on a real capture (slice 1). Polymarket is blocked on the user's network (DNS to loopback). |
 | `paper_execution` | Virtual ledger, order book simulation, fees, risk caps, recovery | Built and tested. Reusable as the paper broker. |
 | `strategies` | Rule strategies (momentum, probability) and the `StrategyFrame` / `TradeProposal` contracts | Built for offline tapes. Needs a candle-based strategy for Kraken. |
-| `ai` | OpenAI/xAI/Anthropic adapters, spend reservations, bounded multi-step flow | Built. **Today the AI can only veto or lower the price of a rule-proposed buy; it cannot originate trades.** V0 must change this (slice 3). |
+| `ai` | OpenAI/xAI/Anthropic adapters, spend reservations, bounded multi-step flow | Built. In the experiment runner the AI can only veto or lower the price of a rule-proposed buy. **In the live loop (slice 3, section 11) it proposes a direction that deterministic code sizes and executes.** |
 | `experiments` | Paired A/B cells, cost accounting, immutable configs | Built; useful for comparing rules vs AI. |
 | `runtime` | Hash-chained journal, one-owner worker, auto-recovery (DEC-039), health probe | Built but **specific to one Polymarket market** and cannot trade. Must be generalised or replaced by a V0 loop (slice 2). |
 | `reporting` | Read-only authenticated dashboard, audit export, Telegram outbox | Built. **No per-strategy view, no on/off toggles, alerts never sent.** |
@@ -87,9 +87,9 @@ change needs a new decision.
 
 | # | Slice | Done when |
 | --- | --- | --- |
-| 1 | **Done (PR pending merge)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
-| 2 | **Built on `feature/s2-live-paper-loop` (PR pending merge)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
-| 3 | AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
+| 1 | **Done (merged, PR #10)** Kraken public data adapter (ticker, candles, order book) with fixtures and contract tests; allow-listed in the transport; destination guard applies | Tests green; one real read-only sample captured as a fixture |
+| 2 | **Done (merged, PR #11)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
+| 3 | **Built on `feature/s3-ai-proposer` (PR pending merge), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | Dashboard v1: strategy cards, on/off switch, equity curve, P&L, trades, AI cost, plain-language status | Authenticated toggle works; browser tests green |
@@ -229,3 +229,44 @@ first order's quote looked like it came from the future); it is fixed and has a 
 - **Benchmark**: a partial buy counts as held; the rest is retried in the next slot. Disabled strategies make no decisions.
 - **Known limits**: no retention policy for decisions or observations (about 600 decision rows per day); the benchmark and
   rules portfolios are independent EUR 100 ledgers.
+
+## 11. The AI strategy (slice 3)
+
+A third strategy, `<session>-ai`, with its own €100 paper portfolio, risk state and journal. Per cycle it runs the same
+mechanical exits as the rules strategy first (stop −5%, take-profit +8%, 72 h, risk gates, capacity guard). For a pair that
+a decision hangs on, and whose last review was at least 4 h ago (5 minutes of slack), it builds a **numeric-only snapshot**
+(bid, ask, spread, closes, 24 h range and volume, changes, the position's entry price, P&L and age, and the fee/stop/limit
+rules; at most about 3 kB) and asks the model for buy, sell or hold. The answer is a direction only: a buy is sized by the
+same deterministic function as the rules entry (20% of equity, exposure and cash limits, marketable limit), a sell closes
+the whole position, anything else is a hold. Nothing is asked when the answer could not change the outcome (pair already
+exiting, risk-blocked, cooling down, no room to enter, missing or stale data: the newest candle must be under 45 minutes old).
+
+Each decision carries `detail` (call id, model, flow result, answer, usage, estimated cost in USD) in `live_decisions`;
+`atl-live status` shows it. Hold reasons say what happened: `ai_not_reviewed`, `ai_abstain`, `ai_veto`, `ai_buy_ignored_held`,
+`ai_sell_ignored_flat`, `ai_unavailable_<code>` (for example `global_spending_limit`, `paid_spending_disabled`,
+`pricing_not_reviewed`, `pricing_not_current`, `failure_breaker`, `no_recent_candles`).
+
+**Money.** Every call reserves its worst case first (6000 input and 400 output tokens by default, about USD 0.02 at
+2.5/12 per million) and is refused once the global cap (`ATL_AI_TOTAL_LIMIT_USD`, counted across all envelopes) would be
+crossed. Expect about 18 reviews a day at most (3 pairs × 6), far less when the gates skip pairs. Unknown outcomes are
+settled at the reserved maximum (DEC-044), so the cap is true and the AI keeps working; after 5 in 24 h it pauses.
+
+**Activation (all four needed, otherwise the AI strategy does not exist and nothing is paid):**
+`ATL_AI_ENABLED=true`, `ATL_OPENAI_API_KEY` (a separate key with a hard monthly limit on the VPS), `ATL_AI_TOTAL_LIMIT_USD`
+above zero (use 10), and the model's price in `ATL_AI_REVIEWED_PRICES` (verify the current price and model on the provider's
+page first; the default model name `gpt-5.6-terra` is from the 2026-10-19 note and must be re-checked). For an unattended run set
+`ATL_AI_PRICE_MAX_AGE_DAYS` (for example 14) or refresh the price daily. `atl-live` prints which of these is missing.
+
+**Known limits.** The key is only sent to a public address, but a test transport without a socket cannot show who answered
+(it is treated as public). The first real call has not been made: the real response shape, latency and cost are unverified
+until slice 5 activation, and the model's quality is exactly what the experiment measures. Two pairs may both be reviewed
+(and paid for) when the first one's entry will use up the exposure room; the second buy is then refused deterministically.
+
+Review hardening of slice 3: mechanical exits for the AI portfolio are placed before any model call; a review is stamped
+before its call (a crash never pays twice) and unstamped when the question was never put (no recent candles, breaker, local
+error), so it is asked again next cycle; a failing AI path is contained per pair; a 200 reply that cannot be decoded and any
+provider-claimed "settled" are charged at the reserved maximum; `ATL_AI_PRICE_MAX_AGE_DAYS` works from the environment.
+Remaining limits: the destination check resolves DNS separately from the connect (no IP pinning), so a rebinding race could
+send the key before the post-connect peer check reports it; non-200 replies (a bad key, rate limiting) are charged at the
+maximum and count toward the daily breaker; the model's free-text reason is stored in the journal and must never be fed back
+into a prompt.

@@ -15,7 +15,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID, insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ai_trading_lab.ai.models import AIRequest, PriceSnapshot, ProviderName, ProviderResult
+from ai_trading_lab.ai.models import (
+    AIRequest,
+    PriceSnapshot,
+    ProviderName,
+    ProviderResult,
+    Usage,
+)
 from ai_trading_lab.config import Settings
 from ai_trading_lab.market_data.models import FrozenModel
 from ai_trading_lab.market_data.storage import content_hash, metadata
@@ -76,7 +82,8 @@ class _Call(FrozenModel):
 
     @model_validator(mode="after")
     def valid(self) -> _Call:
-        if self.call_id != self.request.call_id or self.reservation != reserve_cost(
+        # Integrity only: how stale the price was is judged once, when the call is admitted.
+        if self.call_id != self.request.call_id or self.reservation != _reservation(
             self.request, self.price, self.at
         ):
             raise ValueError("call_reservation_integrity")
@@ -104,16 +111,28 @@ calls = Table(
 )
 
 
-def reserve_cost(request: AIRequest, price: PriceSnapshot, at: datetime) -> Decimal:
+def _reservation(request: AIRequest, price: PriceSnapshot, at: datetime) -> Decimal:
     if at.tzinfo is None or at.utcoffset() is None:
         raise ValueError("aware_budget_clock_required")
     if price.provider != request.provider or price.model != request.model:
         raise ValueError("pricing_identity_mismatch")
-    if not timedelta(0) <= at - price.verified_at_utc <= timedelta(days=1):
+    if at < price.verified_at_utc:
         raise ValueError("pricing_not_current")
     if request.provider != "fixture" and price.input_per_million + price.output_per_million <= 0:
         raise ValueError("paid_provider_requires_pricing")
     return _cost(price, request.max_input_tokens, request.max_output_tokens)
+
+
+def reserve_cost(
+    request: AIRequest,
+    price: PriceSnapshot,
+    at: datetime,
+    max_age: timedelta = timedelta(days=1),
+) -> Decimal:
+    amount = _reservation(request, price, at)
+    if at - price.verified_at_utc > max_age:
+        raise ValueError("pricing_not_current")
+    return amount
 
 
 def _cost(price: PriceSnapshot, input_tokens: int, output_tokens: int) -> Decimal:
@@ -123,6 +142,17 @@ def _cost(price: PriceSnapshot, input_tokens: int, output_tokens: int) -> Decima
         return (
             input_tokens * price.input_per_million + output_tokens * price.output_per_million
         ) / Decimal(1_000_000)
+
+
+def settled(request: AIRequest, why: str, **fields: object) -> ProviderResult:
+    """An unknown outcome counted as spent at the call's reserved maximum (an upper bound)."""
+    return ProviderResult(
+        status="settled",
+        usage=Usage(input_tokens=request.max_input_tokens, output_tokens=request.max_output_tokens),
+        model=request.model,
+        reason=f"settled_{why}"[:200],
+        **fields,  # type: ignore[arg-type]
+    )
 
 
 def _total(values: Iterable[Decimal], start: Decimal = Decimal(0)) -> Decimal:
@@ -140,7 +170,7 @@ def _outcome(call: _Call, result: ProviderResult | None) -> tuple[Decimal, bool]
         or result.usage.output_tokens > call.request.max_output_tokens
         or amount > call.reservation
         or result.model != call.request.model
-        or result.status not in ("completed", "refused", "invalid")
+        or result.status not in ("completed", "refused", "invalid", "settled")
     )
     return (max(call.reservation, amount), True) if exceeded else (amount, False)
 
@@ -308,7 +338,9 @@ class BudgetStore:
                     return Reservation(
                         status="blocked", reason="call_pending", reserved_amount=call.reservation
                     )
-            amount = reserve_cost(request, price, at)
+            amount = reserve_cost(
+                request, price, at, timedelta(days=self.settings.ai_price_max_age_days)
+            )
             proposed = _Call(
                 call_id=request.call_id,
                 request=request,
@@ -415,6 +447,36 @@ class BudgetStore:
                 await self._checkpoint(connection, budget_id)
                 return result
             raise ValueError("call_missing")
+
+    async def settle_pending(self, budget_id: PyUUID, older_than: datetime) -> int:
+        """Charge calls that were reserved but never finished (a crash) at their reserved maximum.
+
+        The caller must hold the single-instance lock or pass a time old enough that the call
+        cannot still be in flight. Returns how many calls were settled.
+        """
+        async with self.engine.connect() as connection:
+            _, history = await self._load(connection, budget_id, for_update=False)
+        count = 0
+        for call, result in history:
+            if result is None and call.at < older_than:
+                await self.finish(
+                    budget_id,
+                    call.call_id,
+                    call.request.fingerprint,
+                    settled(call.request, "crash"),
+                )
+                count += 1
+        return count
+
+    async def settled_since(self, budget_id: PyUUID, since: datetime) -> int:
+        """How many calls in this envelope ended with an unknown outcome since `since`."""
+        async with self.engine.connect() as connection:
+            _, history = await self._load(connection, budget_id, for_update=False)
+        return sum(
+            1
+            for call, result in history
+            if result is not None and result.status == "settled" and call.at >= since
+        )
 
     @asynccontextmanager
     async def _read_connection(

@@ -10,9 +10,13 @@ import sys
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_trading_lab.ai.budget import BudgetStore
+from ai_trading_lab.ai.providers import HTTPProvider
 from ai_trading_lab.config import Settings
 from ai_trading_lab.database import create_database_engine
+from ai_trading_lab.live.ai_strategy import AIConfig, AIDeps
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.engine import LiveEngine
 from ai_trading_lab.live.errors import CycleErrors, LoopIntegrityError
@@ -57,11 +61,47 @@ def _emit(event: dict[str, Any]) -> None:
     print(json.dumps(event, sort_keys=True, default=str), flush=True)
 
 
+def build_ai(settings: Settings, engine: AsyncEngine) -> tuple[AIDeps | None, str]:
+    """The AI strategy exists only when explicitly activated and fully configured.
+
+    Needs ATL_AI_ENABLED, an OpenAI key, a spending cap above zero and a reviewed price for the
+    model. Anything missing leaves the AI strategy off: nothing is asked and nothing is paid.
+    """
+    if not settings.ai_enabled:
+        return None, "ai_disabled"
+    key = settings.openai_api_key
+    if key is None or not key.get_secret_value().strip():
+        return None, "ai_key_missing"
+    if settings.ai_total_limit_usd <= 0:
+        return None, "ai_spending_cap_is_zero"
+    config = AIConfig()
+    price = next(
+        (
+            p
+            for p in settings.ai_reviewed_prices
+            if (p.provider, p.model) == ("openai", config.model)
+        ),
+        None,
+    )
+    if price is None:
+        return None, "ai_price_not_reviewed"
+    deps = AIDeps(
+        provider=HTTPProvider("openai", key),
+        price=price,
+        budget=BudgetStore(engine, settings),
+        config=config,
+    )
+    return deps, "ai_enabled"
+
+
 async def run(arguments: argparse.Namespace) -> int:
     settings = Settings()
     engine = create_database_engine(settings)
     config = LiveConfig()
-    live = LiveEngine(engine, lambda: HttpTransport(), config)
+    ai, ai_note = build_ai(settings, engine)
+    live = LiveEngine(engine, lambda: HttpTransport(), config, ai=ai)
+    if arguments.command != "status":
+        _emit({"ai": ai_note})
     try:
         if arguments.command == "setup":
             await live.setup()
@@ -102,6 +142,8 @@ async def run(arguments: argparse.Namespace) -> int:
                 )
             return 0 if result.failed == 0 else 1
     finally:
+        if ai is not None and isinstance(ai.provider, HTTPProvider):
+            await ai.provider.aclose()
         await engine.dispose()
     return 0
 

@@ -68,6 +68,18 @@ class Decision(FrozenModel):
     action: Literal["buy", "sell", "hold"]
     reason: str
     order: OrderPlan | None = None
+    # Why, beyond the short reason: the AI call behind it, its answer and what it cost.
+    detail: dict[str, JsonValue] | None = None
+
+
+class Proposal(FrozenModel):
+    """What the AI proposed for one pair. It carries no size, price or limit: only a direction."""
+
+    action: Literal["buy", "sell", "hold"]
+    reason: str
+    detail: dict[str, JsonValue] | None = None
+    # False when the question was never put (no data, a local refusal): it is asked again soon.
+    reviewed: bool = True
 
 
 def liquidation(
@@ -292,3 +304,205 @@ def decide_benchmark(
             )
         )
     return decisions
+
+
+def _not_acting(proposal: Proposal | None, unasked: str, ignored: str) -> str:
+    """Why the AI strategy leaves a pair alone: not asked, held back, or the wrong direction."""
+    if proposal is None:
+        return unasked
+    return proposal.reason if proposal.action == "hold" else ignored
+
+
+def _ai_pass(
+    *,
+    config: LiveConfig,
+    now: datetime,
+    markets: Mapping[str, Market],
+    state: PortfolioState,
+    loop: LoopState,
+    marks: Mapping[str, Mark | None],
+    equity: Decimal | None,
+    blocked: str | None,
+    proposals: Mapping[str, Proposal],
+) -> tuple[list[Decision], list[str]]:
+    """The AI strategy's decisions and the pairs whose decision depends on an AI answer.
+
+    Mechanical exits (stop, take-profit, time limit) are the rules' and never wait for or depend on
+    the AI; the AI can only add a sell for a position that is not already exiting, or ask for an
+    entry. Every size, price and limit still comes from the deterministic code.
+    """
+    risk = config.risk
+    exposure = sum((p.cost_basis for p in state.positions), Decimal(0))
+    cash_left = state.cash - state.reserved_cash
+    fee_rate = config.fee_bps / Decimal(10000)
+    decisions: list[Decision] = []
+    needs: list[str] = []
+    for pair in config.pairs:
+        market = markets.get(pair)
+        if (problem := _usable(market, pair)) is not None:
+            decisions.append(problem)
+            continue
+        assert market is not None
+        quote, tick = market.quote, market.quote.instrument.tick_size
+        position = held_position(state, quote.instrument)
+        proposal = proposals.get(pair)
+        if position is not None:
+            mark = marks.get(pair)
+            entry_price = position.cost_basis / position.quantity
+            entered = loop.entered_at.get(pair, now - timedelta(hours=risk.max_hold_hours))
+            price = mark.price if mark is not None else quote.bids[0].price
+            reason: str | None = exit_reason(entry_price, price, entered, now, risk)
+            if reason is None:
+                needs.append(pair)
+                if proposal is None or proposal.action != "sell":
+                    kept = _not_acting(proposal, "holding", "ai_buy_ignored_held")
+                    decisions.append(
+                        Decision(
+                            pair=pair,
+                            action="hold",
+                            reason=kept,
+                            detail=proposal.detail if proposal else None,
+                        )
+                    )
+                    continue
+                reason = "ai_sell"
+            limit = marketable_limit("sell", quote.bids[0].price, tick, risk.limit_buffer_bps)
+            decisions.append(
+                Decision(
+                    pair=pair,
+                    action="sell",
+                    reason=reason,
+                    order=OrderPlan(side="sell", quantity=position.quantity, limit_price=limit),
+                    detail=proposal.detail if proposal and reason == "ai_sell" else None,
+                )
+            )
+            continue
+        if (
+            why := entry_gate(
+                blocked=blocked,
+                held=False,
+                last_entry_at=loop.last_entry_at.get(pair),
+                last_stop_at=loop.last_stop_at.get(pair),
+                now=now,
+                risk=risk,
+            )
+        ) is not None:
+            decisions.append(_hold(pair, why))
+            continue
+        if equity is None:
+            decisions.append(_hold(pair, "equity_unavailable"))
+            continue
+        limit = marketable_limit("buy", quote.asks[0].price, tick, risk.limit_buffer_bps)
+        quantity = _entry_quantity(
+            market,
+            equity=equity,
+            exposure_basis=exposure,
+            cash=cash_left,
+            policy_cap=config.policy().max_order_notional,
+            fee_bps=config.fee_bps,
+            risk=risk,
+            limit_price=limit,
+        )
+        if quantity is None:
+            # Earlier entries in this cycle can use up the room after the AI was asked. What the
+            # AI said still wins the label, and what its call cost stays in the journal.
+            if proposal is None or proposal.action == "buy":
+                label = "size_below_minimum_or_no_room"
+            else:
+                label = _not_acting(proposal, "", "ai_sell_ignored_flat")
+            decisions.append(
+                Decision(
+                    pair=pair,
+                    action="hold",
+                    reason=label,
+                    detail=proposal.detail if proposal else None,
+                )
+            )
+            continue
+        needs.append(pair)
+        if proposal is None or proposal.action != "buy":
+            waiting = _not_acting(proposal, "ai_not_reviewed", "ai_sell_ignored_flat")
+            decisions.append(
+                Decision(
+                    pair=pair,
+                    action="hold",
+                    reason=waiting,
+                    detail=proposal.detail if proposal else None,
+                )
+            )
+            continue
+        exposure += quantity * limit
+        cash_left -= quantity * limit * (1 + fee_rate)
+        decisions.append(
+            Decision(
+                pair=pair,
+                action="buy",
+                reason="ai_buy",
+                order=OrderPlan(side="buy", quantity=quantity, limit_price=limit),
+                detail=proposal.detail,
+            )
+        )
+    return decisions, needs
+
+
+def decide_ai(
+    *,
+    config: LiveConfig,
+    now: datetime,
+    markets: Mapping[str, Market],
+    state: PortfolioState,
+    loop: LoopState,
+    marks: Mapping[str, Mark | None],
+    equity: Decimal | None,
+    blocked: str | None,
+    proposals: Mapping[str, Proposal],
+) -> list[Decision]:
+    return _ai_pass(
+        config=config,
+        now=now,
+        markets=markets,
+        state=state,
+        loop=loop,
+        marks=marks,
+        equity=equity,
+        blocked=blocked,
+        proposals=proposals,
+    )[0]
+
+
+def review_candidates(
+    *,
+    config: LiveConfig,
+    now: datetime,
+    interval: timedelta,
+    markets: Mapping[str, Market],
+    state: PortfolioState,
+    loop: LoopState,
+    marks: Mapping[str, Mark | None],
+    equity: Decimal | None,
+    blocked: str | None,
+) -> list[str]:
+    """Pairs worth paying the AI about now: a decision hangs on the answer and a review is due.
+
+    Nothing is asked about a pair that is already exiting mechanically, is blocked by a risk gate,
+    a cooldown or a missing book, or has no room to enter, since the answer could not change what
+    the deterministic code does.
+    """
+    _, needs = _ai_pass(
+        config=config,
+        now=now,
+        markets=markets,
+        state=state,
+        loop=loop,
+        marks=marks,
+        equity=equity,
+        blocked=blocked,
+        proposals={},
+    )
+    slack = timedelta(minutes=5)  # cycle times jitter by seconds; 4 h must not drift to 4 h 15 min
+    due = []
+    for pair in needs:
+        last = loop.last_review_at.get(pair)
+        if last is None or now - last >= interval - slack:
+            due.append(pair)
+    return due

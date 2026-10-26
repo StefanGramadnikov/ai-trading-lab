@@ -325,6 +325,12 @@ class LiveEngine:
                     item.decision_id, "rejected", {"error": "unreadable_planned_decision"}, now
                 )
                 continue
+            if intent.side == "buy" and not strategy.enabled:
+                # Switched off after this entry was planned but before it was sent: never open it.
+                await self.store.finish_decision(
+                    item.decision_id, "rejected", {"error": "strategy_disabled"}, now
+                )
+                continue
             stamped = await self._stamp(strategy, now)
             loop, _ = await self._submit(strategy, item, intent, entry, stamped, loop)
 
@@ -349,6 +355,17 @@ class LiveEngine:
                         continue  # nothing to journal every cycle for a strategy that is off
                     await self.store.log_decision(
                         sid, decision.pair, now, decision.action, decision.reason, decision.detail
+                    )
+                    report["holds"] += 1
+                    continue
+                if (
+                    decision.order.side == "buy"
+                    and not off
+                    and not await self.store.is_enabled(sid)
+                ):
+                    # Switched off mid-cycle: the entry is dropped, not sent.
+                    await self.store.log_decision(
+                        sid, decision.pair, now, "hold", "strategy_disabled", decision.detail
                     )
                     report["holds"] += 1
                     continue
@@ -485,6 +502,8 @@ class LiveEngine:
         slot = int(now.timestamp() // self.config.cycle_seconds)
         proposals: dict[str, Proposal] = {}
         for pair in due:
+            if not await self.store.is_enabled(strategy.strategy_id):
+                break  # switched off mid-cycle: no further model call, no further spend
             market = markets[pair]
             position = held_position(state, market.quote.instrument)
             held = None

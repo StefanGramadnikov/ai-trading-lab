@@ -645,3 +645,45 @@ async def test_a_disabled_strategy_makes_no_new_entry_and_resumes_when_enabled(
     again = await r.cycle()  # the same market: the breakout is still there
     assert again.strategies[r.rules_id].blocked is None
     assert again.strategies[r.rules_id].orders == 1
+
+
+async def test_a_planned_buy_left_by_a_crash_is_never_sent_once_the_strategy_is_off(
+    engine: AsyncEngine,
+) -> None:
+    from ai_trading_lab.live.engine import build_markets
+    from ai_trading_lab.market_data.adapters.kraken import KrakenAdapter
+    from ai_trading_lab.paper_execution.models import OrderIntent
+
+    r = await rig(engine)
+    await seed_breakout(r)
+    async with r.live.transport() as transport:
+        batch = await KrakenAdapter(transport).collect(PAIRS, candles_since=1)
+    market = build_markets(batch, CONFIG)["XBTUSD"]
+    row = next(s for s in await r.store.strategies() if s.strategy_id == r.rules_id)
+    intent = OrderIntent(
+        portfolio_id=row.portfolio_id,
+        idempotency_key=f"{r.rules_id}:XBTUSD:buy:crash",
+        instrument=market.quote.instrument,
+        side="buy",
+        quantity=D("0.0002"),
+        limit_price=D("67067.2"),
+        created_at_utc=r.now,
+        expires_at_utc=r.now + timedelta(seconds=60),
+    )
+    await r.store.plan_decision(
+        r.rules_id,
+        "XBTUSD",
+        r.now,
+        "buy",
+        "breakout_above_48h_high",
+        intent.idempotency_key,
+        intent.model_dump(mode="json"),
+        market.entry.model_dump(mode="json"),
+    )
+    await r.store.set_enabled(r.rules_id, False, actor="test", reason="stop before restart")
+    await r.cycle()
+    assert (await r.portfolio(r.rules_id)).positions == ()
+    decisions = await r.store.decisions(r.rules_id)
+    assert [(d.status, (d.result or {}).get("error")) for d in decisions] == [
+        ("rejected", "strategy_disabled")
+    ]

@@ -421,17 +421,49 @@ async def test_a_review_that_was_never_put_is_asked_again_next_cycle(engine: Asy
     assert len(stub.requests) == 3
 
 
-async def test_a_disabled_ai_strategy_asks_nothing_but_still_stops_out(engine: AsyncEngine) -> None:
+async def test_a_disabled_ai_strategy_asks_nothing_even_for_a_held_position(
+    engine: AsyncEngine,
+) -> None:
     stub = Stub(lambda _body: "buy")
     r = await start(engine, stub)
     await r.cycle()
     asked = len(stub.requests)
     assert asked == 3 and len((await r.portfolio()).positions) == 2
     await r.store.set_enabled(r.live.ai_id, False, actor="test", reason="cost")
-    r.venue.scale = D("0.9")  # past the 5% stop, and four hours on: every pair would be due
+    # Four hours on, with no loss and positions held: every pair is due, yet nothing is asked.
     report = await r.cycle(minutes_later=240)
-    # The loss gate may name itself first; either way no entry is possible.
-    assert report.errors == [] and report.strategies[r.live.ai_id].blocked is not None
-    assert len(stub.requests) == asked  # no model call and no spend while it is off
+    assert report.errors == [] and report.strategies[r.live.ai_id].blocked == "strategy_disabled"
+    assert len(stub.requests) == asked
+    assert len((await r.portfolio()).positions) == 2  # kept: no exit condition was met
+    await r.store.set_enabled(r.live.ai_id, True, actor="test", reason="back")
+    await r.cycle(minutes_later=15)
+    assert len(stub.requests) > asked  # reviews resume once it is on again
+
+
+async def test_a_disabled_ai_strategy_still_stops_out(engine: AsyncEngine) -> None:
+    stub = Stub(lambda _body: "buy")
+    r = await start(engine, stub)
+    await r.cycle()
+    await r.store.set_enabled(r.live.ai_id, False, actor="test", reason="cost")
+    r.venue.scale = D("0.9")  # past the 5% stop
+    await r.cycle(minutes_later=15)
     assert (await r.portfolio()).positions == ()
     assert {d.reason for d in await r.decisions() if d.action == "sell"} == {"stop_loss"}
+
+
+async def test_switching_off_mid_cycle_stops_the_remaining_calls_and_the_pending_entry(
+    engine: AsyncEngine,
+) -> None:
+    class Switching(Stub):
+        async def analyze(self, request: AIRequest) -> ProviderResult:
+            result = await super().analyze(request)
+            await r.store.set_enabled(r.live.ai_id, False, actor="test", reason="mid-cycle")
+            return result
+
+    stub = Switching(lambda _body: "buy")
+    r = await start(engine, stub)
+    report = await r.cycle()
+    assert report.errors == []
+    assert len(stub.requests) == 1  # the first call was already under way; no more were made
+    assert (await r.portfolio()).positions == ()  # and its entry was dropped, not sent
+    assert "strategy_disabled" in {d.reason for d in await r.decisions()}

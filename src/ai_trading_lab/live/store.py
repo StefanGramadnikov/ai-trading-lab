@@ -283,6 +283,16 @@ class LiveStore:
             )
         return True
 
+    async def is_enabled(self, strategy_id: str) -> bool:
+        """A fresh read, for the moments inside a cycle where spending or entering must not wait."""
+        async with self.engine.connect() as connection:
+            value = await connection.scalar(
+                select(live_strategies.c.enabled).where(
+                    live_strategies.c.strategy_id == strategy_id
+                )
+            )
+        return bool(value)
+
     async def audit(self, strategy_id: str | None = None, limit: int = 50) -> list[AuditRow]:
         """Newest first."""
         statement = select(live_strategy_audit).order_by(live_strategy_audit.c.seq.desc())

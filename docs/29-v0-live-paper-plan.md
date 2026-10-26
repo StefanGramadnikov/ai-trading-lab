@@ -286,3 +286,11 @@ rows, but its mechanical exits (stop, take-profit, 72 h, trend break for rules) 
 leaves a position unmanaged, and its equity keeps being recorded so the curve and the final comparison stay continuous. The
 benchmark never sells, so switching it off simply stops its (one-time) entries. Re-enabling resumes normally. The reason shown
 in a cycle report is the first gate that applies (`strategy_disabled`, or a risk gate that was already active).
+
+Details from the slice-4 review: the flag is also re-read (one cheap query) before each model call and before each entry order,
+so a `disable` issued during a cycle stops the remaining spend and drops a not-yet-sent entry; a planned entry left by a
+crash is rejected (`strategy_disabled`) instead of sent when its strategy is off, while a planned exit is still sent; an unknown
+strategy id exits with code 2 and `{"status":"failed","error":"unknown strategy"}`. While a strategy is off its data-problem
+holds (for example `no_market_data`) are not journaled either; the cycle report's `failures` still lists them. The audit actor
+is the OS user and informational only (it can be spoofed with an environment variable); the audit table has no tamper
+protection beyond database access control.

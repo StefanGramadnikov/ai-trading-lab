@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import getpass
 import json
+import os
 import signal
 import sys
 from typing import Any
@@ -38,6 +39,14 @@ def _positive(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
     return number
+
+
+def _user() -> str:
+    """Informational only: the OS user, or its numeric id where there is no passwd entry."""
+    try:
+        return getpass.getuser()
+    except (KeyError, OSError):
+        return f"uid:{os.getuid()}"
 
 
 def _reason(value: str) -> str:
@@ -131,12 +140,13 @@ async def run(arguments: argparse.Namespace) -> int:
             aliases = {"rules": live.rules_id, "ai": live.ai_id, "benchmark": live.benchmark_id}
             strategy_id = aliases.get(arguments.strategy, arguments.strategy)
             enabled = arguments.command == "enable"
-            changed = await live.store.set_enabled(
-                strategy_id,
-                enabled,
-                actor=f"cli:{getpass.getuser()}",
-                reason=arguments.reason,
-            )
+            try:
+                changed = await live.store.set_enabled(
+                    strategy_id, enabled, actor=f"cli:{_user()}", reason=arguments.reason
+                )
+            except ValueError:
+                _emit({"status": "failed", "error": "unknown strategy", "strategy_id": strategy_id})
+                return 2
             _emit({"strategy_id": strategy_id, "enabled": enabled, "changed": changed})
         elif arguments.command == "audit":
             rows = await live.store.audit(limit=arguments.limit)

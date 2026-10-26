@@ -286,3 +286,24 @@ async def test_audit_command_prints_the_trail(capsys: pytest.CaptureFixture[str]
     live.store.audit.assert_awaited_once_with(limit=5)
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out["audit"][0]["reason"] == "r" and out["audit"][0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_strategy_is_reported_as_such(capsys: pytest.CaptureFixture[str]) -> None:
+    engine, live = AsyncMock(), MagicMock()
+    live.rules_id, live.ai_id, live.benchmark_id = "r", "a", "b"
+    live.store.set_enabled = AsyncMock(side_effect=ValueError("unknown strategy"))
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+    ):
+        assert await cli.run(args("disable", "typo", "--reason", "x")) == 2
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out == {"status": "failed", "error": "unknown strategy", "strategy_id": "typo"}
+    engine.dispose.assert_awaited_once()
+
+
+def test_the_actor_falls_back_to_the_uid_without_a_passwd_entry() -> None:
+    with patch("getpass.getuser", side_effect=KeyError("no entry")):
+        assert cli._user().startswith("uid:")

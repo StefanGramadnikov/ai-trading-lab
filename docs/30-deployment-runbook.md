@@ -10,7 +10,7 @@ step that does not give the expected result. The deployment files are `compose.p
 - Nothing is reachable from the internet except SSH. You look at it by logging in (`docker compose ... exec`, `atl-live status`).
   The dashboard (slice 6) and Telegram alerts (slice 7) come later; until then **you check by hand once a day**.
 - Cost: the server (about 4–6 EUR a month on Hetzner for a 2 vCPU / 4 GB shared type; **check the price on the order page**,
-  billing is hourly so deleting it ends the cost) plus the OpenAI spend, hard-capped at USD 10 in total by the application and
+  billing is hourly so deleting it ends the cost) plus the OpenAI spend, hard-capped at USD 15 in total by the application and
   by the monthly limit you set on the key.
 - Not included: real money, real orders, exchange credentials. The execution mode is fixed to `PAPER_ONLY` in
   `compose.prod.yaml`; no setting in the env file can change it.
@@ -127,7 +127,7 @@ Do this only after sections 5 and 6 pass and the loop has run a few hours. The A
    output price per million tokens; I will build the exact `ATL_AI_REVIEWED_PRICES` line. The default model name in the code
    (`gpt-5.6-terra`) comes from a 2026-10-19 note and may be out of date.
 2. Put the separate server key in `/opt/atl/.env.prod` as `ATL_OPENAI_API_KEY`, set `ATL_AI_ENABLED=true`,
-   `ATL_AI_TOTAL_LIMIT_USD=10` and the price line. Never paste the key into chat, git or a ticket.
+   `ATL_AI_TOTAL_LIMIT_USD=15` and the price line. Never paste the key into chat, git or a ticket.
 3. `dc up -d live` (recreates the container; the loop registers the AI strategy itself on start), then
    `dc logs live | grep '"ai"' | tail -1`: it must say `{"ai": "ai_enabled"}`. Any other value names what is missing.
 4. After the first 4-hour review window, `atl-live status` shows the AI decisions with their cost. Check the cost against the
@@ -139,6 +139,8 @@ within one cycle and spends nothing from then on). To remove the key entirely, d
 ## 8. Daily routine during the run (5 minutes)
 
 - `dc ps` (live is `healthy`), `atl-live health`, `atl-live status` (equity per strategy, holdings, recent decisions).
+- `atl-live errors --status new` (anything the loop recorded as broken; empty is good), then `atl-live errors --show <prefix>` for the
+  stack trace of one problem and `atl-live ack <prefix|all> --reason "..."` once it is understood. `atl-live status` shows the totals.
 - `df -h /` (disk) and `docker stats --no-stream` (memory).
 - `deploy/pull-backup.sh` from your Mac.
 - If `live` is unhealthy or restarting: `dc logs --tail 200 live`; common causes are Kraken being unreachable (the loop recovers

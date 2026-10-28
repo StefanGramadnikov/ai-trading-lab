@@ -23,7 +23,7 @@ approves a live pilot.
 | Topic | Decision |
 | --- | --- |
 | Market / data | **Kraken public API** for BTC, ETH, SOL (free, no key). Verified reachable from the user's network on 2026-10-25 (ticker). |
-| AI | **OpenAI** first, **€10 total cap**, enforced by the application's budget guard. One cheap model, called only when a candidate needs judging. Other providers (e.g. Grok) are deferred. |
+| AI | **OpenAI** first, **USD 15 total cap** (DEC-045, raised from €10), enforced by the application's budget guard. One cheap model, called only when a candidate needs judging. Other providers (e.g. Grok) are deferred. |
 | Hosting | **Cheap VPS** (~€4–6/month, vendor and region chosen **together** with the user; check current prices). |
 | Evaluation | **1–2 weeks** of paper trading, then a GO / EXTEND / STOP report. Supersedes the 30-day plan. |
 | Process | One slice at a time; test → fix → test until green; commit and push after each green slice; keep docs current; the user merges PRs. |
@@ -92,11 +92,12 @@ change needs a new decision.
 | 3 | **Done (merged, PR #12), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | **Done (merged, PR #13), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
-| 6 | Dashboard v1: strategy cards, on/off switch, equity curve, P&L, trades, AI cost, plain-language status | Authenticated toggle works; browser tests green |
-| 7 | Real Telegram alerts (needs the user's bot token) | A test alert received |
-| 8 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
-| 9 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
-| 10 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
+| 6 | **Error journal and visibility (built on `feature/s6-error-journal`, section 15):** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
+| 7 | Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
+| 8 | Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
+| 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
+| 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
+| 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
 
 ## 6. How to work in this repository
 
@@ -322,3 +323,30 @@ disk 9% used, about 115 MB used by the two containers. **The 1-2 week evaluation
 
 Not yet done: AI activation (needs the owner's new OpenAI key with a monthly limit, the verified model and price), a dashboard
 (slice 6), alerts (slice 7). Until then the owner checks daily: `dc ps`, `atl-live health`, `atl-live status`, and pulls a backup.
+
+## 15. Error journal (slice 6)
+
+Why: a contained exception used to leave only its type name in the cycle report, so nothing could be diagnosed later. Now every
+problem is written to two small tables (migration 0015): `error_groups` (one row per distinct problem: fingerprint of component,
+exception type and code location without line numbers; count; first and last seen; strategy and pair; status; redacted message and
+stack trace; who acknowledged it and why) and `error_occurrences` (the 20 most recent per problem).
+
+What is recorded: **errors** (an exception in a strategy, the AI path, the paper broker or the worker loop; these start as `new` and
+need acknowledging, and reopen if the same problem recurs after being acknowledged) and **warnings** (no exception behind them:
+Kraken requests that failed, Kraken data that failed validation, an AI provider that timed out, returned an unusable reply or was
+unreachable; always `seen`). Budget and policy refusals of the AI are not outages and are not recorded. Warnings are what the
+"Kraken is down" and "AI is down" alerts of slice 8 will read.
+
+Redaction before anything is stored: API keys (`sk-...`), bearer tokens, `password=`, `token:`, `api_key=` style pairs, URLs with
+credentials, long hex strings and any 40-character token-like string. Message at most 500 characters, trace at most 6000.
+
+**Storage is bounded** (the owner's concern): one row per problem, at most 500 problems, at most 20 occurrences each, handled or
+warning problems expire after 30 days (an unacknowledged error is kept), pruning runs at most hourly inside the loop. Worst case about
+15 MB. For scale: measured on the server after three cycles the whole database was 9.6 MB; extrapolated, raw captures and decisions
+grow roughly 12 MB a day (about 170 MB in two weeks; an estimate, not a measurement over time), and the disk has 33 GB free.
+
+Recording never raises: if the journal itself cannot write, a one-line notice goes to stderr and the loop carries on.
+
+Reading it: `atl-live errors [--status new] [--level error] [--limit N]` (list and summary), `atl-live errors --show <fingerprint
+prefix>` (full detail, trace and recent occurrences), `atl-live ack <fingerprint prefix|all> --reason "..."`; `atl-live status` shows
+the summary. The dashboard (slice 7) and the alerts (slice 8) read the same tables.

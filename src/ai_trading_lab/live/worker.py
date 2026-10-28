@@ -104,6 +104,7 @@ async def run_loop(
     emit: Callable[[dict[str, Any]], None],
     max_failures: int = 10,
     heartbeat: Callable[[], Awaitable[None]] | None = None,
+    on_error: Callable[[BaseException], Awaitable[None]] | None = None,
 ) -> LoopResult:
     """Run `cycles` cycles (None means until stopped), aligned to the interval.
 
@@ -121,6 +122,8 @@ async def run_loop(
             report = await cycle()
         except LoopIntegrityError as exc:
             emit({"event": "fatal", "error": str(exc)[:200]})
+            if on_error is not None:
+                await on_error(exc)
             raise
         except Exception as exc:  # contained by design; the next cycle starts from durable facts
             failed += 1
@@ -133,6 +136,8 @@ async def run_loop(
             if (detail := getattr(exc, "detail", None)) is not None:
                 event["detail"] = detail
             emit(event)
+            if on_error is not None:
+                await on_error(exc)
             if failed_in_a_row >= max_failures:
                 raise RuntimeError(f"{failed_in_a_row} consecutive failed cycles") from exc
         else:

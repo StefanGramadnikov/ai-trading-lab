@@ -1,6 +1,6 @@
 # AI Trading Lab
 
-> **Status:** V0 live-paper experiment planned (Kraken BTC/ETH/SOL, OpenAI €10 cap, cheap VPS) — **start at [docs/29-v0-live-paper-plan.md](docs/29-v0-live-paper-plan.md)**. Milestone 8A code and review repairs are in PR #9 pending merge.
+> **Status:** V0 live-paper experiment planned (Kraken BTC/ETH/SOL, OpenAI USD 15 cap, cheap VPS) — **start at [docs/29-v0-live-paper-plan.md](docs/29-v0-live-paper-plan.md)**. Milestone 8A code and review repairs are in PR #9 pending merge.
 > **Document version:** 1.4, 2026-10-20.
 > **Operating mode:** `PAPER_ONLY` until a separately approved live-trading release.
 

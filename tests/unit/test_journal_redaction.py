@@ -109,4 +109,5 @@ def test_a_huge_trace_is_shortened_but_keeps_both_ends() -> None:
     assert len(trace) <= MAX_TRACE + 10
     assert "[trace shortened]" in trace
     # The message is clipped before anything else, so the end of the original is gone.
-    assert trace.startswith("Traceback") and trace.rstrip().endswith("word")
+    # Where the clip falls depends on the path length, so check the shape, not the last letter.
+    assert trace.startswith("Traceback") and "word word word" in trace[-200:]

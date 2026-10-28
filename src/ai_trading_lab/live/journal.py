@@ -11,12 +11,16 @@ Recording never raises. A broken journal must not take the trading loop down wit
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import re
 import sys
+import time
 import traceback
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from urllib.parse import unquote
 
 from pydantic import AwareDatetime
 from sqlalchemy import (
@@ -57,9 +61,15 @@ COMPONENTS = (
 
 MAX_MESSAGE = 500
 MAX_TRACE = 6000
+MAX_CONTEXT = 2000
+MAX_FRAMES = 30
+PRE_CLIP = 20000  # nothing longer is ever run through the patterns
+WRITE_TIMEOUT = 5.0
+BACKOFF_SECONDS = 60.0
 KEEP_OCCURRENCES = 20  # per problem
 KEEP_DAYS = 30
 MAX_GROUPS = 500
+HARD_MAX_GROUPS = 1000  # even unacknowledged errors are capped, oldest first
 PRUNE_EVERY = timedelta(hours=1)
 
 error_groups = Table(
@@ -137,36 +147,87 @@ class JournalSummary(FrozenModel):
     last_error_utc: AwareDatetime | None = None
 
 
+_SECRET_WORDS = (
+    r"api[_-]?key|token|secret|passw(?:or)?d|passphrase|key|sign(?:ature)?|auth\w*|cookie|session"
+)
 _REDACTIONS = (
     (re.compile(r"sk-[A-Za-z0-9_\-]{8,}"), "sk-[redacted]"),
-    (re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{8,}"), "Bearer [redacted]"),
+    # Whole header lines: the scheme word ("Basic", "Bearer") and the value go together.
     (
         re.compile(
-            r"(?i)\b(api[_-]?key|token|secret|password|passwd|authorization|x-api-key)\b"
-            r"([\"']?\s*[=:]\s*[\"']?)[^\s\"',;]+"
+            r"(?i)\b(authorization|proxy-authorization|cookie|set-cookie|api-sign)\b"
+            r"[ \t]*[:=][^\r\n]*"
+        ),
+        r"\1: [redacted]",
+    ),
+    (re.compile(r"(?i)\bbearer\s+\S{8,}"), "Bearer [redacted]"),
+    # name=value or "name": "value" where the name contains a secret-looking word, even inside
+    # longer names such as OPENAI_API_KEY or client_secret.
+    (
+        re.compile(
+            r"(?i)([A-Za-z0-9_\-]*(?:" + _SECRET_WORDS + r")[A-Za-z0-9_\-]*)"
+            r"([\"']?[ \t]*[=:][ \t]*[\"']?)[^\s\"']+"
         ),
         r"\1\2[redacted]",
     ),
-    (re.compile(r"(?i)(://[^/\s:@]+:)[^/\s@]+@"), r"\1[redacted]@"),
+    # Credentials in a URL, up to the last @ of the token so a / or @ in the password cannot leak.
+    (re.compile(r"(://[^:/\s@]+:)\S*@"), r"\1[redacted]@"),
     (re.compile(r"\b[0-9a-fA-F]{32,}\b"), "[redacted-hex]"),
-    (re.compile(r"[A-Za-z0-9_\-]{40,}"), "[redacted-long-token]"),
 )
+_TOKENISH = re.compile(r"[A-Za-z0-9+/_\-]{32,}={0,2}")
+
+
+def _mask_token(match: re.Match[str]) -> str:
+    """A long run that mixes digits, upper and lower case is a key or token, not a path or name."""
+    value = match.group(0)
+    if (
+        any(c.isdigit() for c in value)
+        and any(c.isupper() for c in value)
+        and any(c.islower() for c in value)
+    ):
+        return "[redacted-long-token]"
+    return value
 
 
 def redact(text: str) -> str:
     """Remove anything that looks like a credential before it is stored or shown."""
+    text = text.replace("\x00", "")[:PRE_CLIP]
+    if "%" in text:
+        text = unquote(text)  # token%3Dabc and %22api_key%22%3A are the same secrets
     for pattern, replacement in _REDACTIONS:
         text = pattern.sub(replacement, text)
-    return text
+    return _TOKENISH.sub(_mask_token, text)
 
 
 def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
+def _safe(text: str, limit: int) -> str:
+    return _clip(redact(text), limit)
+
+
+def _safe_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Context is redacted as text and bounded; anything odd is replaced by a marker."""
+    if context is None:
+        return None
+    try:
+        text = redact(json.dumps(context, default=str))
+        if len(text) > MAX_CONTEXT:
+            return {"truncated": True}
+        loaded = json.loads(text)
+        return loaded if isinstance(loaded, dict) else {"value": loaded}
+    except (TypeError, ValueError):
+        return {"unserializable": True}
+
+
 def _trace(exc: BaseException) -> str:
-    text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    text = redact(text)
+    """The frames (never locals) and a clipped message, built without formatting a huge message."""
+    frames = "".join(
+        traceback.format_list(traceback.extract_tb(exc.__traceback__, limit=-MAX_FRAMES))
+    )
+    last = f"{type(exc).__name__}: {str(exc)[:PRE_CLIP]}"
+    text = redact("Traceback (most recent call last):\n" + frames + last)
     if len(text) <= MAX_TRACE:
         return text
     head = MAX_TRACE // 3
@@ -185,8 +246,8 @@ def _location(exc: BaseException) -> str:
     return (ours or fallback or "unknown")[:200]
 
 
-def fingerprint(component: str, error_type: str, location: str) -> str:
-    return hashlib.sha256(f"{component}|{error_type}|{location}".encode()).hexdigest()
+def fingerprint(component: str, error_type: str, location: str, level: str = "error") -> str:
+    return hashlib.sha256(f"{level}|{component}|{error_type}|{location}".encode()).hexdigest()
 
 
 class ErrorJournal:
@@ -194,6 +255,7 @@ class ErrorJournal:
         self.engine = engine
         self._clock = clock or (lambda: datetime.now(UTC))
         self._last_prune: datetime | None = None
+        self._paused_until = 0.0
 
     # ---- recording (never raises) -----------------------------------------------------
 
@@ -210,22 +272,23 @@ class ErrorJournal:
         try:
             error_type = type(exc).__name__
             location = _location(exc)
-            return await self._write(
-                level="error",
-                component=component,
-                error_type=error_type,
-                location=location,
-                headline=_clip(f"{error_type} in {location}", 200),
-                message=_clip(redact(str(exc)), MAX_MESSAGE),
-                trace=_trace(exc),
-                strategy_id=strategy_id,
-                pair=pair,
-                context=context,
-                at=at,
-            )
+            fields: dict[str, Any] = {
+                "level": "error",
+                "component": component,
+                "error_type": error_type,
+                "location": location,
+                "headline": f"{error_type} in {location}",
+                "message": str(exc)[:PRE_CLIP],
+                "trace": _trace(exc),
+                "strategy_id": strategy_id,
+                "pair": pair,
+                "context": context,
+                "at": at,
+            }
         except Exception as problem:  # the journal must never break the loop
             print(f"error journal failed: {type(problem).__name__}", file=sys.stderr)
             return False
+        return await self._guarded(fields)
 
     async def record_event(
         self,
@@ -242,23 +305,47 @@ class ErrorJournal:
         at: datetime | None = None,
     ) -> bool:
         """A problem with no exception behind it (Kraken not answering, an AI call timing out)."""
+        return await self._guarded(
+            {
+                "level": level,
+                "component": component,
+                "error_type": error_type,
+                "location": location,
+                "headline": headline or f"{error_type} ({component})",
+                "message": message[:PRE_CLIP],
+                "trace": None,
+                "strategy_id": strategy_id,
+                "pair": pair,
+                "context": context,
+                "at": at,
+            }
+        )
+
+    async def _guarded(self, fields: dict[str, Any]) -> bool:
+        """Sanitise, bound the time spent, and stand down for a minute after a failure.
+
+        A database outage must cost the loop at most one short wait, not one per recorded problem.
+        """
+        if time.monotonic() < self._paused_until:
+            return False
         try:
-            return await self._write(
-                level=level,
-                component=component,
-                error_type=error_type[:100],
-                location=location[:200],
-                headline=_clip(headline or f"{error_type} ({component})", 200),
-                message=_clip(redact(message), MAX_MESSAGE),
-                trace=None,
-                strategy_id=strategy_id,
-                pair=pair,
-                context=context,
-                at=at,
-            )
+            clean = {
+                **fields,
+                "component": str(fields["component"])[:30],
+                "error_type": _safe(str(fields["error_type"]), 100),
+                "location": _safe(str(fields["location"]), 200),
+                "headline": _safe(str(fields["headline"]), 200),
+                "message": _safe(str(fields["message"]), MAX_MESSAGE),
+                "strategy_id": (fields["strategy_id"] or None) and str(fields["strategy_id"])[:100],
+                "pair": (fields["pair"] or None) and str(fields["pair"])[:12],
+                "context": _safe_context(fields["context"]),
+            }
+            await asyncio.wait_for(self._write(**clean), WRITE_TIMEOUT)
         except Exception as problem:
+            self._paused_until = time.monotonic() + BACKOFF_SECONDS
             print(f"error journal failed: {type(problem).__name__}", file=sys.stderr)
             return False
+        return True
 
     async def _write(
         self,
@@ -274,9 +361,9 @@ class ErrorJournal:
         pair: str | None,
         context: dict[str, Any] | None,
         at: datetime | None,
-    ) -> bool:
+    ) -> None:
         now = at or self._clock()
-        fp = fingerprint(component, error_type, location)
+        fp = fingerprint(component, error_type, location, level)
         first_status: Status = "new" if level == "error" else "seen"
         async with self.engine.begin() as connection:
             statement = insert(error_groups).values(
@@ -334,8 +421,10 @@ class ErrorJournal:
                     error_occurrences.c.seq.not_in(keep),
                 )
             )
-        await self._prune(now)
-        return True
+        try:
+            await self._prune(now)
+        except Exception as problem:  # housekeeping must not lose a record that is already saved
+            print(f"error journal prune failed: {type(problem).__name__}", file=sys.stderr)
 
     async def _prune(self, now: datetime) -> None:
         if self._last_prune is not None and now - self._last_prune < PRUNE_EVERY:
@@ -356,6 +445,17 @@ class ErrorJournal:
                     .where(error_groups.c.status != "new")
                     .order_by(error_groups.c.last_seen_utc)
                     .limit((total or 0) - MAX_GROUPS)
+                )
+                await connection.execute(
+                    delete(error_groups).where(error_groups.c.fingerprint.in_(oldest))
+                )
+            total = await connection.scalar(select(func.count()).select_from(error_groups))
+            if (total or 0) > HARD_MAX_GROUPS:
+                # Even unacknowledged errors are capped, oldest first, so growth has a hard bound.
+                oldest = (
+                    select(error_groups.c.fingerprint)
+                    .order_by(error_groups.c.last_seen_utc)
+                    .limit((total or 0) - HARD_MAX_GROUPS)
                 )
                 await connection.execute(
                     delete(error_groups).where(error_groups.c.fingerprint.in_(oldest))
@@ -459,8 +559,15 @@ class ErrorJournal:
         now = at or self._clock()
         condition = error_groups.c.status == "new"
         if fingerprint_ is not None:
-            condition = condition & error_groups.c.fingerprint.like(fingerprint_ + "%")
+            matching = error_groups.c.fingerprint.startswith(fingerprint_, autoescape=True)
+            condition = condition & matching
         async with self.engine.begin() as connection:
+            if fingerprint_ is not None:
+                found = await connection.scalar(
+                    select(func.count()).select_from(error_groups).where(matching)
+                )
+                if (found or 0) > 1:
+                    raise ValueError("ambiguous fingerprint prefix")
             done = await connection.execute(
                 update(error_groups)
                 .where(condition)

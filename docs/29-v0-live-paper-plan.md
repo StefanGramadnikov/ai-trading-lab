@@ -68,7 +68,7 @@ Missing or stale data means no new entries. Risk breaches latch.
 strategy. Both appear on the dashboard with an on/off switch.
 
 **Costs:** the AI price recorded in the project on 2026-10-19 was `gpt-5.6-terra` at $2.50 / $12 per million
-input / output tokens, about $0.009 per decision. Calling the AI every 15 minutes would use the €10 in under
+input / output tokens, about $0.009 per decision. Calling the AI every 15 minutes would use the budget in under
 two weeks, so the AI is called only for flagged candidates (target 10–20 calls/day, roughly 10–20 cents/day).
 Re-check the current price and model list before activation.
 

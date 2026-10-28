@@ -55,7 +55,6 @@ PROVIDER_OUTAGE_PREFIXES = (
     "transport",
     "unsafe_",
     "destination_",
-    "invalid_provider_response",
     "encoded_response",
     "response_too_large",
 )
@@ -219,6 +218,18 @@ class Proposer:
         Budget and policy refusals are not outages and are not recorded here.
         """
         if self.journal is None:
+            return
+        if last.reason.endswith("invalid_provider_response"):
+            # The provider answered, but not usably: a quality problem, not "the AI is down".
+            await self.journal.record_event(
+                "ai_strategy",
+                "invalid_provider_response",
+                "The model reply did not validate.",
+                strategy_id=strategy_id,
+                pair=pair,
+                headline="The AI reply could not be used",
+                at=now,
+            )
             return
         outage = last.status == "settled" or last.reason.startswith(PROVIDER_OUTAGE_PREFIXES)
         if outage:

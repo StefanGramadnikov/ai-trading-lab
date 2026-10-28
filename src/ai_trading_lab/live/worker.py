@@ -139,7 +139,13 @@ async def run_loop(
             if on_error is not None:
                 await on_error(exc)
             if failed_in_a_row >= max_failures:
-                raise RuntimeError(f"{failed_in_a_row} consecutive failed cycles") from exc
+                giving_up = RuntimeError(f"{failed_in_a_row} consecutive failed cycles")
+                if on_error is not None:
+                    try:
+                        raise giving_up from exc  # raised once so the journal gets a stack to file
+                    except RuntimeError as caught:
+                        await on_error(caught)
+                raise giving_up from exc
         else:
             failed_in_a_row = 0
             emit({"event": "cycle_done", "report": report})

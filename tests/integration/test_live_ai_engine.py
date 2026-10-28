@@ -65,6 +65,10 @@ class Stub:
     async def analyze(self, request: AIRequest) -> ProviderResult:
         self.requests.append(request)
         action = self.decide(json.loads(request.evidence.payload))
+        if action == "invalid":
+            return ProviderResult(
+                status="invalid", model=request.model, reason="invalid_provider_response"
+            )
         if action == "error":
             return ProviderResult(
                 status="error", model=request.model, reason="http_error_unknown_billing"
@@ -510,3 +514,14 @@ async def test_an_exception_inside_the_ai_path_is_journaled_and_contained(
     assert (group.component, group.error_type) == ("ai_strategy", "RuntimeError")
     assert group.last_strategy_id == r.live.ai_id
     # The crash left its call reserved, so the budget guard refuses the other pai
+
+
+async def test_an_unusable_ai_reply_is_a_quality_warning_not_an_outage(
+    engine: AsyncEngine,
+) -> None:
+    await clear_errors(engine)
+    r = await start(engine, Stub(lambda _body: "invalid"))
+    await r.cycle()
+    kinds = {(g.component, g.error_type) for g in await r.live.journal.groups(level="warning")}
+    assert ("ai_strategy", "invalid_provider_response") in kinds
+    assert all(component != "ai_provider" for component, _ in kinds)

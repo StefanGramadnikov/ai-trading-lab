@@ -7,6 +7,7 @@ import asyncio
 import getpass
 import json
 import os
+import re
 import signal
 import sys
 from datetime import timedelta
@@ -51,6 +52,16 @@ def _user() -> str:
         return f"uid:{os.getuid()}"
 
 
+def _fingerprint(value: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{4,64}", value):
+        raise argparse.ArgumentTypeError("must be 4 to 64 hex characters (a fingerprint prefix)")
+    return value
+
+
+def _fingerprint_or_all(value: str) -> str:
+    return value if value == "all" else _fingerprint(value)
+
+
 def _reason(value: str) -> str:
     text = value.strip()
     if not 1 <= len(text) <= 200:
@@ -80,13 +91,13 @@ def parser() -> argparse.ArgumentParser:
     probe.add_argument("--max-age-minutes", type=_positive, default=40)
     errors = commands.add_parser("errors", help="list recorded problems, or show one in full")
     errors.add_argument(
-        "--show", metavar="FINGERPRINT", help="full detail for one problem (prefix ok)"
+        "--show", metavar="FINGERPRINT", type=_fingerprint, help="full detail for one problem"
     )
     errors.add_argument("--status", choices=("new", "seen", "acknowledged"))
     errors.add_argument("--level", choices=("error", "warning"))
     errors.add_argument("--limit", type=_positive, default=30)
     ack = commands.add_parser("ack", help="acknowledge a recorded error (or all new ones)")
-    ack.add_argument("fingerprint", help="a fingerprint prefix, or 'all'")
+    ack.add_argument("fingerprint", type=_fingerprint_or_all, help="a fingerprint prefix, or 'all'")
     ack.add_argument("--reason", required=True, type=_reason)
     audit = commands.add_parser("audit", help="print the on/off audit trail, newest first")
     audit.add_argument("--limit", type=_positive, default=20)
@@ -198,9 +209,13 @@ async def run(arguments: argparse.Namespace) -> int:
                 )
         elif arguments.command == "ack":
             target = None if arguments.fingerprint == "all" else arguments.fingerprint
-            count = await journal.acknowledge(
-                target, actor=f"cli:{_user()}", reason=arguments.reason
-            )
+            try:
+                count = await journal.acknowledge(
+                    target, actor=f"cli:{_user()}", reason=arguments.reason
+                )
+            except ValueError:
+                _emit({"status": "failed", "error": "that prefix matches more than one problem"})
+                return 2
             _emit({"acknowledged": count})
         elif arguments.command == "audit":
             rows = await live.store.audit(limit=arguments.limit)
@@ -223,7 +238,8 @@ async def run(arguments: argparse.Namespace) -> int:
 
                 async def record_worker_error(exc: BaseException) -> None:
                     # Strategy failures were already journaled with their detail by the engine.
-                    if not isinstance(exc, CycleErrors):
+                    # Integrity failures were journaled by the engine as `paper_broker`.
+                    if not isinstance(exc, CycleErrors | LoopIntegrityError):
                         await journal.record_exception("worker", exc, at=live.clock())
 
                 async def cycle() -> Any:

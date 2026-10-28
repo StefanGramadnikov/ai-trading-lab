@@ -402,7 +402,7 @@ async def test_errors_show_prints_the_full_problem_and_unknown_prefixes_fail(
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out["problem"]["last_traceback"] == "Traceback..." and out["recent_occurrences"] == []
     journal.group = AsyncMock(return_value=None)
-    assert await _run_with_journal(["errors", "--show", "zz"], journal) == 2
+    assert await _run_with_journal(["errors", "--show", "ffff"], journal) == 2
     assert "no single problem" in capsys.readouterr().out
 
 
@@ -418,3 +418,23 @@ async def test_ack_records_who_and_why(
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1]) == {"acknowledged": 2}
     with pytest.raises(SystemExit):
         args("ack", "all")  # a reason is required
+
+
+def test_fingerprint_arguments_must_be_hex_prefixes() -> None:
+    assert args("errors", "--show", "ab12").show == "ab12"
+    assert args("ack", "all", "--reason", "x").fingerprint == "all"
+    for bad in (
+        ["errors", "--show", "%"],
+        ["errors", "--show", "ab"],
+        ["ack", "_", "--reason", "x"],
+    ):
+        with pytest.raises(SystemExit):
+            args(*bad)
+
+
+@pytest.mark.asyncio
+async def test_an_ambiguous_ack_prefix_is_reported(capsys: pytest.CaptureFixture[str]) -> None:
+    journal = MagicMock()
+    journal.acknowledge = AsyncMock(side_effect=ValueError("ambiguous fingerprint prefix"))
+    assert await _run_with_journal(["ack", "ab12", "--reason", "x"], journal) == 2
+    assert "more than one problem" in capsys.readouterr().out

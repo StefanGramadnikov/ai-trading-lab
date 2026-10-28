@@ -28,6 +28,43 @@ def test_credentials_are_removed(raw: str, secret: str) -> None:
     assert "redacted" in cleaned
 
 
+@pytest.mark.parametrize(
+    ("raw", "secret"),
+    [
+        ("OPENAI_API_KEY=abcdefghij1234567890", "abcdefghij1234567890"),
+        (
+            "KRAKEN_API_SECRET=AbCdEf/GhIjKl+MnOpQr/StUvWxYz0123456789AbCdEf/GhIjKlMnOpQrStUv==",
+            "StUvWxYz0123",
+        ),
+        ("client_secret: s3cr3t-value-here", "s3cr3t-value"),
+        ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNz"),
+        ("Cookie: session=abc123; theme=dark", "abc123"),
+        ("API-Sign: signaturevalue/with+chars==", "signaturevalue"),
+        ("password=ab,cd and more", "ab,cd"),
+        ("token%3Dabcdefghijkl", "abcdefghijkl"),
+        ("%22api_key%22%3A%22verysecretvalue%22", "verysecretvalue"),
+        ("postgresql://user:p/ss@word@db:5432/x", "p/ss"),
+        ("bearer abcdefghijklmnop", "abcdefghijklmnop"),
+    ],
+)
+def test_known_bypasses_are_closed(raw: str, secret: str) -> None:
+    cleaned = redact(raw)
+    assert secret not in cleaned, cleaned
+    assert "redacted" in cleaned
+
+
+def test_paths_names_and_ids_are_not_mistaken_for_tokens() -> None:
+    line = 'File "/app/src/ai_trading_lab/live/engine.py", line 12, in _collect_everything_now'
+    assert redact(line) == line
+    assert redact("keyboard layout ok") == "keyboard layout ok"
+    assert "\x00" not in redact("a\x00b")
+
+
+def test_a_huge_input_is_clipped_before_the_patterns_run() -> None:
+    text = "word " * 2_000_000
+    assert len(redact(text)) <= 20_000 + 50
+
+
 def test_ordinary_text_survives() -> None:
     text = "TypeError: unsupported operand for Decimal in live.strategies:decide_rules at cycle 7"
     assert redact(text) == text
@@ -59,6 +96,7 @@ def test_the_fingerprint_names_the_place_not_the_line_and_the_trace_is_clean() -
     assert fingerprint("rules_strategy", "ValueError", "x") != fingerprint(
         "ai_strategy", "ValueError", "x"
     )
+    assert fingerprint("a", "b", "c", "error") != fingerprint("a", "b", "c", "warning")
     trace = _trace(first)
     assert "abcdef123456" not in trace and "ValueError" in trace and "_boom_a" in trace
 
@@ -70,4 +108,5 @@ def test_a_huge_trace_is_shortened_but_keeps_both_ends() -> None:
         trace = _trace(exc)
     assert len(trace) <= MAX_TRACE + 10
     assert "[trace shortened]" in trace
-    assert trace.startswith("Traceback") and trace.rstrip().endswith("end")
+    # The message is clipped before anything else, so the end of the original is gone.
+    assert trace.start

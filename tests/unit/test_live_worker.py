@@ -262,3 +262,30 @@ async def test_unexpected_cycle_failures_and_integrity_failures_reach_the_error_
             on_error=hook,
         )
     assert [type(e) for e in seen] == [LoopIntegrityError]
+
+
+@pytest.mark.asyncio
+async def test_giving_up_after_repeated_failures_is_itself_reported_with_a_stack() -> None:
+    clock = Clock()
+    seen: list[BaseException] = []
+
+    async def hook(exc: BaseException) -> None:
+        seen.append(exc)
+
+    async def always_fails() -> Any:
+        raise TimeoutError("venue timed out")
+
+    with pytest.raises(RuntimeError, match="consecutive failed cycles"):
+        await run_loop(
+            always_fails,
+            cycles=None,
+            interval=900,
+            offset=20,
+            clock=clock,
+            sleep=clock.sleep,
+            emit=lambda _e: None,
+            on_error=hook,
+            max_failures=3,
+        )
+    assert [type(e).__name__ for e in seen] == ["TimeoutError"] * 3 + ["RuntimeError"]
+    assert seen[-1].__traceback__ is not None and isinstance(seen[-1].__cause__, TimeoutError)

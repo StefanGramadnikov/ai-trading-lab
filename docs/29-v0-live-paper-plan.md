@@ -91,7 +91,7 @@ change needs a new decision.
 | 2 | **Done (merged, PR #11)**: pieces A–D below. Generalised live paper loop: multi-symbol, candle history, deterministic rules strategy with exits (stop, time, take-profit), Kraken fee/spread model, journal, restart-safe | Runs locally for several cycles on real Kraken data; user approves risk numbers first |
 | 3 | **Done (merged, PR #12), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | **Done (merged, PR #13), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
-| 5 | **Files built on `feature/s5-deployment` (docs/30); the deployment itself is done together with the user:** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
+| 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | Dashboard v1: strategy cards, on/off switch, equity curve, P&L, trades, AI cost, plain-language status | Authenticated toggle works; browser tests green |
 | 7 | Real Telegram alerts (needs the user's bot token) | A test alert received |
 | 8 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
@@ -308,3 +308,17 @@ counts, then teardown. **Not rehearsed:** the Hetzner server itself, `bootstrap.
 SSH, the AI strategy against the real OpenAI API. The 1-2 week clock starts when the loop first runs on the server.
 
 Review fixes of slice 5: the timer runs as `atl` (backups readable by scp), `bootstrap.sh` installs the timer (no sudo needed), a backup is kept only if it is a readable archive containing our tables, rotation keeps the newest 7 by count, the restore test fails on a bad restore, and the runbook states the limits of `health`, the restart behaviour and that `restore-test.sh` is a manual weekly check. Re-rehearsed locally after these changes (up --build, migrate exit 0, healthy, backup, restore test ok).
+
+## 14. Deployment record (slice 5, done 2026-10-28)
+
+Server: Hetzner Cloud, Helsinki, 2 vCPU class `ubuntu-2gb-hel1`, Ubuntu 24.04.5, name `atl-v0`. Deployed commit `ef92ac59f5a270670f8a91577741928d10b7dd35`
+(also in `/opt/atl/DEPLOYED_COMMIT`), image tag `ef92ac5`. Stack as in `compose.prod.yaml`; bootstrap, code and env were placed following
+docs/30; the database password was generated on the server and never displayed. AI strategy **off** (`ATL_AI_ENABLED=false`, no key).
+
+Evidence observed on the server: `migrate` exited 0; `live` healthy; the first real cycle at **2026-10-28T16:20:47Z** observed
+XBTEUR, ETHEUR and SOLEUR with no errors and filled the benchmark's three paper orders (equity 98.41 after fees and spread); a
+backup was taken, its checksum verified and the restore test passed (row counts matched); the backup was pulled to the owner's Mac;
+disk 9% used, about 115 MB used by the two containers. **The 1-2 week evaluation clock started with that first cycle.**
+
+Not yet done: AI activation (needs the owner's new OpenAI key with a monthly limit, the verified model and price), a dashboard
+(slice 6), alerts (slice 7). Until then the owner checks daily: `dc ps`, `atl-live health`, `atl-live status`, and pulls a backup.

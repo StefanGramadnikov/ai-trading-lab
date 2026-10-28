@@ -1707,3 +1707,9 @@ Cut from `main` after PR #13 merged. Vendor and backup target chosen with the us
 Adds `compose.prod.yaml` (db, one-shot migrate, `atl-live` loop; no published ports, read-only, capabilities dropped, fixed
 `PAPER_ONLY`), `atl-live health`, `deploy/` (bootstrap, backup with checksum, restore test, pull-from-Mac, kill switch, systemd timer,
 env template) and docs/30. Rehearsed end to end locally in an isolated Compose project; the server itself is not yet created.
+
+## 2026-10-28 — V0 deployed (slice 5 completed)
+
+The V0 paper loop runs on the Hetzner server (docs/29 section 14). First real cycle 2026-10-28T16:20:47Z: three pairs observed,
+benchmark filled, no errors; backup and restore test passed. Rules and benchmark strategies are running; the AI strategy is off
+until activated by the owner. The 1-2 week evaluation clock started with the first cycle.

@@ -92,8 +92,8 @@ change needs a new decision.
 | 3 | **Done (merged, PR #12), section 11:** AI proposer that can originate buy/sell/hold; spend guard (€10); destination guard on the OpenAI client; numeric-only evidence; short ADR for the change from veto-only | AI decisions logged with cost; cap proven by test |
 | 4 | **Done (merged, PR #13), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
-| 6 | **Error journal and visibility (built on `feature/s6-error-journal`, section 15):** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
-| 7 | Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
+| 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
+| 7 | **Built on `feature/s7-dashboard`, section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
@@ -350,3 +350,31 @@ Recording never raises: if the journal itself cannot write, a one-line notice go
 Reading it: `atl-live errors [--status new] [--level error] [--limit N]` (list and summary), `atl-live errors --show <fingerprint
 prefix>` (full detail, trace and recent occurrences), `atl-live ack <fingerprint prefix|all> --reason "..."`; `atl-live status` shows
 the summary. The dashboard (slice 7) and the alerts (slice 8) read the same tables.
+
+## 16. Dashboard (slice 7)
+
+Owner decisions: working on/off switches, behind a sign-in; reached through an SSH tunnel; verdict says "too early to tell";
+alerts for anything broken (DEC-046). Design iterated in `docs/design/dashboard-v1|v2` with the `dashboard-designer` agent.
+
+What it is: one more container (`dashboard` in `compose.prod.yaml`), the same image, command `atl-dashboard serve`, published on the
+server's `127.0.0.1:8000` only. From your Mac: `ssh -L 8000:localhost:8000 atl@SERVER`, then open `http://localhost:8000`.
+It has no OpenAI key and no order path. It can read, flip a strategy's flag and acknowledge errors, nothing else.
+
+Sign-in: one owner password. `ATL_DASHBOARD_PASSWORD_HASH` (scrypt, made by `atl-dashboard hash-password`, which asks at a hidden
+prompt on the server) and `ATL_DASHBOARD_SESSION_SECRET` (`atl-dashboard make-secret`) live in `/opt/atl/.env.prod`. Unset means every
+sign-in is refused. The cookie is signed, HttpOnly, SameSite=Strict, ends after 30 minutes idle (`ATL_DASHBOARD_IDLE_MINUTES`) or 12 hours
+in all; writes also need a CSRF header and a same-host Origin; five wrong passwords lock sign-in for 15 minutes (counted globally). A
+stolen cookie cannot be revoked before it expires; the tunnel is the real access control.
+
+API (all JSON, `/api/...`, signed-in only): `overview` (everything the first screens need), `decisions` (filtered, paged),
+`audit`, `errors`, `errors/{fingerprint}`, POST `errors/{fingerprint}/ack`, POST `strategies/{id}/enabled`, `login`, `logout`, `me`.
+A switch calls the same `LiveStore.set_enabled` as the CLI with actor `dashboard:owner` and a required reason; a database failure
+returns 503 "nothing was changed". Any unexpected exception in the page's own code is recorded in the error journal as
+component `dashboard` and the page shows a plain message.
+
+Alerts (`dashboard/alerts.py`, thresholds in DEC-046) are evaluated live by the overview; slice 8 sends them. Not built yet and marked
+as such: backup age (the container cannot see the backup directory by design), strategy consecutive-failure counts beyond the journal's
+recent occurrences, sign-in audit.
+
+The page text, the plain-language reason table and the chart are `dashboard/static/{index.html,app.js,app.css}`: no inline script or
+style, no external resource (CSP `default-src 'none'; script-src 'self'; style-src 'self'`), all server text inserted as text.

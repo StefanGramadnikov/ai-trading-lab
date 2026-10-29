@@ -518,6 +518,28 @@ class ErrorJournal:
             )
         return [Occurrence.model_validate(dict(r)) for r in rows]
 
+    async def recent_error_counts(self, since: datetime) -> dict[str, int]:
+        """Error occurrences per strategy since `since` (each failing cycle records one)."""
+        async with self.engine.connect() as connection:
+            rows = (
+                await connection.execute(
+                    select(error_occurrences.c.strategy_id, func.count())
+                    .select_from(
+                        error_occurrences.join(
+                            error_groups,
+                            error_groups.c.fingerprint == error_occurrences.c.fingerprint,
+                        )
+                    )
+                    .where(
+                        error_groups.c.level == "error",
+                        error_occurrences.c.at_utc >= since,
+                        error_occurrences.c.strategy_id.is_not(None),
+                    )
+                    .group_by(error_occurrences.c.strategy_id)
+                )
+            ).all()
+        return {str(strategy_id): int(count) for strategy_id, count in rows}
+
     async def summary(self, now: datetime | None = None) -> JournalSummary:
         moment = now or self._clock()
         since = moment - timedelta(hours=24)

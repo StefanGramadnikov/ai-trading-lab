@@ -2,8 +2,9 @@
 #
 #   docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod up -d --build
 #
-# Nothing here publishes a port: the database and the loop are reachable only from the server itself
-# (docker exec, or an SSH session). The dashboard comes in a later slice.
+# The only published port is the dashboard, bound to the server's own loopback (127.0.0.1:8000): it is
+# reachable from your Mac only through an SSH tunnel (ssh -L 8000:localhost:8000 atl@SERVER). The firewall
+# opens SSH only, and nothing else is published.
 name: atl
 
 x-logging: &logging
@@ -78,6 +79,45 @@ services:
       timeout: 20s
       retries: 3
       start_period: 10m
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  # The dashboard: read models over the loop's tables, plus the audited on/off switches. It has no
+  # OpenAI key and no way to place anything: it can only read, flip a strategy flag and acknowledge errors.
+  dashboard:
+    build: .
+    image: atl-app:${ATL_IMAGE_TAG:-local}
+    command: ["/app/.venv/bin/atl-dashboard", "serve"]
+    environment:
+      <<: *database-url
+      ATL_EXECUTION_MODE: PAPER_ONLY
+      ATL_AI_ENABLED: ${ATL_AI_ENABLED:-false}
+      ATL_AI_TOTAL_LIMIT_USD: ${ATL_AI_TOTAL_LIMIT_USD:-0}
+      ATL_DASHBOARD_PASSWORD_HASH: ${ATL_DASHBOARD_PASSWORD_HASH:-}
+      ATL_DASHBOARD_SESSION_SECRET: ${ATL_DASHBOARD_SESSION_SECRET:-}
+      ATL_DASHBOARD_IDLE_MINUTES: ${ATL_DASHBOARD_IDLE_MINUTES:-30}
+      ATL_DEPLOYED_COMMIT: ${ATL_IMAGE_TAG:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     read_only: true
     tmpfs: ["/tmp"]
     security_opt: ["no-new-privileges:true"]

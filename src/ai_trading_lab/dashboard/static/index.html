@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Trading Lab dashboard</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="paper" role="status">PAPER MONEY ONLY - no real orders are ever placed</div>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">AI Trading Lab<small>V0 paper experiment: rules vs AI vs buy-and-hold</small></div>
+    <div class="ctrl" id="who"></div>
+    <button class="btn" id="theme" type="button" aria-label="Switch between light and dark theme">Theme</button>
+  </div>
+</header>
+<nav class="tabs" aria-label="Main" id="nav" hidden>
+  <div class="in">
+    <a href="#overview" data-v="overview">Overview</a>
+    <a href="#decisions" data-v="decisions">Decisions</a>
+    <a href="#ai" data-v="ai">AI &amp; safety</a>
+    <a href="#errors" data-v="errors" id="nav-err">Errors</a>
+    <a href="#system" data-v="system">System</a>
+  </div>
+</nav>
+<div class="statusbar" id="statusbar" hidden>
+  <span id="updated" aria-live="polite"></span>
+  <button class="btn" id="refresh" type="button">Refresh now</button>
+</div>
+
+<main id="main" tabindex="-1">
+  <noscript><p>This page needs JavaScript to show the dashboard.</p></noscript>
+</main>
+<footer id="foot">Paper money only. This page cannot place orders; it can only switch the paper strategies on or off and acknowledge errors.</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="dlg" aria-labelledby="dlg-title"><div id="dlg-body"></div></dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

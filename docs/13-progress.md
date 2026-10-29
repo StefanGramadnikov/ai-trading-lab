@@ -1733,3 +1733,11 @@ a `dashboard` service published on 127.0.0.1 only, and DEC-046 (alert thresholds
 PR #17 merged and deployed (commit 42d9f15). Dashboard reachable through the SSH tunnel; the owner signed in. Loop healthy, cycles clean.
 Next: slice 8 (Telegram alerts; needs the owner's bot token typed into the server env file) and AI activation (needs the owner's new key).
 
+
+
+## 2026-10-29 — Slice 8: Telegram alerts (branch `feature/s8-telegram-alerts`)
+
+Adds the `alerts` package and container (separate process), `alert_state` (migration 0016), `atl-alerts run|test|find-chat`, the
+planner that sends each problem once, reminds after 6 h, announces recovery and retries failed deliveries a bounded number of times,
+and a daily check message. Not deployed; waits for the owner's bot token (docs/30 section 9c).
+

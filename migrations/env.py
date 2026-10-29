@@ -5,6 +5,7 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ai_trading_lab.ai.run_store import ai_runs
+from ai_trading_lab.alerts.state import alert_state
 from ai_trading_lab.backtesting.store import research_runs
 from ai_trading_lab.config import Settings
 from ai_trading_lab.experiments.store import experiments
@@ -22,6 +23,7 @@ assert (
     is sessions.metadata
     is live_strategies.metadata
     is error_groups.metadata
+    is alert_state.metadata
 )
 
 

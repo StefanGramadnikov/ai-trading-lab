@@ -177,6 +177,26 @@ $dc up -d dashboard
 Open it from your Mac: `ssh -L 8000:localhost:8000 atl@SERVER`, leave that window open, browse to `http://localhost:8000`.
 Switches and error acknowledgements work from there; both are recorded (`atl-live audit`, `atl-live errors`).
 
+## 9c. Telegram alerts (slice 8)
+
+You create the bot, so the token never leaves your hands:
+
+1. In Telegram open `@BotFather`, send `/newbot`, choose a name, and copy the token it prints (looks like `123456:ABC...`).
+2. Open your new bot in Telegram and send it any message (for example "hi").
+3. On the server, put the token in the env file (`nano /opt/atl/.env.prod`), line `ATL_TELEGRAM_BOT_TOKEN=...`, then:
+
+```bash
+cd /opt/atl/ai-trading-lab
+dc="docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod"
+$dc run --rm --no-deps -T alerts /app/.venv/bin/atl-alerts find-chat     # prints your chat id (never the token)
+nano /opt/atl/.env.prod    # set ATL_TELEGRAM_CHAT_ID=<that id> and ATL_TELEGRAM_ENABLED=true
+$dc up -d alerts
+$dc exec -T alerts /app/.venv/bin/atl-alerts test                       # you should get a message within seconds
+```
+
+`alerts` appears in `dc ps` and reports `healthy` once it has checked. If the test message does not arrive, `dc logs --tail 50 alerts`
+shows the reason without ever printing the token (`telegram_settings_invalid` means the token or chat id has the wrong shape; the container keeps running and sends nothing until you fix the env file and `up -d alerts`). To stop alerts: set `ATL_TELEGRAM_ENABLED=false` and `up -d alerts`.
+
 ## 10. Security notes
 
 - No inbound port except SSH; the dashboard is published on the server's loopback only (SSH tunnel); the database has no published port; the containers run read-only with all capabilities dropped.

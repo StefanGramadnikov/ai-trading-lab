@@ -94,7 +94,7 @@ change needs a new decision.
 | 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
-| 8 | Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
+| 8 | **Built on `feature/s8-telegram-alerts`, section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
@@ -386,3 +386,34 @@ set the password on the server with `/opt/atl/set-dashboard-password.sh` (hidden
 env file, never displayed) and signed in through the SSH tunnel. Checked from the server afterwards: three consecutive cycles
 (09:15, 09:30, 09:45 UTC) without failures, no unacknowledged errors, the only journal entry is the three Kraken warnings from the
 first cycle after the slice 6 restart (a startup hiccup, never repeated). The switch was not exercised by the assistant; the owner tests it from the page.
+
+## 17. Telegram alerts (slice 8)
+
+What it is: one more container, `alerts` (`atl-alerts run`), deliberately **not** part of the loop's process, so it can tell you
+when the loop has stopped. Every 5 minutes it computes the same findings the dashboard shows (`DashboardData.overview()` and the
+rules R1-R6 of `dashboard/alerts.py`, thresholds in DEC-046) and sends them to one Telegram chat through the existing durable
+single-attempt outbox (`notifications/`), so nothing is sent twice by a crash and a message carrying a secret-shaped string is refused.
+
+Behaviour (`alerts/monitor.py`, pure `plan()` plus a runner): a new problem is sent once; the same problem is never repeated within
+6 hours (then one "still not fixed" reminder); a problem is announced as "Resolved" only after 30 quiet minutes, so a value hovering
+at a threshold stays one episode instead of flooding the chat; a message that could not be delivered is retried after growing pauses
+(5 min, 15 min, 1 h, 3 h, then every 6 h), and one problem failing to send never blocks the others. Each send is recorded as "told"
+before it is attempted and rolled back if it failed, so a crash can lose one message but never send a second copy. Telegram's
+"unknown" outcome (timeout, 5xx) counts as a failure and is retried: a duplicate message is possible there, a deliberate trade for
+alerts (the single-attempt rule protects orders). Message text is fixed wording from our own code (rule title, detail sentence, rule
+id, how to open the dashboard); nothing from the market, the AI or an exception message is ever copied into it.
+
+If the database itself is unreachable, the outbox is too, so a small in-memory path sends one fixed "the database does not answer"
+message straight through Telegram (again after 6 hours) and one "answers again" note on recovery.
+
+Added by the assistant, not requested: a **daily check** message at 07:00 UTC or later (values per strategy, alerts active, errors to
+review, AI state), retried hourly the same day if Telegram was down. Without it, silence could mean "all fine" or "the alerter is dead". Tell me if you do not want it.
+
+Not covered: the alerter itself dying (Docker restarts it and its healthcheck shows on `docker compose ps`, but nothing outside the
+server watches it; the daily check going missing is your signal), and the whole server being down (no alert can come from it; an
+external uptime monitor would be a later, separate decision).
+
+Setup (yours, docs/30 section 9c): create the bot with @BotFather, put the token in `/opt/atl/.env.prod`, send your bot a message,
+`atl-alerts find-chat` prints your chat id, set `ATL_TELEGRAM_ENABLED=true`, start the container, `atl-alerts test` sends a test
+message. Until enabled the container idles and nothing is marked as sent. New table `alert_state` (migration 0016).
+

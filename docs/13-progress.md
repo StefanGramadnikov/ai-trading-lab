@@ -1728,3 +1728,8 @@ restart logged three Kraken `source_error` warnings, which the journal captured 
 Slice 7 adds the `dashboard` package (sign-in, read models, working switches, acknowledgement, shared alert rules), the static page,
 a `dashboard` service published on 127.0.0.1 only, and DEC-046 (alert thresholds approved by the owner). Not yet deployed.
 
+## 2026-10-29 — Slice 7 deployed
+
+PR #17 merged and deployed (commit 42d9f15). Dashboard reachable through the SSH tunnel; the owner signed in. Loop healthy, cycles clean.
+Next: slice 8 (Telegram alerts; needs the owner's bot token typed into the server env file) and AI activation (needs the owner's new key).
+

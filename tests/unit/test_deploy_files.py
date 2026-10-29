@@ -16,12 +16,12 @@ SCRIPTS = sorted((ROOT / "deploy").glob("*.sh"))
 
 
 def test_only_the_dashboard_is_published_and_only_on_the_servers_own_loopback() -> None:
-    assert set(SERVICES) == {"db", "migrate", "live", "dashboard"}
+    assert set(SERVICES) == {"db", "migrate", "live", "dashboard", "alerts"}
     for name, service in SERVICES.items():
         assert "network_mode" not in service, name
         assert service.get("privileged") is not True, name
         if name != "dashboard":
-            assert "ports" not in service, name
+            assert "ports" not in service, name  # the alerter only calls out, never listens
     assert SERVICES["dashboard"]["ports"] == ["127.0.0.1:8000:8000"]
 
 
@@ -85,7 +85,7 @@ def test_every_service_rotates_its_logs(name: str) -> None:
 
 def test_the_image_provides_the_commands_the_stack_runs() -> None:
     scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
-    assert "atl-live" in scripts and "atl-dashboard" in scripts
+    assert {"atl-live", "atl-dashboard", "atl-alerts"} <= set(scripts)
     assert (ROOT / "alembic.ini").exists() and (ROOT / "migrations").is_dir()
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert "alembic.ini" in dockerfile and "migrations" in dockerfile
@@ -165,3 +165,26 @@ def test_any_sensible_image_tag_lets_the_dashboard_start(tag: str) -> None:
     from ai_trading_lab.config import Settings
 
     assert Settings(_env_file=None, deployed_commit=tag).deployed_commit in (tag, None)
+
+
+def test_the_alerter_is_separate_from_the_loop_locked_down_and_cannot_spend_or_trade() -> None:
+    alerts = SERVICES["alerts"]
+    environment = alerts["environment"]
+    assert alerts["command"] == ["/app/.venv/bin/atl-alerts", "run"]
+    assert environment["ATL_EXECUTION_MODE"] == "PAPER_ONLY"
+    assert not any("API_KEY" in key for key in environment)
+    assert environment["ATL_TELEGRAM_ENABLED"] == "${ATL_TELEGRAM_ENABLED:-false}"
+    assert environment["ATL_TELEGRAM_BOT_TOKEN"] == "${ATL_TELEGRAM_BOT_TOKEN:-}"
+    assert "ports" not in alerts and alerts["restart"] == "unless-stopped"
+    assert alerts["read_only"] is True and alerts["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in alerts["security_opt"]
+    assert alerts["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
+    # It must not live inside the loop's container: a dead loop could not report itself.
+    assert alerts["command"] != SERVICES["live"]["command"]
+
+
+def test_the_env_example_ships_telegram_off_with_no_token() -> None:
+    text = (ROOT / "deploy" / "env.prod.example").read_text()
+    assert "ATL_TELEGRAM_ENABLED=false" in text
+    assert re.search(r"^ATL_TELEGRAM_BOT_TOKEN=$", text, re.MULTILINE)
+    assert re.search(r"^ATL_TELEGRAM_CHAT_ID=$", text, re.MULTILINE)

@@ -124,5 +124,40 @@ services:
     cap_drop: [ALL]
     logging: *logging
 
+  # Telegram alerts: a SEPARATE process from the loop on purpose, so it can tell you when the loop
+  # itself has stopped. It reads the same tables as the dashboard and sends only fixed text (rule
+  # title, our own detail sentence) to your one Telegram chat. It cannot trade, ask the AI or write
+  # anything but its own alert state and the notification outbox.
+  alerts:
+    build: .
+    image: atl-app:${ATL_IMAGE_TAG:-local}
+    command: ["/app/.venv/bin/atl-alerts", "run"]
+    environment:
+      <<: *database-url
+      ATL_EXECUTION_MODE: PAPER_ONLY
+      ATL_AI_ENABLED: ${ATL_AI_ENABLED:-false}
+      ATL_AI_TOTAL_LIMIT_USD: ${ATL_AI_TOTAL_LIMIT_USD:-0}
+      ATL_TELEGRAM_ENABLED: ${ATL_TELEGRAM_ENABLED:-false}
+      ATL_TELEGRAM_BOT_TOKEN: ${ATL_TELEGRAM_BOT_TOKEN:-}
+      ATL_TELEGRAM_CHAT_ID: ${ATL_TELEGRAM_CHAT_ID:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD-SHELL", "test -n \"$$(find /tmp/alerts.ok -mmin -15 2>/dev/null)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
 volumes:
   postgres_data:

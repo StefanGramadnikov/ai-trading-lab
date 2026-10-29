@@ -96,7 +96,7 @@ change needs a new decision.
 | 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | **Done (merged, PR #19; deployed 2026-10-29), section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
-| 8b | **Built on `feature/s9-ai-model-setting` (DEC-047):** model chosen by setting (`ATL_AI_MODEL`, default `gpt-6.1-sol`), per-model reasoning setting, fail-closed model list; first real call still to be made | Gate green; first real call verified |
+| 8b | **Done (merged, PR #21; deployed and AI activated 2026-10-29), section 17 record (DEC-047):** model chosen by setting (`ATL_AI_MODEL`, default `gpt-6.1-sol`), per-model reasoning setting, fail-closed model list; first real call still to be made | Gate green; first real calls verified (6 validated, 2026-10-29) |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
@@ -431,3 +431,23 @@ by the setup commands (throwaway container for `find-chat`; `up -d alerts` repla
 `malformed_candles` warning for ETHEUR in the 13:15 UTC cycle (other pairs fine, contained), and the same kind of single-cycle
 hiccup earlier in the day; to be watched, not yet explained. The owner also added a local launcher, `run-ai-trading-lab`
 (outside the repo): opens the SSH tunnel and http://atl.wip:8000.
+
+### Deployment and AI activation record (slice 8b, 2026-10-29)
+
+Deployed commit b1b33ea (backup `atl-20261029T135553Z.dump` first). The owner revoked the exposed key, created a new project key with a
+monthly limit and put the AI lines in `/opt/atl/.env.prod` (typed by the owner; the assistant never saw the key); `live` logged
+`{"ai": "ai_enabled"}` from 14:04 UTC. Model `gpt-6.1-sol` (DEC-047, pinned by `ATL_AI_MODEL`), cap USD 15.
+
+Observed on the server afterwards (read-only, from the database and container logs): **6 real calls** (3 pairs at 14:05 and at 18:00, one review
+per pair every 4 hours), all `completed / validated`, model id returned exactly `gpt-6.1-sol`, 596-645 input and 109-131 output tokens,
+3.4-4.4 s each, about USD 0.0025 per call by token count (estimate, not an invoice; about USD 0.015 for the six). All six answers were
+"abstain"; no strategy has traded yet, and no error is recorded. This settles two items DEC-047 listed as unverified (the API accepts
+`reasoning.effort=low` with the strict JSON schema; the returned model id matches). At 18 calls a day two weeks cost about USD 0.6.
+
+**Env-file lesson.** Two manual edits of the env file went wrong: (1) the new AI lines were added above the original empty defaults, and
+the later lines won (`ai_key_missing`); (2) the instructions to delete the stale duplicates used line numbers from an earlier state of the
+file, so a `sed` deleted the wrong lines, among them `ATL_DASHBOARD_SESSION_SECRET` (the dashboard then said "No dashboard password is
+configured"). Repaired by appending a new random secret (the password hash was intact; Telegram, key and AI lines were unaffected). Rule from
+now on: edit the env file by variable name, never by line number; keep one line per variable; check with a names-only listing
+(`cut -d= -f1 /opt/atl/.env.prod | sort | uniq -d` must print nothing); a backup copy of the file contains the key and is removed
+once the change is verified. Any change to an AI or alert variable needs `dc up -d` (all services), not only `live`.

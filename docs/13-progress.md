@@ -1755,3 +1755,10 @@ adapter (`gpt-5.6-terra`: none, `gpt-6.1-sol`: low), a fail-closed check (`ai_mo
 allowance from 400 to 2000 tokens (reasoning counts inside it). Two integration-test constants for the reserved amount changed
 accordingly; the cap invariant they test is unchanged. Independent review: no confirmed money-safety defect; findings (reasoning allowance exhaustion, model-id mismatch cost, stale README/fixture, comment overstating fail-closed) fixed or recorded in DEC-047; a gpt-6.1-sol smoke fixture added. Gate: ruff, mypy clean, 1675 passed, coverage 95.15%. Not deployed. Not
 verified: a real call to the API (accepted `reasoning.effort=low`, returned model id) — the first call after activation will show it.
+
+## 2026-10-29 — Slice 8b deployed; AI activated
+
+PR #21 merged, commit b1b33ea deployed, `ai_enabled` from 14:04 UTC. First 6 real calls to `gpt-6.1-sol` all validated (abstain), about USD 0.015
+estimated; no errors. Env-file mishap (wrong lines deleted from stale line numbers; dashboard session secret lost) repaired the same
+evening; lesson recorded in docs/29 and docs/30.
+Next: let the run proceed; slice 9 (self-review), slice 10 (evaluation report) and a stale-docs cleanup remain. Live pilot is not approved.

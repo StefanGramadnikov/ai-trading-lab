@@ -32,6 +32,14 @@ _SYSTEM = (
 )
 
 
+# Reasoning effort sent per OpenAI model. Reasoning tokens are billed as output and count inside
+# max_output_tokens, so every model the live loop may use needs a deliberate entry here:
+# gpt-5.6-terra documents "none"; gpt-6.1-sol documents low, medium (default), high, xhigh and max
+# (no "none"), so it gets the lowest. The live loop refuses to start the AI for a model not listed
+# (`build_ai`); this adapter alone sends no effort for an unlisted model (the provider default).
+OPENAI_REASONING_EFFORT: dict[str, str] = {"gpt-5.6-terra": "none", "gpt-6.1-sol": "low"}
+
+
 class Provider(Protocol):
     async def analyze(self, request: AIRequest) -> ProviderResult: ...
 
@@ -81,8 +89,8 @@ def _body(request: AIRequest) -> bytes:
                 }
             },
         )
-        if request.model == "gpt-5.6-terra":
-            body["reasoning"] = {"effort": "none"}
+        if (effort := OPENAI_REASONING_EFFORT.get(request.model)) is not None:
+            body["reasoning"] = {"effort": effort}
     else:
         messages = [{"role": "user", "content": content}]
         if request.provider == "xai":

@@ -49,6 +49,9 @@ def test_bounded_json_and_modes(tmp_path: Path) -> None:
             AIRunInput.model_validate(spec.model_copy(update=update).model_dump(mode="json"))
     real = cli.read_run(Path("tests/fixtures/ai_openai_smoke.json"))
     assert real.provider == "openai" and real.budget.total_limit == 1
+    sol = cli.read_run(Path("tests/fixtures/ai_openai_smoke_gpt_6_1_sol.json"))
+    assert sol.model == sol.price.model == "gpt-6.1-sol" and sol.budget.total_limit == 1
+    assert sol.budget.budget_id != real.budget.budget_id and sol.max_output_tokens == 2000
     for real_update in ({"purpose": "development"}, {"fixture_results": spec.fixture_results}):
         with pytest.raises(ValueError):
             AIRunInput.model_validate(real.model_copy(update=real_update).model_dump(mode="json"))

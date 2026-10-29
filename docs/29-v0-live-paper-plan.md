@@ -67,8 +67,9 @@ Missing or stale data means no new entries. Risk breaches latch.
 **Two strategies run side by side, each with its own paper portfolio:** a rules-only control and the AI
 strategy. Both appear on the dashboard with an on/off switch.
 
-**Costs:** the AI price recorded in the project on 2026-10-19 was `gpt-5.6-terra` at $2.50 / $12 per million
-input / output tokens, about $0.009 per decision. Calling the AI every 15 minutes would use the budget in under
+**Costs (updated by DEC-047, 2026-10-29):** the model is now `gpt-6.1-sol` at $2.00 / $10 per million input / output tokens
+(OpenAI's pricing page, read 2026-10-29). The earlier note was `gpt-5.6-terra` at $2.50 / $12 (the page now lists it at $2.00 / $12),
+about $0.009 per decision. Calling the AI every 15 minutes would use the budget in under
 two weeks, so the AI is called only for flagged candidates (target 10–20 calls/day, roughly 10–20 cents/day).
 Re-check the current price and model list before activation.
 
@@ -95,6 +96,7 @@ change needs a new decision.
 | 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | **Done (merged, PR #19; deployed 2026-10-29), section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
+| 8b | **Built on `feature/s9-ai-model-setting` (DEC-047):** model chosen by setting (`ATL_AI_MODEL`, default `gpt-6.1-sol`), per-model reasoning setting, fail-closed model list; first real call still to be made | Gate green; first real call verified |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
@@ -247,15 +249,17 @@ Each decision carries `detail` (call id, model, flow result, answer, usage, esti
 `ai_sell_ignored_flat`, `ai_unavailable_<code>` (for example `global_spending_limit`, `paid_spending_disabled`,
 `pricing_not_reviewed`, `pricing_not_current`, `failure_breaker`, `no_recent_candles`).
 
-**Money.** Every call reserves its worst case first (6000 input and 400 output tokens by default, about USD 0.02 at
-2.5/12 per million) and is refused once the global cap (`ATL_AI_TOTAL_LIMIT_USD`, counted across all envelopes) would be
+**Money.** Every call reserves its worst case first (6000 input and 2000 output tokens by default, because hidden reasoning
+counts inside the output allowance: about USD 0.032 at 2/10 per million for `gpt-6.1-sol`; it was 400 tokens before DEC-047) and is refused once the global cap (`ATL_AI_TOTAL_LIMIT_USD`, counted across all envelopes) would be
 crossed. Expect about 18 reviews a day at most (3 pairs × 6), far less when the gates skip pairs. Unknown outcomes are
 settled at the reserved maximum (DEC-044), so the cap is true and the AI keeps working; after 5 in 24 h it pauses.
 
 **Activation (all four needed, otherwise the AI strategy does not exist and nothing is paid):**
 `ATL_AI_ENABLED=true`, `ATL_OPENAI_API_KEY` (a separate key with a hard monthly limit on the VPS), `ATL_AI_TOTAL_LIMIT_USD`
-above zero (use 10), and the model's price in `ATL_AI_REVIEWED_PRICES` (verify the current price and model on the provider's
-page first; the default model name `gpt-5.6-terra` is from the 2026-10-19 note and must be re-checked). For an unattended run set
+above zero (use 15), and the model's price in `ATL_AI_REVIEWED_PRICES` (verify the current price and model on the provider's
+page first). The model is `ATL_AI_MODEL` (default `gpt-6.1-sol`); it must be one the adapter knows
+(`ai.providers.OPENAI_REASONING_EFFORT`) and needs its own entry in the price line, otherwise `atl-live` reports
+`ai_model_unsupported` or `ai_price_not_reviewed` and nothing is asked. For an unattended run set
 `ATL_AI_PRICE_MAX_AGE_DAYS` (for example 14) or refresh the price daily. `atl-live` prints which of these is missing.
 
 **Known limits.** The key is only sent to a public address, but a test transport without a socket cannot show who answered

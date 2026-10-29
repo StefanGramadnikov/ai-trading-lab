@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_chat_id: SecretStr | None = None
     ai_enabled: bool = False
+    # Pinned per experiment: it must be a model the OpenAI adapter knows (see
+    # ai.providers.OPENAI_REASONING_EFFORT) and the reviewed price list needs an entry for it.
+    ai_model: str = Field(default="gpt-6.1-sol", pattern=r"^[A-Za-z0-9_.:-]+$", max_length=200)
     ai_total_limit_usd: NonnegativeAmount = Decimal(0)
     # How long a reviewed price may be used after its verification date (the default is one day;
     # an unattended multi-day run needs the owner to raise it deliberately).

@@ -1771,5 +1771,4 @@ inside the alerts watcher. Deterministic and spend-free; rule-based suggestions 
 ## 2026-10-30 — Slice 10: evaluation report (branch `feature/s10-evaluation-report`, DEC-049)
 
 Adds the `report` package (pure series maths and verdict, a read-only service, Markdown renderer) and `atl-report`. Common-window, after-cost, paired comparison with
-the AI bill netted separately; verdict EXTEND by default, GO/STOP from proposed thresholds (DEC-049, not approved). Gate: ruff, mypy clean, 1731 passed, coverage
-95.16%. Stacked on `feature/s9-daily-review` (PR #23) because the owner was away. Not deployed; not run against the server's data.
+the AI bill netted separately; verdict EXTEND by default, GO/STOP from proposed thresholds (DEC-049, not approved). Independent review findings fixed: the risk stop now comes before the data-quality gate, returns are compared in percent of each starting equity, coverage uses the worst strategy, stale/truncated data extends the run, the AI bill window matches the trade window, an abandoned row of the same kind no longer clamps the window, `--usd-eur nan` rejected, the weak daily-edge guard is real. Built on main after slice 9 (PR #23) was merged. Not deployed; not run against the server's data.

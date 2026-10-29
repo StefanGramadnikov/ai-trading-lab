@@ -33,7 +33,7 @@ def _rate(value: str) -> Decimal:
         rate = Decimal(value)
     except InvalidOperation as exc:
         raise argparse.ArgumentTypeError("a number such as 0.86 is required") from exc
-    if not Decimal("0.01") <= rate <= Decimal(10):
+    if not rate.is_finite() or not Decimal("0.01") <= rate <= Decimal(10):
         raise argparse.ArgumentTypeError("the rate must be between 0.01 and 10")
     return rate
 

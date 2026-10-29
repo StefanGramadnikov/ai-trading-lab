@@ -49,6 +49,9 @@ class Integrity(FrozenModel):
     unacknowledged_errors: int
     errors_24h: int
     switches_in_window: int
+    stale: bool  # the newest equity point is older than two cycles (and no --until was given)
+    truncated: bool  # more history exists than one report reads
+    ignored_strategies: list[str]  # extra rows of a kind that already had a newer one
 
 
 class Verdict(FrozenModel):

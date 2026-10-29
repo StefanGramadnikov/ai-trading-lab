@@ -30,11 +30,15 @@ LABELS = {"benchmark": "Buy and hold", "rules": "Rules breakout", "ai": "AI"}
 ORDER = {"rules": 0, "ai": 1, "benchmark": 2}
 CYCLE_SECONDS = 900
 MAX_POINTS = 5000  # about 52 days of 15-minute equity points per strategy
+MAX_DECISIONS = 20000
+STALE_AFTER = timedelta(
+    minutes=45
+)  # three cycles without a new point means the data is not current
 THRESHOLDS = {
     "minimum_window_days": str(verdict.MIN_WINDOW_DAYS),
     "minimum_closed_ai_trades": str(verdict.MIN_CLOSED_TRADES),
     "minimum_loop_coverage": str(verdict.MIN_COVERAGE),
-    "margin_over_buy_and_hold_eur": str(verdict.MARGIN_EUR),
+    "margin_over_buy_and_hold_percentage_points": str(verdict.MARGIN_POINTS),
     "drawdown_limit": str(verdict.DRAWDOWN_LIMIT),
 }
 
@@ -67,8 +71,12 @@ class ReportService:
         if window is not None:
             async with self._snapshot() as snapshot:
                 for budget_id in await self.budget.budget_ids():
+                    # (start, end] like the trades: a call is stamped with its cycle's time
                     for fact in await self.budget.calls_between(
-                        budget_id, window.start, window.end, snapshot=snapshot
+                        budget_id,
+                        window.start + timedelta(microseconds=1),
+                        window.end + timedelta(microseconds=1),
+                        snapshot=snapshot,
                     ):
                         calls += 1
                         spent += fact.amount
@@ -97,6 +105,19 @@ class ReportService:
             r.strategy_id: await self.live.equity_curve(r.strategy_id, MAX_POINTS) for r in rows
         }
         series = {sid: pts for sid, pts in series.items() if pts}
+        # One strategy per kind: if an old row exists too, the one still recording wins.
+        ignored: list[str] = []
+        newest: dict[str, str] = {}
+        for r in rows:
+            if r.strategy_id in series:
+                best = newest.get(r.kind)
+                if best is None or series[r.strategy_id][-1].at_utc > series[best][-1].at_utc:
+                    newest[r.kind] = r.strategy_id
+        for r in rows:
+            if r.strategy_id in series and newest[r.kind] != r.strategy_id:
+                ignored.append(r.strategy_id)
+                del series[r.strategy_id]
+        truncated = any(len(pts) >= MAX_POINTS for pts in series.values())
         window = metrics.common_window(series, since, until)
         results: dict[str, StrategyResult] = {}
         daily: dict[str, dict[date, Decimal]] = {}
@@ -113,10 +134,11 @@ class ReportService:
                     row.strategy_id,
                     window.start,
                     window.end + timedelta(microseconds=1),
-                    limit=20000,
+                    limit=MAX_DECISIONS,
                 )
                 if d.cycle_at_utc > window.start
             ]
+            truncated = truncated or len(decisions) >= MAX_DECISIONS
             filled = [
                 d for d in decisions if d.status in ("filled", "partial") and d.action != "hold"
             ]
@@ -169,18 +191,15 @@ class ReportService:
             expected = Decimal(
                 int((window.end - window.start).total_seconds()) // CYCLE_SECONDS + 1
             )
-            best = max(len(metrics.clip(series[r.strategy_id], window)) for r in results.values())
-            coverage = min(Decimal(1), Decimal(best) / expected)
+            worst = min(len(metrics.clip(series[r.strategy_id], window)) for r in results.values())
+            coverage = min(Decimal(1), Decimal(worst) / expected)
         errors = await self.journal.summary(now)
         window_days = window.days if window is not None else Decimal(0)
         vs_bench = next(
-            (
-                p.mean_diff
-                for p in paired
-                if p.label == LABELS["ai"] and p.versus == LABELS["benchmark"]
-            ),
+            (p for p in paired if p.label == LABELS["ai"] and p.versus == LABELS["benchmark"]),
             None,
         )
+        stale = bool(until is None and window is not None and now - window.end > STALE_AFTER)
         decision = verdict.decide(
             ai=ai,
             rules=results.get("rules"),
@@ -190,7 +209,9 @@ class ReportService:
             coverage=coverage,
             unacknowledged_errors=errors.unacknowledged_errors,
             switches_in_window=switches,
-            paired_mean_vs_benchmark=vs_bench,
+            paired_vs_benchmark=vs_bench,
+            stale=stale,
+            truncated=truncated,
         )
         return EvaluationReport(
             generated_at=now,
@@ -208,6 +229,9 @@ class ReportService:
                 unacknowledged_errors=errors.unacknowledged_errors,
                 errors_24h=errors.errors_24h,
                 switches_in_window=switches,
+                stale=stale,
+                truncated=truncated,
+                ignored_strategies=ignored,
             ),
             verdict=decision,
             thresholds=THRESHOLDS,
@@ -223,7 +247,11 @@ def assumptions(usd_to_eur: Decimal) -> list[str]:
         f"not in it: it is netted at 1 USD = {usd_to_eur} EUR (1 is a conservative assumption).",
         "Fills are simulated from the public order book; real fills could be worse. Nothing here "
         "is a real trade.",
-        "Daily comparisons use UTC days; the first and last day can be partial.",
+        "Daily comparisons use UTC days; the first and last day can be partial. Returns are "
+        "compared in percent of each strategy's own starting equity inside the window.",
+        "GO does not adjust for risk: sitting in cash through a falling week can look like "
+        "out-performance. 'Closed trades' counts filled sells (partial fills and stop exits "
+        "included), not clean round trips. The AI bill sums every budget envelope in the database.",
         "A few days of data is a small sample. This report does not prove skill; GO means "
         "'worth proposing a small real-money pilot for a separate decision', never approval.",
         "The GO / EXTEND / STOP thresholds are the assistant's proposal (DEC-049) and need the "

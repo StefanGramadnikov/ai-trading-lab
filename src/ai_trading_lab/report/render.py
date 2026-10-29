@@ -22,7 +22,9 @@ WORDS = {
     "not_profitable_after_costs": "not profitable after the AI bill",
     "not_clearly_better_than_buy_and_hold": "not clearly better than buy and hold",
     "trails_the_rules_strategy": "trails the rules strategy",
-    "no_daily_edge_over_buy_and_hold": "no average daily edge over buy and hold",
+    "no_steady_daily_edge_over_buy_and_hold": "no steady daily edge over buy and hold",
+    "data_not_current": "the newest data is more than three cycles old",
+    "history_truncated": "there is more history than one report reads (use --since)",
 }
 
 
@@ -105,6 +107,8 @@ def markdown(report: EvaluationReport) -> str:
         f"- Unacknowledged errors: {i.unacknowledged_errors} "
         f"(errors in the last 24 h: {i.errors_24h}).",
         f"- Strategy switches inside the window: {i.switches_in_window}.",
+        f"- Newest data is current: {'no' if i.stale else 'yes'}. "
+        f"History complete: {'no' if i.truncated else 'yes'}.",
         "",
         "## Thresholds used (proposed, awaiting the owner's approval)",
         "",

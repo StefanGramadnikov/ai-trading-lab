@@ -1767,3 +1767,9 @@ Next: let the run proceed; slice 9 (self-review), slice 10 (evaluation report) a
 
 Adds the `review` package (pure digest, stores `daily_reviews` and `review_suggestions` via migration 0017, service, `atl-review` CLI) and the hook that runs it
 inside the alerts watcher. Deterministic and spend-free; rule-based suggestions are advice only. AI-authored suggestions deferred (DEC-048). Independent review found and we fixed: retries that could never resend (each attempt now has its own outbox key), an unbounded retry on a refused message, no review for a day with no cycles, first-day and catch-up figures (expected cycles, spend as of the day's end), a non-repeatable budget read, no timeout around the job. Gate: ruff, mypy clean, 1707 passed, coverage 95.13%. Not deployed (owner away; deployment needs `dc up -d` after merge).
+
+## 2026-10-30 — Slice 10: evaluation report (branch `feature/s10-evaluation-report`, DEC-049)
+
+Adds the `report` package (pure series maths and verdict, a read-only service, Markdown renderer) and `atl-report`. Common-window, after-cost, paired comparison with
+the AI bill netted separately; verdict EXTEND by default, GO/STOP from proposed thresholds (DEC-049, not approved). Gate: ruff, mypy clean, 1731 passed, coverage
+95.16%. Stacked on `feature/s9-daily-review` (PR #23) because the owner was away. Not deployed; not run against the server's data.

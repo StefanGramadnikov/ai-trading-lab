@@ -22,6 +22,10 @@ def isolate_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "ATL_OPENAI_API_KEY",
         "ATL_XAI_API_KEY",
         "ATL_ANTHROPIC_API_KEY",
+        "ATL_DASHBOARD_PASSWORD_HASH",
+        "ATL_DASHBOARD_SESSION_SECRET",
+        "ATL_DASHBOARD_IDLE_MINUTES",
+        "ATL_DEPLOYED_COMMIT",
     ):
         monkeypatch.delenv(name, raising=False)
 

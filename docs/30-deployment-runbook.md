@@ -161,9 +161,25 @@ within one cycle and spends nothing from then on). To remove the key entirely, d
 - **Tear down (end of the experiment):** pull a final backup and the evaluation data, then delete the server in the Hetzner
   console (billing stops) and revoke the OpenAI key.
 
+## 9b. The dashboard (slice 7)
+
+Set the sign-in once, on the server (the password is typed at a hidden prompt; never paste it anywhere else):
+
+```bash
+cd /opt/atl/ai-trading-lab
+dc="docker compose -f compose.prod.yaml --env-file /opt/atl/.env.prod"
+$dc run --rm --no-deps dashboard /app/.venv/bin/atl-dashboard hash-password   # prints a line: scrypt:...
+$dc run --rm --no-deps dashboard /app/.venv/bin/atl-dashboard make-secret     # prints a random line
+nano /opt/atl/.env.prod    # paste them as ATL_DASHBOARD_PASSWORD_HASH=... and ATL_DASHBOARD_SESSION_SECRET=...
+$dc up -d dashboard
+```
+
+Open it from your Mac: `ssh -L 8000:localhost:8000 atl@SERVER`, leave that window open, browse to `http://localhost:8000`.
+Switches and error acknowledgements work from there; both are recorded (`atl-live audit`, `atl-live errors`).
+
 ## 10. Security notes
 
-- No inbound port except SSH; the database has no published port; the containers run read-only with all capabilities dropped.
+- No inbound port except SSH; the dashboard is published on the server's loopback only (SSH tunnel); the database has no published port; the containers run read-only with all capabilities dropped.
 - The env file is `chmod 600` and outside the repository. A tarball made with `git archive` contains only tracked files, so a
   local `.env` can never ride along.
 - Secrets never go into logs or chat. If one does, revoke and replace it.
@@ -171,6 +187,6 @@ within one cycle and spends nothing from then on). To remove the key entirely, d
 
 ## 11. Known gaps (fixed in later slices)
 
-No dashboard (slice 6), no alerts (slice 7), so a stall is noticed only by your daily check or by `docker compose ps`. Backups are
+The dashboard shows a stall but nothing pushes it to you until the Telegram alerts (slice 8) exist, so look at it daily. Backups are
 logical dumps once a night: up to a day of paper trading could be lost on a total server failure (acceptable for paper). The
 image is built on the server from the tarball, not pulled from a registry; the commit id file is the only version record.

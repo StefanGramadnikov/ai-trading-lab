@@ -478,6 +478,20 @@ class BudgetStore:
             if result is not None and result.status == "settled" and call.at >= since
         )
 
+    async def settled_times(self, budget_id: PyUUID, since: datetime) -> list[datetime]:
+        """When each unknown-outcome call since `since` was made, oldest first."""
+        async with self.engine.connect() as connection:
+            _, history = await self._load(connection, budget_id, for_update=False)
+        return sorted(
+            call.at
+            for call, result in history
+            if result is not None and result.status == "settled" and call.at >= since
+        )
+
+    async def budget_ids(self) -> list[PyUUID]:
+        async with self.engine.connect() as connection:
+            return list((await connection.execute(select(budgets.c.budget_id))).scalars().all())
+
     @asynccontextmanager
     async def _read_connection(
         self, snapshot: AsyncConnection | None

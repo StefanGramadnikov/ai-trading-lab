@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Trading Lab dashboard (v2 mock)</title>
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --surface2:#eef0f4; --line:#d9dde4; --text:#1b2230; --muted:#505b6c;
+  --accent:#1b4fb8; --accent-ink:#ffffff;
+  --rules:#1d5fd1; --ai:#8a3fd0; --bench:#566170;
+  --good:#146c3a; --good-bg:#e1f3e8; --warn:#8a5300; --warn-bg:#fdf0d5; --bad:#a3231a; --bad-bg:#fde6e3; --info-bg:#e4ecfb;
+  --paper:#2b2f3a; --paper-ink:#ffffff; --shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);
+  --r:12px; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f131a; --surface:#171c25; --surface2:#1f2631; --line:#2f3847; --text:#e8ecf3; --muted:#a6b0c0;
+  --accent:#7aa5ff; --accent-ink:#0b1220; --rules:#6ea8ff; --ai:#c39bff; --bench:#a3adb9;
+  --good:#5fd08b; --good-bg:#14301f; --warn:#f0b955; --warn-bg:#35280f; --bad:#ff8f84; --bad-bg:#3b1a17; --info-bg:#17274a;
+  --paper:#e8ecf3; --paper-ink:#10151d; --shadow:none; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0f131a; --surface:#171c25; --surface2:#1f2631; --line:#2f3847; --text:#e8ecf3; --muted:#a6b0c0;
+  --accent:#7aa5ff; --accent-ink:#0b1220; --rules:#6ea8ff; --ai:#c39bff; --bench:#a3adb9;
+  --good:#5fd08b; --good-bg:#14301f; --warn:#f0b955; --warn-bg:#35280f; --bad:#ff8f84; --bad-bg:#3b1a17; --info-bg:#17274a;
+  --paper:#e8ecf3; --paper-ink:#10151d; --shadow:none; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:76px}
+h1,h2,h3,p{margin:0}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;left:8px;top:-60px;background:var(--accent);color:var(--accent-ink);padding:8px 12px;border-radius:8px;z-index:50}
+.skip:focus{top:8px}
+.paper{background:var(--paper);color:var(--paper-ink);font-size:13px;font-weight:700;letter-spacing:.06em;text-align:center;padding:6px 12px}
+.sample{background:var(--warn-bg);color:var(--warn);font-size:13px;text-align:center;padding:5px 12px;border-bottom:1px solid var(--line);font-weight:600}
+header.top{background:var(--surface);border-bottom:1px solid var(--line)}
+.top-in{max-width:1160px;margin:0 auto;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:700;font-size:17px;margin-right:auto}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ctrl label{font-size:12px;color:var(--muted)}
+select,.inp{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-height:36px}
+.inp{width:100%;padding:8px}
+.btn{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;min-height:36px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.6;cursor:progress}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.danger{background:var(--bad);color:#fff;border-color:var(--bad);font-weight:600}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.danger{color:#1a0805}}
+:root[data-theme="dark"] .btn.danger{color:#1a0805}
+nav.tabs{background:var(--surface);border-bottom:1px solid var(--line)}
+nav.tabs .in{max-width:1160px;margin:0 auto;padding:0 16px;display:flex;gap:4px}
+nav a{padding:12px 14px;color:var(--muted);text-decoration:none;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap}
+nav a[aria-current="page"]{color:var(--text);border-bottom-color:var(--accent)}
+nav a:hover{color:var(--text)}
+.badge{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--bad);color:#fff;font-size:12px;line-height:20px;text-align:center;font-weight:700}
+:root[data-theme="dark"] .badge{color:#1a0805}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .badge{color:#1a0805}}
+@media (max-width:719px){
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;border-top:1px solid var(--line);border-bottom:0}
+  nav.tabs .in{padding:0;justify-content:space-around;gap:0}
+  nav a{flex:1;text-align:center;padding:10px 1px 12px;font-size:11.5px;border-bottom:0;border-top:3px solid transparent;white-space:normal;line-height:1.25}
+  nav a[aria-current="page"]{border-top-color:var(--accent)}
+  .badge{margin-left:2px;min-width:18px;line-height:18px;padding:0 4px;font-size:11px}
+}
+main{max-width:1160px;margin:0 auto;padding:16px}
+.stack>*+*{margin-top:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px}
+.card h2{font-size:16px;margin-bottom:2px}
+.sub{color:var(--muted);font-size:14px}
+.grid3{display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
+.grid2{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+@media (max-width:959px){.grid3{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+.banner{border-radius:var(--r);padding:12px 16px;border:1px solid;display:flex;gap:12px;align-items:flex-start}
+.banner .ic{font-weight:800;flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;margin-top:1px}
+.banner.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--text)} .banner.bad .ic{background:var(--bad);color:#fff}
+.banner.warn{background:var(--warn-bg);border-color:var(--warn)} .banner.warn .ic{background:var(--warn);color:#fff}
+.banner.info{background:var(--info-bg);border-color:var(--accent)} .banner.info .ic{background:var(--accent);color:var(--accent-ink)}
+:root[data-theme="dark"] .banner .ic{color:#10151d!important}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .banner .ic{color:#10151d!important}}
+.banner b{display:block}
+.banner p{font-size:14px;color:var(--text)}
+.status-strip{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid transparent}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.off{background:var(--surface2);color:var(--muted);border-color:var(--line)}
+.kv{display:flex;flex-direction:column}.kv span:first-child{font-size:12px;color:var(--muted)}.kv span:last-child{font-weight:600}
+.verdict{font-size:20px;line-height:1.35;font-weight:650}
+@media (min-width:720px){.verdict{font-size:24px}}
+.verdict-wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between}
+.num{font-variant-numeric:tabular-nums}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.scard{display:flex;flex-direction:column;gap:12px}
+.scard header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.scard h3{font-size:16px;display:flex;align-items:center;gap:8px}
+.swatch{width:22px;height:0;border-top:4px solid;display:inline-block;border-radius:2px}
+.swatch.bench{border-top-style:dashed}
+.equity{font-size:30px;font-weight:700;line-height:1.1}
+.pl{font-size:15px;font-weight:600}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin:0}
+.dl dt{color:var(--muted)} .dl dd{margin:0}
+.sep{border-top:1px solid var(--line);margin:0}
+.pos-list{list-style:none;margin:0;padding:0;font-size:14px}
+.pos-list li{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
+.reason{font-size:14px;background:var(--surface2);border-radius:8px;padding:8px 10px}
+.switch-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:auto}
+.switch{display:inline-flex;align-items:center;gap:10px;background:none;border:0;padding:4px;cursor:pointer;min-height:44px}
+.switch .track{width:46px;height:26px;border-radius:999px;background:var(--muted);position:relative;flex:none;transition:background .15s}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--surface);transition:transform .15s}
+.switch[aria-checked="true"] .track{background:var(--good)}
+.switch[aria-checked="true"] .track::after{transform:translateX(20px)}
+.switch .lbl{font-weight:600;font-size:14px}
+.chart-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:var(--surface2);border:0;padding:8px 14px;min-height:40px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+#chart{position:relative}
+#chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;font-size:13px;min-width:150px;z-index:5}
+.tip b{display:block;margin-bottom:2px}
+.att-list{list-style:none;margin:8px 0 0;padding:0}
+.att-list li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.al{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-top:4px;padding:1px 8px;border-radius:6px;border:1px solid var(--line)}
+.al.yes{background:var(--surface2);color:var(--text);border-color:var(--text)}
+.al.no{color:var(--muted)}
+.empty{display:flex;gap:12px;align-items:center;color:var(--muted);padding:6px 0}
+.empty .ic{width:28px;height:28px;border-radius:50%;background:var(--good-bg);color:var(--good);display:grid;place-items:center;font-weight:800;flex:none}
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.filters div{display:flex;flex-direction:column;gap:2px}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.r,th.r{text-align:right}
+.exp{background:none;border:0;cursor:pointer;color:var(--accent);font-weight:600;padding:2px 4px;text-decoration:underline;min-height:32px}
+tr.detail td{background:var(--surface2)}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace}
+code{font:13px ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);padding:1px 5px;border-radius:5px;word-break:break-all}
+.meter{height:14px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;position:relative}
+.meter i{display:block;height:100%;background:var(--accent)}
+.meter.warn i{background:var(--warn)}
+.meter.full i{background:var(--bad)}
+.meter .tick{position:absolute;top:0;bottom:0;width:2px;background:var(--text);opacity:.7}
+.big{font-size:28px;font-weight:700}
+.dcards{display:none}
+@media (max-width:719px){
+  .dtable{display:none}
+  .dcards{display:block}
+  .dcards .item{border-top:1px solid var(--line);padding:12px 0}
+}
+.chip{font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
+.chip.buy{background:var(--good-bg);color:var(--good);border-color:transparent}
+.chip.sell{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{padding:10px 0;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.gallery{display:grid;gap:16px;grid-template-columns:repeat(2,1fr)}
+@media (max-width:959px){.gallery{grid-template-columns:1fr}}
+.gal-item{display:flex;flex-direction:column;gap:8px}
+.err-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.err .row2{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.err details-box{display:block}
+.errd{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--text);max-width:480px;width:calc(100% - 32px);padding:20px}
+dialog::backdrop{background:rgba(10,14,22,.55)}
+dialog h2{font-size:18px;margin-bottom:8px}
+dialog ul{padding-left:20px;margin:8px 0}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;max-width:560px;width:calc(100% - 32px);background:var(--surface);border:1px solid var(--good);border-left-width:6px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px 14px;z-index:40;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.toast p{font-size:14px}
+@media (max-width:719px){.toast{bottom:84px}}
+footer{max-width:1160px;margin:0 auto;padding:8px 16px 24px;color:var(--muted);font-size:13px}
+details.how summary{cursor:pointer;color:var(--accent);font-weight:600}
+.hint{font-size:13px;color:var(--muted)}
+.mockctl{background:var(--surface2);border:1px dashed var(--line);border-radius:8px;padding:4px 8px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="paper" role="status">PAPER MONEY ONLY - no real orders are ever placed</div>
+<div class="sample" role="note">SAMPLE DATA - design mock. Every number, time, error and decision on these screens is invented for layout purposes.</div>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">AI Trading Lab<small>V0 paper experiment: rules vs AI vs buy-and-hold</small></div>
+    <div class="ctrl mockctl">
+      <label for="scn">Preview state (mock only)</label>
+      <select id="scn"></select>
+      <label for="sim">Saving a change (mock only)</label>
+      <select id="sim"><option value="ok">Works</option><option value="db">Database does not answer</option><option value="expired">Session expired</option></select>
+    </div>
+    <div class="ctrl" id="who"></div>
+    <button class="btn" id="theme" type="button" aria-label="Switch between light and dark theme">Theme</button>
+  </div>
+</header>
+<nav class="tabs" aria-label="Main" id="nav">
+  <div class="in">
+    <a href="#overview" data-v="overview">Overview</a>
+    <a href="#decisions" data-v="decisions">Decisions</a>
+    <a href="#ai" data-v="ai">AI &amp; safety</a>
+    <a href="#errors" data-v="errors" id="nav-err">Errors</a>
+    <a href="#system" data-v="system">System</a>
+    <a href="#states" data-v="states">States</a>
+  </div>
+</nav>
+
+<main id="main" tabindex="-1"></main>
+<footer>SAMPLE DATA - design mock v2. This page makes no network requests and cannot place orders or change anything. Sign-in, saving and errors are simulated.</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="dlg" aria-labelledby="dlg-title"><div id="dlg-body"></div></dialog>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur = (v, signed) => (signed && v>0 ? '+' : v<0 ? '−' : '') + Math.abs(v).toFixed(2) + ' EUR';
+const pct = v => (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(2) + '%';
+const cls = v => v>0.004 ? 'pos' : v<-0.004 ? 'neg' : '';
+const NOW = Date.UTC(2026,9,31,10,5);      // sample "now" (UTC)
+const START = Date.UTC(2026,9,28,16,20);   // first cycle (sample)
+const fmtT = t => new Date(t).toISOString().slice(5,16).replace('T',' ') + ' UTC';
+const hhmm = t => new Date(t).toISOString().slice(11,16) + ' UTC';
+const ago = m => m < 1 ? 'just now' : m < 60 ? Math.round(m)+' min ago' : m < 1440 ? (m/60).toFixed(1)+' h ago' : (m/1440).toFixed(1)+' days ago';
+const about = m => m < 90 ? 'about '+Math.round(m)+' min' : 'about '+Math.round(m/60)+' h';
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ---------- scenarios ---------- */
+const SCENARIOS = {
+  normal:   'Normal running',
+  close:    'Normal, close race (gap under 1 EUR)',
+  first:    'First hours, no data yet',
+  errors:   'Errors present',
+  stuck:    'AI strategy stopped working (cycle failing)',
+  stalled:  'Loop stalled',
+  kraken:   'Kraken unreachable',
+  budget80: 'AI budget at 83% (warning)',
+  budget:   'AI paused: budget used',
+  breaker:  'AI paused: failure breaker',
+  off:      'Strategy switched off (wind-down)',
+  daily:    'Daily-loss pause',
+  latch:    'Drawdown latch'
+};
+const S = { view:'overview', range:'All', scn:'normal', auth:true, sim:'ok', on:{rules:true, ai:true, bench:true}, audit:[],
+  filt:{strategy:'all',pair:'all',action:'all',status:'all'}, open:{}, errs:[], eopen:{}, efilt:{comp:'all',status:'all'} };
+const VIEWS = ['overview','decisions','ai','errors','system','states'];
+const META = {
+  rules:{name:'Rules breakout', color:'var(--rules)', blurb:'Buys when price breaks above its 48 h high; fixed rules, no AI.'},
+  ai:   {name:'AI strategy',    color:'var(--ai)',    blurb:'Asks an AI model for buy / sell / hold every 4 h per pair.'},
+  bench:{name:'Buy-and-hold benchmark', color:'var(--bench)', blurb:'Buys once and never sells. The yardstick to beat.'}
+};
+const PAIRS = ['XBTEUR','ETHEUR','SOLEUR'];
+const COMP = {data:'Data collection', rules:'Rules strategy', ai:'AI strategy', broker:'Paper broker', db:'Database', dash:'Dashboard'};
+const LIMITS = [
+  ['Starting capital per strategy','EUR 100.00 (virtual)'],['Fee per side','0.80%'],['Max size of one position','20% of equity'],
+  ['Max total exposure','40% of equity'],['Daily-loss pause','3% of starting capital: no new entries until 00:00 UTC'],
+  ['Drawdown latch','10% below the best value reached: stops new entries until cleared by hand'],
+  ['Stop-loss','−5% from entry'],['Take-profit','+8% from entry'],['Maximum hold','72 hours'],
+  ['Cooldown after a stop-out','6 hours'],['Entries per pair','1 per 24 hours'],
+  ['AI budget in total','USD 10.00: heads-up at 80% (USD 8.00), stops asking at 100%'],
+  ['AI failure breaker','After 5 calls with an unknown outcome in the last 24 h the AI stops asking, until the oldest of those 5 is more than 24 h old']
+];
+/* alert policy: id, name, fires when, threshold (all thresholds PROPOSED unless the owner stated them) */
+const RULES = [
+  {id:'R1', name:'Something broke', when:'The code raised an error it did not expect (anything that is not a normal, handled condition such as a single network timeout).', thr:'On the first time a new kind of error appears (same error type and place). Repeats are grouped, not re-sent. It alerts again if an acknowledged error comes back.'},
+  {id:'R2', name:'A strategy or the loop stopped working', when:'No cycle finished, or a strategy recorded no decision or equity point, or its cycle keeps failing.', thr:'Nothing recorded for 40 minutes, or the same strategy fails 3 cycles in a row (45 minutes).'},
+  {id:'R3', name:'Kraken is unreachable', when:'Fresh prices stop arriving from Kraken.', thr:'Newest price of any pair older than 45 minutes. A single timeout that recovers does not alert.'},
+  {id:'R4', name:'The AI provider is unreachable', when:'Calls to the AI provider fail or time out.', thr:'3 calls in a row end with an unknown outcome, or the failure breaker trips (5 in 24 hours).'},
+  {id:'R5', name:'Needs your decision', when:'Something only you can resolve.', thr:'A drawdown latch is on; the AI budget reaches 80% (heads-up) and again at 100% (stopped).'}
+];
+const PAGE_ONLY = [
+  ['Daily-loss pause','It lifts itself at 00:00 UTC. Nothing for you to do.'],
+  ['A strategy you switched off','You did it on purpose; it is in the audit trail.'],
+  ['AI not activated yet, or the first hours of the run','Informational.'],
+  ['A single Kraken or AI timeout that recovered','Shown in Errors as "expected"; counts toward R3 or R4 only if it keeps happening.'],
+  ['Who is ahead','Performance is never an alert.']
+];
+
+/* ---------- sample errors ---------- */
+function makeErrs(sc){
+  const m = x => NOW - x*60e3;
+  const e = [
+   {id:'e1', comp:'data', strat:null, pair:'SOLEUR', count:7, first:m(3900), last:m(85), status:'seen', expected:true, recovered:true,
+    head:'Kraken did not answer in time. The next cycle got fresh prices, so nothing was lost.',
+    cls:'ReadTimeout', where:'live/kraken_client.py: fetch_ohlc',
+    msg:'httpx.ReadTimeout: timed out while reading the response from the Kraken public API (request to /0/public/OHLC, attempt 3 of 3).',
+    trace:'Traceback (most recent call last):\n  File "live/loop.py", line 212, in run_cycle\n    candles = self.kraken.fetch_ohlc(pair, interval=15)\n  File "live/kraken_client.py", line 88, in fetch_ohlc\n    resp = self._get("/0/public/OHLC", params=params)\n  File "live/kraken_client.py", line 51, in _get\n    return self._http.get(url, timeout=10)\nhttpx.ReadTimeout: timed out',
+    ref:{cycle:'cyc-20261031-0825', decision:null}},
+   {id:'e2', comp:'db', strat:'rules', pair:null, count:2, first:m(2600), last:m(1300), status:'ack', ackAt:m(1200), expected:true, recovered:true,
+    head:'The database dropped the connection in the middle of a cycle. The cycle was retried and succeeded.',
+    cls:'OperationalError', where:'live/store.py: write_equity',
+    msg:'psycopg.OperationalError: server closed the connection unexpectedly (host=[REDACTED], password=[REDACTED])',
+    trace:'Traceback (most recent call last):\n  File "live/loop.py", line 240, in run_cycle\n    self.store.write_equity(strategy_id, point)\n  File "live/store.py", line 133, in write_equity\n    cur.execute(INSERT_EQUITY, params)\npsycopg.OperationalError: server closed the connection unexpectedly',
+    ref:{cycle:'cyc-20261030-0815', decision:null}},
+   {id:'e3', comp:'ai', strat:'ai', pair:'ETHEUR', count:3, first:m(560), last:m(140), status:'new', expected:false, recovered:false,
+    head:'The AI strategy hit an unexpected error while reading the AI answer, so it skipped that review. Needs a look: this is a bug, not a network problem.',
+    cls:'ValueError', where:'live/ai_strategy.py: parse_proposal',
+    msg:'ValueError: could not convert string to float: \'n/a\' (field "confidence", model answer length 212 chars, api_key=[REDACTED])',
+    trace:'Traceback (most recent call last):\n  File "live/loop.py", line 266, in run_strategy\n    proposals = strategy.decide(snapshot)\n  File "live/ai_strategy.py", line 141, in decide\n    proposal = parse_proposal(answer)\n  File "live/ai_strategy.py", line 97, in parse_proposal\n    confidence = float(data["confidence"])\nValueError: could not convert string to float: \'n/a\'',
+    ref:{cycle:'cyc-20261031-0745', decision:'dec-4f2a91'}},
+   {id:'e4', comp:'broker', strat:'rules', pair:'SOLEUR', count:1, first:m(3000), last:m(3000), status:'seen', expected:false, recovered:false,
+    head:'The paper broker refused to book a sell because the arithmetic would have left cash slightly below zero (a rounding case).',
+    cls:'InvariantViolation', where:'live/paper_broker.py: apply_fill',
+    msg:'InvariantViolation: cash would become -0.0003 EUR after fill (qty=0.134, fee_basis=quote, price=EUR 142.10)',
+    trace:'Traceback (most recent call last):\n  File "live/loop.py", line 281, in execute\n    fill = broker.apply_fill(intent)\n  File "live/paper_broker.py", line 77, in apply_fill\n    self._check_invariants(new_state)\nInvariantViolation: cash would become -0.0003 EUR after fill',
+    ref:{cycle:'cyc-20261029-1600', decision:'dec-19c07e'}}
+  ];
+  if(sc==='stuck'){ const x=e.find(q=>q.id==='e3'); x.count=5; x.first=m(66); x.last=m(6); x.status='new';
+    x.head='The AI strategy fails every cycle on the same unexpected error. It has recorded nothing for about an hour.'; x.ref={cycle:'cyc-20261031-0950', decision:'dec-77b3c0'}; }
+  return e;
+}
+
+/* ---------- derived sample data ---------- */
+function model(){
+  const sc = S.scn, first = sc==='first';
+  const n = first ? 6 : 289;
+  const r = rng(11), out = {};
+  const walk = (drift, vol, start) => { let v=start, a=[]; for(let i=0;i<n;i++){ v += drift + (r()-.5)*vol; a.push(v);} return a; };
+  let rules = walk(.0011,.16,100), ai = walk(.0007,.2,100), bench = walk(.0004,.17,98.5);
+  const shape = (a, end) => { const k = end - a[n-1]; return a.map((v,i)=> v + k*(i/(n-1))); };
+  if(!first){
+    const ends = sc==='close' ? [100.6,99.8,100.2] : [101.3,99.6,100.1];
+    rules = shape(rules, ends[0]); ai = shape(ai, ends[1]); bench = shape(bench, ends[2]);
+  } else {
+    bench = [100,98.41,98.52,98.47,98.60,98.55]; rules=[100,100,100,100,100,100]; ai=[100,100,100,100,100,100];
+  }
+  const ramp = (a, k, d) => { for(let i=0;i<k;i++){ const j=a.length-1-i; a[j] -= d*(1-i/k); } };
+  if(sc==='daily'){ ramp(rules,14,3.4); rules[n-1]=rules[n-2]; }
+  if(sc==='latch'){ const pk = Math.max(...ai.slice(0,n-30)); for(let i=n-30;i<n;i++) ai[i] = Math.min(ai[i], pk*0.895 + (i-(n-30))*0.01); }
+  const ts = Array.from({length:n},(_,i)=> first ? START + i*15*60e3 : NOW - (n-1-i)*15*60e3);
+  out.ts = ts; out.series = {rules, ai, bench};
+  out.hours = Math.round((ts[n-1]-ts[0])/3600e3);
+
+  out.loop = { age: 6, next: 'in about 9 min', alive:true };
+  out.kraken = PAIRS.map((p,i)=>({pair:p, age:[0.4,0.4,0.5][i], ok:true}));
+  out.ai = { state:'active', spent:3.84, cap:10, calls:11, callsToday:11, unk:[1180], breakerAt:5, warnAt:80 };
+  out.risk = { rules:{kind:'ok'}, ai:{kind:'ok'}, bench:{kind:'ok'} };
+  out.attention = [];
+  out.banner = null;
+  const att = (k,t,p,alert,rule,go) => out.attention.push({k,t,p,alert,rule,go});
+  if(first){ out.ai = {state:'off', spent:0, cap:10, calls:0, callsToday:0, unk:[], breakerAt:5, warnAt:80}; out.loop.age=3; out.loop.next='in about 12 min'; }
+  if(sc==='stalled'){ out.loop = {age:73, next:'overdue by about 58 min', alive:false};
+    out.banner = {k:'bad', t:'The loop has stopped', p:'No cycle has finished for 73 minutes (normal is every 15). Nothing new is being traded or recorded. Open positions are not being watched until it restarts. On the server: run the health check and look at the logs, see the runbook.'};
+    att('bad','Loop stalled','Last cycle finished 73 minutes ago. The server restarts it automatically after repeated failures; if this stays red for 30 more minutes, check the server.',true,'R2'); }
+  if(sc==='stuck'){ out.risk.ai = {kind:'fail', t:'Not working', p:'Its cycle has failed 5 times in a row (about 66 minutes). No decision or equity point recorded since 09:00 UTC. Rules and benchmark are unaffected. See Errors.'};
+    out.banner = {k:'bad', t:'The AI strategy has stopped working', p:'Its cycle fails every 15 minutes on the same unexpected error, so it records nothing and decides nothing. Positions it holds are not being watched by it until this is fixed. Rules and benchmark continue normally.'};
+    att('bad','AI strategy is not working','5 cycles in a row failed (limit before alert: 3). No decisions or equity points for about 66 minutes. The cause is in Errors.',true,'R2','errors'); }
+  if(sc==='kraken'){ out.kraken = PAIRS.map(p=>({pair:p, age:47, ok:false}));
+    out.banner = {k:'bad', t:'Kraken prices are unreachable', p:'The loop is running but could not get fresh prices for 47 minutes. While data is missing or stale, no strategy opens new positions. Equity shown is from the last good prices.'};
+    att('bad','No fresh prices from Kraken','All three pairs are stale (47 min; alert limit 45). New entries are blocked automatically. Usually resolves itself; look at the System page if it lasts over an hour.',true,'R3'); }
+  if(sc==='budget80'){ out.ai = {state:'active', spent:8.31, cap:10, calls:430, callsToday:15, unk:[1180], breakerAt:5, warnAt:80};
+    out.banner = {k:'warn', t:'The AI has used 83% of its USD 10 budget', p:'USD 1.69 is left. At 100% the AI stops asking and only manages exits for positions it already holds; rules and benchmark continue. Nothing for you to do now, but decide whether you want the AI to keep running to the end of the experiment.'};
+    att('warn','AI budget at 83%','USD 8.31 of USD 10.00 spent (heads-up level is 80%). It stops asking at 100%.',true,'R5'); }
+  if(sc==='budget'){ out.ai = {state:'budget', spent:10.0, cap:10, calls:508, callsToday:18, unk:[1180,700], breakerAt:5, warnAt:80};
+    out.banner = {k:'warn', t:'The AI is paused: its USD 10 budget is used up', p:'The AI strategy makes no more calls and only manages exits for positions it already holds. It does not resume by itself: raising the cap needs a new decision from you. Rules and benchmark continue.'};
+    att('warn','AI budget fully used','USD 10.00 of USD 10.00 spent. The AI strategy opens nothing new. Raising the cap needs a new decision from you.',true,'R5'); }
+  if(sc==='breaker'){ out.ai = {state:'breaker', spent:5.12, cap:10, calls:260, callsToday:14, unk:[1080,840,560,300,95], breakerAt:5, warnAt:80};
+    const rs = aiResume(out.ai);
+    out.banner = {k:'warn', t:'The AI is paused: the failure breaker tripped', p:`Five AI calls in the last 24 hours ended with an unknown result (for example a timeout). The AI stops asking until the oldest of those 5 is more than 24 hours old: it resumes in ${about(rs)}, at about ${hhmm(NOW+rs*60e3)}. Rules and benchmark are unaffected.`};
+    att('warn','The AI provider is not answering',`5 unknown call outcomes in 24 h, so the AI is paused. It resumes in ${about(rs)} (when the oldest of the 5 is 24 h old). Spend so far USD 5.12 of 10.`,true,'R4'); }
+  if(sc==='daily'){ out.risk.rules = {kind:'daily', t:'Paused for today', p:'Lost 3.4% of its starting capital today. No new entries until 00:00 UTC; stop-loss and exits still run.'};
+    att('warn','Rules breakout paused for the day','Daily-loss limit (3%) reached. It resumes by itself at 00:00 UTC. Nothing to do.',false,null); }
+  if(sc==='latch'){ out.risk.ai = {kind:'latch', t:'Drawdown latch on', p:'Fell 10.5% below its best value. New entries stay blocked until you clear it by hand; exits still run.'};
+    att('bad','AI strategy latched by drawdown','It is 10.5% below its best value (limit 10%). It will not open positions again until you clear the latch. Decide whether to clear it or leave it for the comparison.',true,'R5'); }
+  ['rules','ai','bench'].filter(k=>!S.on[k]).forEach(k=>{ att('info', META[k].name+' is switched off','Wind-down: it opens nothing new and spends nothing, its stop-loss and exits still run and its curve keeps being recorded.',false,null); });
+  if(sc==='off') out.banner = {k:'info', t:'Rules breakout is switched off (wind-down)', p:'It will not open new positions. Its stop-loss, take-profit and time exits still run, and its equity is still recorded so the comparison stays fair. Switch it back on at any time.'};
+  if(out.ai.state==='off' && first) att('info','AI strategy not activated yet','It needs your OpenAI key and the verified price before it starts. Rules and benchmark are running.',false,null);
+  if(first) out.banner = {k:'info', t:'Just started: not much to see yet', p:'The loop has run for about 1 hour. The benchmark bought its three positions; the other strategies are waiting for a signal. Curves become meaningful after a day or two.'};
+  // errors
+  const unack = S.errs.filter(x=>x.status!=='ack');
+  out.unack = unack.length;
+  if(unack.length){
+    const unexp = unack.filter(x=>!x.expected), latest = [...unack].sort((a,b)=>b.last-a.last)[0];
+    att(unexp.length?'bad':'warn', `${unack.length} error${unack.length>1?'s':''} not acknowledged`,
+      `${unack.length} kind${unack.length>1?'s':''} of error recorded and not yet acknowledged by you (${unexp.length} unexpected, ${unack.length-unexp.length} expected network or database hiccups that recovered). Most recent: ${COMP[latest.comp]}, ${latest.cls}, ${ago((NOW-latest.last)/60e3)}.`,
+      unexp.length>0,'R1','errors');
+  }
+  const order = {bad:0,warn:1,info:2}; out.attention.sort((a,b)=>order[a.k]-order[b.k]);
+  out.isFirst = first;
+  return out;
+}
+/* minutes until the AI failure breaker releases: it needs the count in the last 24 h to fall to 4 */
+function aiResume(ai){
+  if(ai.unk.length < ai.breakerAt) return null;
+  const s = [...ai.unk].sort((a,b)=>b-a);          // oldest first (minutes ago)
+  return 1440 - s[s.length - ai.breakerAt];
+}
+
+function cardFacts(k, m){
+  const s = m.series[k], last = s[s.length-1];
+  const f = {
+    rules:{pos:[['ETHEUR','0.0071 ETH',  '+0.42 EUR'],['SOLEUR','0.134 SOL','−0.11 EUR']], fees:'1.28 EUR', last:{t:'Held ETH/EUR', why:'Price is still above its entry and below the +8% take-profit, and no exit rule has triggered.', when:25}},
+    ai:   {pos:[['XBTEUR','0.00021 BTC','−0.08 EUR']], fees:'0.94 EUR', last:{t:'Hold, no action on SOL/EUR', why:'AI answered "hold": momentum is mixed and the spread is wide relative to the expected move.', when:140}},
+    bench:{pos:[['XBTEUR','0.00031 BTC','+0.21 EUR'],['ETHEUR','0.0089 ETH','+0.16 EUR'],['SOLEUR','0.176 SOL','+0.07 EUR']], fees:'0.79 EUR', last:{t:'Bought once, then holds', why:'The benchmark buys equal parts of the three pairs at the start and never sells.', when:4300}}
+  }[k];
+  if(m.isFirst){
+    if(k==='rules'){ f.pos=[]; f.fees='0.00 EUR'; f.last={t:'Waiting', why:'No breakout above the 48 h high yet. It does nothing until one appears.', when:15}; }
+    if(k==='ai'){ f.pos=[]; f.fees='0.00 EUR'; f.last={t:'Not active', why:'The AI strategy has not been activated yet.', when:null}; }
+    if(k==='bench'){ f.fees='0.79 EUR'; f.last.when=60; }
+  }
+  if(m.kraken[0].ok===false && k!=='bench'){ f.last={t:'Hold, no data', why:'No fresh prices from Kraken, so no decisions could be made.', when:47}; }
+  if(k==='ai' && m.ai.state==='budget') f.last={t:'Hold, AI unavailable', why:'The AI budget is used up (global spending limit), so it was not asked. It does not resume by itself.', when:20};
+  if(k==='ai' && m.ai.state==='breaker'){ const rs=aiResume(m.ai); f.last={t:'Hold, AI paused', why:`The AI failure breaker is tripped, so it was not asked. It resumes in ${about(rs)}, when the oldest of the 5 failed calls is 24 h old.`, when:20}; }
+  if(k==='ai' && m.risk.ai.kind==='fail') f.last={t:'No decision: the cycle failed', why:'The AI strategy raised an unexpected error in each of its last 5 cycles, so no decision was recorded. See the Errors page.', when:66};
+  if(!S.on[k]) f.last={t:'Hold, switched off', why:'Strategy is switched off: it opens nothing new but still manages exits.', when:15};
+  return {...f, last, start:100, pl:last-100, plp:(last-100)};
+}
+
+/* ---------- decisions sample ---------- */
+const DEC = [
+ {id:1, mins:25,  s:'rules', pair:'ETHEUR', a:'hold', st:'logged', why:'Holding ETH/EUR: still inside the +8% take-profit and -5% stop-loss band.'},
+ {id:2, mins:25,  s:'rules', pair:'SOLEUR', a:'hold', st:'logged', why:'Holding SOL/EUR: no exit rule triggered.'},
+ {id:3, mins:140, s:'ai', pair:'SOLEUR', a:'hold', st:'logged', ai:{call:'call-0a91',model:'sample-model',tokens:'1 920 in / 96 out',cost:0.0069,answer:'{"action":"hold","reason":"Momentum is mixed; spread is wide against the expected move."}'}, why:'AI answered hold: momentum mixed and spread wide.'},
+ {id:4, mins:145, s:'ai', pair:'XBTEUR', a:'hold', st:'logged', ai:{call:'call-0a90',model:'sample-model',tokens:'1 905 in / 88 out',cost:0.0068,answer:'{"action":"hold","reason":"Position is small gain; no reason to add or close."}'}, why:'AI answered hold: position has a small gain, no reason to change it.'},
+ {id:5, mins:380, s:'ai', pair:'XBTEUR', a:'buy', st:'filled', amt:'19.90 EUR', ai:{call:'call-0a8c',model:'sample-model',tokens:'2 010 in / 131 out',cost:0.0086,answer:'{"action":"buy","reason":"Price broke above recent range on rising volume."}'}, why:'AI proposed a buy: price broke above its recent range on rising volume. Code sized it at 19.90 EUR (20% of equity) and filled it at the order book price plus 0.80% fee.'},
+ {id:6, mins:610, s:'rules', pair:'ETHEUR', a:'buy', st:'filled', amt:'20.10 EUR', why:'Buy: the last 15-minute candle closed above the highest price of the previous 48 h on at least the median volume.'},
+ {id:7, mins:700, s:'ai', pair:'ETHEUR', a:'hold', st:'refused', ai:{call:null,model:'-',tokens:'0',cost:0,answer:'(not asked)'}, why:'Not asked: the AI failure breaker was tripped at the time (ai_unavailable_failure_breaker).'},
+ {id:8, mins:1010, s:'rules', pair:'SOLEUR', a:'buy', st:'rejected', amt:'20.30 EUR', why:'Buy was refused: the price spread was wider than 2.5%, which would cost more than the trade is worth.'},
+ {id:9, mins:1500, s:'rules', pair:'XBTEUR', a:'sell', st:'filled', amt:'20.40 EUR', why:'Sold BTC/EUR: stop-loss. It fell 5% below its entry price. A 6 h cooldown follows.'},
+ {id:10, mins:2100, s:'ai', pair:'SOLEUR', a:'sell', st:'filled', amt:'19.20 EUR', ai:{call:'call-0a52',model:'sample-model',tokens:'1 980 in / 120 out',cost:0.0081,answer:'{"action":"sell","reason":"Price lost its short-term trend; protect the gain."}'}, why:'AI proposed closing the position: the short-term trend broke. The whole position was sold.'},
+ {id:11, mins:4300, s:'bench', pair:'XBTEUR', a:'buy', st:'filled', amt:'32.80 EUR', why:'Benchmark entry: buys an equal share of each pair once and then holds.'},
+ {id:12, mins:4300, s:'bench', pair:'ETHEUR', a:'buy', st:'filled', amt:'32.80 EUR', why:'Benchmark entry: buys an equal share of each pair once and then holds.'},
+ {id:13, mins:4300, s:'bench', pair:'SOLEUR', a:'buy', st:'filled', amt:'32.80 EUR', why:'Benchmark entry: buys an equal share of each pair once and then holds.'}
+];
+function aiCalls(m){
+  const ok = DEC.filter(d=>d.ai && d.ai.call).map(d=>({id:d.ai.call, mins:d.mins, pair:d.pair, ans:d.a, tokens:d.ai.tokens, cost:d.ai.cost, res:'settled'}));
+  const bad = m.ai.unk.map((mins,i)=>({id:'call-u'+(i+1), mins, pair:PAIRS[i%3], ans:'(no answer)', tokens:'2 000 reserved', cost:0.0240, res:'unknown outcome (timeout), charged at worst case', unknown:true}));
+  return [...ok,...bad].sort((a,b)=>a.mins-b.mins);
+}
+
+/* ---------- rendering ---------- */
+const main = $('#main');
+function badgeRisk(r){
+  if(r.kind==='ok') return '<span class="pill good">✓ Trading normally</span>';
+  if(r.kind==='daily') return '<span class="pill warn">⏸ '+esc(r.t)+'</span>';
+  return '<span class="pill bad">⛔ '+esc(r.t)+'</span>';
+}
+function bannerHTML(b){ if(!b) return ''; const ic={bad:'!',warn:'!',info:'i'}[b.k];
+  return `<div class="banner ${b.k}" role="${b.k==='bad'?'alert':'status'}"><span class="ic" aria-hidden="true">${ic}</span><div><b>${esc(b.t)}</b><p>${esc(b.p)}</p></div></div>`; }
+
+/* verdict: "too early to tell" if the run is young (< 72 h) or the lead over the runner-up is under 1 EUR */
+const SHORT = {rules:'Rules breakout',ai:'AI',bench:'Benchmark'};
+function verdict(m){
+  const f = {rules:cardFacts('rules',m), ai:cardFacts('ai',m), bench:cardFacts('bench',m)};
+  const ks = ['rules','ai','bench'].filter(k=>!(k==='ai' && m.ai.state==='off'));
+  const sorted = [...ks].sort((x,y)=>f[y].pl-f[x].pl);
+  const stand = sorted.map(k=>`${SHORT[k]} ${eur(f[k].pl,true)}`).join(', ');
+  if(m.isFirst) return {early:true, text:`Too early to tell: the run is about ${m.hours+1} hour old. The benchmark has bought in; the others are waiting for a signal.`};
+  const gap = f[sorted[0]].pl - f[sorted[1]].pl, young = m.hours < 72;
+  if(young || gap < 1){
+    const why = young && gap < 1 ? `the run is only ${m.hours} hours old and the lead is only ${gap.toFixed(2)} EUR`
+      : young ? `the run is only ${m.hours} hours old` : `the gap between the first two is only ${gap.toFixed(2)} EUR, which a single lucky or unlucky day can produce`;
+    return {early:true, text:`Too early to tell: ${why}. For now, after fees: ${stand}.`};
+  }
+  const d = m.hours >= 48 ? Math.round(m.hours/24)+' days' : m.hours+' hours';
+  const b = f.bench.pl;
+  const cmp = (k, label) => { if(k==='ai' && m.ai.state==='off') return null; const diff = f[k].pl - b; return `${label} is ${Math.abs(diff)<0.05?'level with':(diff>0?'ahead of':'behind')} the benchmark${Math.abs(diff)<0.05?'':' by '+Math.abs(diff).toFixed(2)+' EUR'}`; };
+  const a = cmp('rules','Rules breakout'), c = cmp('ai','the AI');
+  let s = (a||'') + (c ? (a?'; ':'') + c : '') + ' after ' + d + '.';
+  s = s.charAt(0).toUpperCase()+s.slice(1);
+  return {early:false, text: s + ` Best so far: ${META[sorted[0]].name} at ${eur(f[sorted[0]].pl,true)}. All figures are after fees.`};
+}
+
+function stratCard(k, m){
+  const f = cardFacts(k, m), on = S.on[k], risk = m.risk[k];
+  const e = m.series[k][m.series[k].length-1];
+  const aiOff = k==='ai' && m.ai.state==='off';
+  const lastWhen = f.last.when==null ? '' : ago(f.last.when);
+  const swState = aiOff ? 'Not activated' : on ? 'On' : 'Off (wind-down)';
+  return `<article class="card scard" aria-labelledby="sc-${k}">
+    <header><div><h3 id="sc-${k}"><span class="swatch ${k==='bench'?'bench':''}" style="border-top-color:${META[k].color}" aria-hidden="true"></span>${esc(META[k].name)}</h3>
+      <p class="sub">${esc(META[k].blurb)}</p></div>
+      ${aiOff ? '<span class="pill off">Not activated</span>' : on ? (k==='bench'?'<span class="pill good">✓ Holding</span>':badgeRisk(risk)) : '<span class="pill off">⏻ Switched off</span>'}
+    </header>
+    <div><div class="equity num">${e.toFixed(2)} <span style="font-size:16px;font-weight:600" class="sub">EUR</span></div>
+      <div class="pl num ${cls(f.pl)}">${f.pl>0?'▲':f.pl<0?'▼':'▬'} ${eur(f.pl,true)} (${pct(f.plp)}) <span class="sub" style="font-weight:400">since the 100 EUR start</span></div></div>
+    ${risk.p && on ? `<p class="reason" style="border-left:4px solid var(--${risk.kind==='daily'?'warn':'bad'})">${esc(risk.p)}</p>`:''}
+    <hr class="sep">
+    <div><p class="sub" style="font-size:12px">OPEN POSITIONS</p>
+      ${f.pos.length ? '<ul class="pos-list">'+f.pos.map(p=>`<li><span>${esc(p[0])} <span class="sub">${esc(p[1])}</span></span><span class="num ${cls(p[2].includes('−')?-1:1)}">${esc(p[2])}</span></li>`).join('')+'</ul>' : '<p class="sub">None. Holding only cash.</p>'}
+      <p class="sub" style="margin-top:6px">Fees paid so far: <span class="num">${f.fees}</span></p></div>
+    <hr class="sep">
+    <div><p class="sub" style="font-size:12px">LAST DECISION ${lastWhen?'· '+esc(lastWhen):''}</p>
+      <p style="font-weight:600">${esc(f.last.t)}</p><p class="reason" style="margin-top:4px">${esc(f.last.why)}</p></div>
+    <div class="switch-row">
+      <button class="switch" role="switch" aria-checked="${on && !aiOff}" data-sw="${k}" ${aiOff?'disabled':''} aria-label="${esc(META[k].name)} on or off"><span class="track" aria-hidden="true"></span><span class="lbl">${esc(swState)}</span></button>
+    </div>
+  </article>`;
+}
+
+/* ---- chart ---- */
+function chartData(m){
+  const n = m.ts.length; const R = S.range;
+  const hrs = {'6 h':6,'24 h':24,'3 days':72,'All':1e9}[R];
+  const from = m.ts[n-1] - hrs*3600e3;
+  return m.ts.map((t,i)=>i).filter(i=>m.ts[i] >= from);
+}
+function drawChart(){
+  const m = M, box = $('#chart'); if(!box) return;
+  const W = Math.max(320, box.clientWidth), mobile = W<560, H = mobile?250:310;
+  const pad = {l:48, r:mobile?64:96, t:14, b:28};
+  const idx = chartData(m);
+  const keys = ['bench','rules','ai'];
+  const vis = keys.filter(k=> !(k==='ai' && m.ai.state==='off'));
+  let lo=100, hi=100; idx.forEach(i=>vis.forEach(k=>{const v=m.series[k][i]; lo=Math.min(lo,v); hi=Math.max(hi,v);}));
+  lo = Math.floor((lo-0.4)*2)/2; hi = Math.ceil((hi+0.4)*2)/2;
+  const t0 = m.ts[idx[0]], t1 = m.ts[idx[idx.length-1]];
+  const X = t => pad.l + (idx.length>1 ? (t-t0)/(t1-t0) : .5) * (W-pad.l-pad.r);
+  const Y = v => pad.t + (hi-v)/(hi-lo) * (H-pad.t-pad.b);
+  let g = '';
+  const step = (hi-lo) > 6 ? 2 : (hi-lo) > 3 ? 1 : .5;
+  for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step){ g += `<line x1="${pad.l}" x2="${W-pad.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pad.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="12" fill="var(--muted)">${v.toFixed(v%1?1:0)}</text>`; }
+  g += `<line x1="${pad.l}" x2="${W-pad.r}" y1="${Y(100)}" y2="${Y(100)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="2 4"/><text x="${pad.l+4}" y="${Y(100)-5}" font-size="12" font-weight="600" fill="var(--muted)">Start: 100 EUR</text>`;
+  const nt = mobile?3:5;
+  for(let j=0;j<nt;j++){ const t = t0 + (t1-t0)*j/(nt-1); const d = new Date(t); const lab = (t1-t0) > 36*3600e3 ? d.toISOString().slice(5,10) : d.toISOString().slice(11,16);
+    g += `<text x="${X(t)}" y="${H-8}" text-anchor="${j==0?'start':j==nt-1?'end':'middle'}" font-size="12" fill="var(--muted)">${lab}</text>`; }
+  const dash = {bench:'7 5', rules:'', ai:'2 3'};
+  let paths='', labels=[];
+  vis.forEach(k=>{
+    const d = idx.map((i,j)=> (j?'L':'M')+X(m.ts[i]).toFixed(1)+' '+Y(m.series[k][i]).toFixed(1)).join(' ');
+    paths += `<path d="${d}" fill="none" stroke="${META[k].color}" stroke-width="2.5" ${dash[k]?`stroke-dasharray="${dash[k]}"`:''} stroke-linejoin="round" stroke-linecap="${k==='ai'?'butt':'round'}"/>`;
+    labels.push({k, y:Y(m.series[k][idx[idx.length-1]]), v:m.series[k][idx[idx.length-1]]});
+  });
+  labels.sort((a,b)=>a.y-b.y); for(let i=1;i<labels.length;i++) if(labels[i].y-labels[i-1].y<15) labels[i].y = labels[i-1].y+15;
+  const short = {rules:'Rules',ai:'AI',bench:'Benchmark'};
+  labels.forEach(l=>{ paths += `<text x="${W-pad.r+8}" y="${l.y+4}" font-size="${mobile?12:13}" font-weight="700" fill="${META[l.k].color}">${short[l.k]} ${l.v.toFixed(1)}</text>`; });
+  const summary = 'Equity over time for ' + vis.map(k=>`${short[k]} ending at ${m.series[k][m.series[k].length-1].toFixed(2)} EUR`).join(', ') + '. Use left and right arrow keys to read values.';
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0" id="svgc">
+    ${g}${paths}<g id="cur" style="display:none"><line y1="${pad.t}" y2="${H-pad.b}" stroke="var(--text)" stroke-width="1"/>${vis.map(k=>`<circle r="4.5" fill="${META[k].color}" stroke="var(--surface)" stroke-width="2" data-k="${k}"/>`).join('')}</g></svg><div class="tip" id="tip" hidden></div>`;
+  const svg = $('#svgc'), cur = $('#cur'), tip = $('#tip'); let pos = idx.length-1;
+  function show(j){
+    pos = Math.max(0,Math.min(idx.length-1,j)); const i = idx[pos], x = X(m.ts[i]);
+    cur.style.display=''; cur.firstChild.setAttribute('x1',x); cur.firstChild.setAttribute('x2',x);
+    vis.forEach(k=>{ const c = cur.querySelector(`circle[data-k="${k}"]`); c.setAttribute('cx',x); c.setAttribute('cy',Y(m.series[k][i])); });
+    tip.hidden=false; tip.innerHTML = `<b>${fmtT(m.ts[i])}</b>` + vis.map(k=>`<div><span style="color:${META[k].color};font-weight:700">${short[k]}</span> <span class="num">${m.series[k][i].toFixed(2)} EUR</span></div>`).join('');
+    const left = x > W/2 ? x-tip.offsetWidth-12 : x+12; tip.style.left = Math.max(0,left)+'px'; tip.style.top = '8px';
+  }
+  svg.addEventListener('pointermove', e=>{ const r=svg.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width); const t=t0+(x-pad.l)/(W-pad.l-pad.r)*(t1-t0); let best=0,bd=1e18; idx.forEach((i,j)=>{const d=Math.abs(m.ts[i]-t); if(d<bd){bd=d;best=j}}); show(best); });
+  svg.addEventListener('pointerleave', ()=>{ cur.style.display='none'; tip.hidden=true; });
+  svg.addEventListener('keydown', e=>{ if(e.key==='ArrowLeft'){e.preventDefault();show(pos-1)} if(e.key==='ArrowRight'){e.preventDefault();show(pos+1)} if(e.key==='Home'){e.preventDefault();show(0)} if(e.key==='End'){e.preventDefault();show(idx.length-1)} });
+  svg.addEventListener('blur', ()=>{ cur.style.display='none'; tip.hidden=true; });
+}
+
+/* ---------- views ---------- */
+let M;
+function alertTag(x){ return x.alert ? `<span class="al yes">🔔 Would send an alert (rule ${x.rule})</span>` : `<span class="al no">Page only, no alert</span>`; }
+function vOverview(){
+  const m=M, a=m.loop, ai=m.ai, p=ai.spent/ai.cap*100, v=verdict(m);
+  const loopPill = !a.alive ? '<span class="pill bad">✖ Stalled</span>' : '<span class="pill good">● Running</span>';
+  const attn = m.attention.length
+    ? `<p class="hint" style="margin-top:4px">Each item says whether it would also reach you on Telegram (planned for a later slice). The rules are listed under System, "What alerts you".</p>
+      <ul class="att-list">${m.attention.map(x=>`<li><span class="pill ${x.k==='info'?'off':x.k}" style="align-self:flex-start;flex:none">${x.k==='bad'?'Act':x.k==='warn'?'Note':'Info'}</span><div><b>${esc(x.t)}</b><p class="sub">${esc(x.p)}</p>${alertTag(x)}${x.go?` <button class="exp" type="button" data-go="${x.go}">Open ${x.go==='errors'?'Errors':x.go}</button>`:''}</div></li>`).join('')}</ul>`
+    : `<div class="empty"><span class="ic" aria-hidden="true">✓</span><div><b style="color:var(--text)">Nothing needs your attention.</b><p>The loop is running, prices are fresh, no errors are waiting, the AI is within its budget and no safety limit has been hit.</p></div></div>`;
+  const krakenOk = m.kraken.every(k=>k.ok);
+  const aiPill = {active: p>=ai.warnAt?'<span class="pill warn">⚠ Asking, budget '+Math.round(p)+'% used</span>':'<span class="pill good">✓ Asking</span>', off:'<span class="pill off">Not activated</span>',
+    budget:'<span class="pill warn">⏸ Stopped: budget used</span>', breaker:`<span class="pill warn">⏸ Paused, resumes in ${about(aiResume(ai)||0)}</span>`}[ai.state];
+  const errPill = m.unack ? `<span class="pill ${S.errs.some(e=>e.status!=='ack'&&!e.expected)?'bad':'warn'}">${m.unack} to review</span>` : '<span class="pill good">✓ None</span>';
+  return `<div class="stack">
+    ${bannerHTML(m.banner)}
+    <section class="card" aria-label="Status">
+      <div class="status-strip">
+        <div class="kv"><span>Loop</span><span>${loopPill}</span></div>
+        <div class="kv"><span>Last cycle</span><span class="num">${ago(a.age)}</span></div>
+        <div class="kv"><span>Next cycle</span><span>${esc(a.next)}</span></div>
+        <div class="kv"><span>Kraken prices</span><span>${krakenOk?'<span class="pill good">✓ Fresh</span>':'<span class="pill bad">✖ Stale</span>'}</span></div>
+        <div class="kv"><span>AI</span><span>${aiPill}</span></div>
+        <div class="kv"><span>AI spend</span><span class="num">USD ${ai.spent.toFixed(2)} of ${ai.cap}</span></div>
+        <div class="kv"><span>Errors to review</span><span>${errPill}</span></div>
+        <div class="kv"><span>Running for</span><span>${m.hours>=48?(m.hours/24).toFixed(1)+' days':m.hours+' h'}</span></div>
+      </div>
+    </section>
+    <section class="card" aria-label="Verdict"><div class="verdict-wrap"><p class="verdict" aria-live="polite">${esc(v.text)}</p>${v.early?'<span class="pill off">Too early to tell</span>':''}</div>
+      <p class="hint" style="margin-top:8px">Each strategy started with 100 EUR of fake money. "Benchmark" just buys once and holds: a strategy is only worth running if it beats it, after fees. We only call a leader when the run is at least 3 days old and the lead over the runner-up is at least 1 EUR, so one lucky day is not read as a result.</p></section>
+    <section class="grid3" aria-label="Strategies">${['rules','ai','bench'].map(k=>stratCard(k,m)).join('')}</section>
+    <section class="card" aria-labelledby="ch-h">
+      <div class="chart-head"><div><h2 id="ch-h">Equity compared</h2><p class="sub">Total value of each portfolio in EUR, after fees. Dotted line is the 100 EUR start.</p></div>
+        <div class="seg" role="group" aria-label="Time range">${['6 h','24 h','3 days','All'].map(r=>`<button type="button" aria-pressed="${S.range===r}" data-range="${r}">${r}</button>`).join('')}</div></div>
+      <div id="chart"></div>
+      <div class="legend" aria-hidden="true"><span><span class="swatch" style="border-top-color:var(--rules)"></span>Rules breakout (solid)</span><span><span class="swatch" style="border-top:4px dotted var(--ai)"></span>AI (dotted)</span><span><span class="swatch bench" style="border-top-color:var(--bench)"></span>Benchmark (dashed)</span></div>
+    </section>
+    <section class="card" aria-labelledby="at-h"><h2 id="at-h">Needs your attention</h2>${attn}</section>
+  </div>`;
+}
+
+function vDecisions(){
+  const f = S.filt;
+  const rows = DEC.filter(d=>(f.strategy==='all'||d.s===f.strategy)&&(f.pair==='all'||d.pair===f.pair)&&(f.action==='all'||d.a===f.action)&&(f.status==='all'||d.st===f.status));
+  const sel = (id,label,opts) => `<div><label for="f-${id}" class="sub">${label}</label><select id="f-${id}" data-f="${id}">${opts.map(o=>`<option value="${o[0]}" ${S.filt[id]===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`;
+  const chip = a => `<span class="chip ${a}">${a==='buy'?'▲ Buy':a==='sell'?'▼ Sell':'— Hold'}</span>`;
+  const stat = s => ({filled:'Filled',logged:'Logged',rejected:'Refused by safety check',refused:'Not asked'}[s]||s);
+  const when = d => fmtT(NOW - d.mins*60e3);
+  const detail = d => d.ai ? `<tr class="detail"><td colspan="6"><p class="sub" style="font-size:12px">WHAT THE AI ANSWERED</p><pre>${esc(d.ai.answer)}</pre>
+      <p style="margin-top:8px" class="num"><b>Tokens:</b> ${esc(d.ai.tokens)} · <b>Cost:</b> USD ${d.ai.cost.toFixed(4)} · <b>Model:</b> ${esc(d.ai.model)} · <b>Call:</b> ${esc(d.ai.call||'none')}</p>
+      <p class="hint" style="margin-top:4px">The AI only proposes a direction. Size, limits and the fill are decided by fixed code, never by the AI.</p></td></tr>` : '';
+  const tbl = rows.map(d=>`<tr><td class="num" style="white-space:nowrap">${when(d)}</td><td>${esc(META[d.s].name.split(' ')[0])}</td><td>${d.pair.replace('EUR','/EUR')}</td><td>${chip(d.a)}${d.amt?'<div class="sub num">'+d.amt+'</div>':''}</td>
+      <td>${stat(d.st)}</td><td>${esc(d.why)}${d.ai?` <button class="exp" type="button" data-x="${d.id}" aria-expanded="${!!S.open[d.id]}">${S.open[d.id]?'Hide':'Show'} AI detail</button>`:''}</td></tr>${S.open[d.id]?detail(d):''}`).join('');
+  const cards = rows.map(d=>`<div class="item"><div style="display:flex;justify-content:space-between;gap:8px"><span>${chip(d.a)} <b>${d.pair.replace('EUR','/EUR')}</b></span><span class="sub num">${when(d)}</span></div>
+      <p class="sub">${esc(META[d.s].name)} · ${stat(d.st)}${d.amt?' · '+d.amt:''}</p><p style="margin-top:4px">${esc(d.why)}</p>
+      ${d.ai?`<button class="exp" type="button" data-x="${d.id}" aria-expanded="${!!S.open[d.id]}">${S.open[d.id]?'Hide':'Show'} AI detail</button>`:''}
+      ${d.ai&&S.open[d.id]?`<div class="reason" style="margin-top:6px"><pre>${esc(d.ai.answer)}</pre><p class="num" style="margin-top:6px">${esc(d.ai.tokens)} tokens · USD ${d.ai.cost.toFixed(4)}</p></div>`:''}</div>`).join('');
+  return `<div class="stack"><section class="card"><h2>Decisions and trades</h2><p class="sub">Every time a strategy decided something, with the reason in plain words. "Hold" means it looked and chose to do nothing.</p>
+    <div class="filters" style="margin-top:12px">${sel('strategy','Strategy',[['all','All'],['rules','Rules breakout'],['ai','AI'],['bench','Benchmark']])}${sel('pair','Pair',[['all','All'],...PAIRS.map(p=>[p,p.replace('EUR','/EUR')])])}${sel('action','Action',[['all','All'],['buy','Buy'],['sell','Sell'],['hold','Hold']])}${sel('status','Status',[['all','All'],['filled','Filled'],['logged','Logged (hold)'],['rejected','Refused by safety check'],['refused','Not asked']])}</div></section>
+    <section class="card"><p class="sub" aria-live="polite">${rows.length} of ${DEC.length} sample rows shown</p>
+      ${rows.length?`<div class="tbl-wrap dtable"><table><thead><tr><th>Time</th><th>Strategy</th><th>Pair</th><th>Action</th><th>Status</th><th>Why</th></tr></thead><tbody>${tbl}</tbody></table></div><div class="dcards">${cards}</div>`
+      :'<div class="empty"><div><b style="color:var(--text)">No decisions match these filters.</b><p>Clear a filter to see more.</p></div></div>'}</section></div>`;
+}
+
+function vAI(){
+  const m=M, ai=m.ai, p=ai.spent/ai.cap*100, calls = ai.state==='off' ? [] : aiCalls(m);
+  const st = {active:['good','✓ Active'], off:['off','Not activated'], budget:['warn','⏸ Stopped: budget used'], breaker:['warn','⏸ Paused: failure breaker']}[ai.state];
+  const rs = aiResume(ai), nUnk = ai.unk.length;
+  const brk = nUnk>=ai.breakerAt ? ['warn','⏸ Tripped: paused'] : nUnk>=ai.breakerAt-1 ? ['warn','⚠ One more and it pauses'] : ['good','✓ Clear'];
+  const mcls = p>=100?'full':p>=ai.warnAt?'warn':'';
+  const bState = p>=100 ? ['warn','⏸ Stopped (100% used)'] : p>=ai.warnAt ? ['warn','⚠ Warning: '+Math.round(p)+'% used'] : ['good','✓ Within budget'];
+  const unkRows = [...ai.unk].sort((a,b)=>b-a);
+  return `<div class="stack">${bannerHTML(m.banner && m.banner.t.startsWith('The AI') ? m.banner : null)}
+    <section class="card"><h2>Is the AI allowed to ask right now?</h2><p class="sub">The AI pauses in exactly two ways. Both are automatic and both only stop it from asking; exits for positions it holds still run.</p>
+      <dl class="dl" style="margin-top:10px;grid-template-columns:minmax(170px,auto) 1fr">
+        <dt>Overall</dt><dd><span class="pill ${st[0]}">${st[1]}</span></dd>
+        <dt>A. Failure breaker</dt><dd><span class="pill ${brk[0]}">${brk[1]}</span> ${rs!==null?`<b>Resumes in ${about(rs)}</b> (about ${hhmm(NOW+rs*60e3)}), when the oldest of the 5 failed calls is 24 h old.`:`<span class="sub">${nUnk} of ${ai.breakerAt} failed calls in the last 24 h. At 5 it stops asking.</span>`}</dd>
+        <dt>B. Budget</dt><dd><span class="pill ${bState[0]}">${bState[1]}</span> ${p>=100?'<b>Does not resume by itself.</b> Raising the cap needs a new decision from you.':`<span class="sub">Heads-up at 80% (USD ${(ai.cap*.8).toFixed(2)}), stops asking at 100% (USD ${ai.cap.toFixed(2)}).</span>`}</dd>
+      </dl></section>
+    <section class="grid3" aria-label="AI summary">
+      <div class="card"><h2>Budget used</h2><p class="big num">USD ${ai.spent.toFixed(2)} <span class="sub" style="font-size:16px;font-weight:400">of ${ai.cap.toFixed(2)}</span></p>
+        <div class="meter ${mcls}" role="progressbar" aria-valuemin="0" aria-valuemax="${ai.cap}" aria-valuenow="${ai.spent}" aria-valuetext="${Math.round(p)}% used${p>=100?', stopped':p>=ai.warnAt?', warning':''}" aria-label="AI budget used"><i style="width:${Math.min(100,p)}%"></i><b class="tick" style="left:${ai.warnAt}%" aria-hidden="true"></b></div>
+        <p class="hint" style="margin-top:4px">The bar turns amber at the line (80%) and red at 100%.</p>
+        <p class="sub" style="margin-top:6px"><b>${p.toFixed(0)}% used${p>=100?': stopped':p>=ai.warnAt?': warning':''}.</b> USD ${(ai.cap-ai.spent).toFixed(2)} left. The application refuses any call that could cross the cap.</p></div>
+      <div class="card"><h2>Calls today</h2><p class="big num">${ai.callsToday}</p><p class="sub">Expect about 10 to 18 a day at most (3 pairs, one review per 4 h).</p><p style="margin-top:6px"><span class="pill ${st[0]}">${st[1]}</span></p></div>
+      <div class="card"><h2>Failure breaker</h2><p class="big num">${nUnk} <span class="sub" style="font-size:16px;font-weight:400">of ${ai.breakerAt} unknown outcomes in 24 h</span></p>
+        <p style="margin:6px 0"><span class="pill ${brk[0]}">${brk[1]}</span></p><p class="sub">An unknown outcome (a call that timed out or could not be read) is charged at its worst case. At 5 within 24 hours the AI stops asking until the oldest of them is more than 24 hours old.</p></div>
+    </section>
+    ${nUnk?`<section class="card"><h2>Failed calls in the last 24 hours</h2><p class="sub">Each one counts toward the breaker until it is 24 hours old.</p>
+      <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>When</th><th>Pair</th><th>Counts for another</th></tr></thead><tbody>${unkRows.map(x=>`<tr><td class="num">${fmtT(NOW-x*60e3)} (${ago(x)})</td><td>${PAIRS[ai.unk.indexOf(x)%3].replace('EUR','/EUR')}</td><td class="num">${about(1440-x)}</td></tr>`).join('')}</tbody></table></div></section>`:''}
+    <section class="card"><h2>Every AI call</h2><p class="sub">Newest first. Cost is an estimate from token counts and the reviewed price.</p>
+      ${calls.length ? `<div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Time</th><th>Pair</th><th>Answer</th><th>Tokens</th><th class="r">Cost (USD)</th><th>Result</th></tr></thead><tbody>${calls.map(c=>`<tr><td class="num" style="white-space:nowrap">${fmtT(NOW-c.mins*60e3)}</td><td>${c.pair.replace('EUR','/EUR')}</td><td>${esc(c.ans)}</td><td class="num">${esc(c.tokens)}</td><td class="r num">${c.cost.toFixed(4)}</td><td>${c.res==='settled'?'Settled':'<span class="pill warn">'+esc(c.res)+'</span>'}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty"><div><b style="color:var(--text)">No AI calls yet.</b><p>The AI strategy has not been activated, so nothing has been asked and nothing has been spent.</p></div></div>'}</section>
+    <section class="card"><h2>Risk limits in force</h2><p class="sub">Read-only. These are fixed by decision DEC-043 and enforced by code; neither the AI nor this page can change them. A change needs a new decision.</p>
+      <dl class="dl" style="margin-top:10px;grid-template-columns:minmax(150px,auto) 1fr">${LIMITS.map(l=>`<dt>${esc(l[0])}</dt><dd>${esc(l[1])}</dd>`).join('')}</dl>
+      <details class="how" style="margin-top:12px"><summary>What do these words mean?</summary><p class="sub" style="margin-top:6px"><b>Drawdown</b>: how far below its best value the portfolio has fallen. <b>Latch</b>: a switch that stays on until you clear it by hand. <b>Exposure</b>: the share of the portfolio currently invested rather than held as cash. <b>Stop-loss</b>: an automatic sell if a position loses too much.</p></details></section></div>`;
+}
+
+function vErrors(){
+  const f = S.efilt, all = S.errs;
+  const rows = all.filter(e=>(f.comp==='all'||e.comp===f.comp)&&(f.status==='all'||e.status===f.status)).sort((a,b)=>b.last-a.last);
+  const total = all.reduce((s,e)=>s+e.count,0), unack = all.filter(e=>e.status!=='ack').length;
+  const sel = (id,label,opts) => `<div><label for="ef-${id}" class="sub">${label}</label><select id="ef-${id}" data-ef="${id}">${opts.map(o=>`<option value="${o[0]}" ${f[id]===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`;
+  const stPill = s => ({new:'<span class="pill bad">● New</span>', seen:'<span class="pill warn">Seen</span>', ack:'<span class="pill off">✓ Acknowledged</span>'}[s]);
+  const card = e => {
+    const open = !!S.eopen[e.id];
+    const alertLine = e.expected ? '<span class="al no">No alert: expected kind of error that recovered (counts toward the Kraken / AI / database rules only if it keeps happening)</span>' : '<span class="al yes">🔔 Alert sent when first seen (rule R1: unexpected error)</span>';
+    return `<article class="card err" aria-labelledby="eh-${e.id}">
+      <div class="err-h"><div><p class="sub" style="font-size:12px;font-weight:700">${esc(COMP[e.comp].toUpperCase())}</p><b id="eh-${e.id}">${esc(e.head)}</b></div>${stPill(e.status)}</div>
+      <p class="sub num" style="margin-top:6px">${e.count} time${e.count>1?'s':''} · first ${fmtT(e.first)} · last ${fmtT(e.last)} (${ago((NOW-e.last)/60e3)})${e.recovered?' · recovered':' · not recovered'}</p>
+      <p class="sub">Strategy: ${e.strat?esc(META[e.strat].name):'not specific to one strategy'} · Pair: ${e.pair?e.pair.replace('EUR','/EUR'):'not known'} · Kind: <code>${esc(e.cls)}</code></p>
+      <div style="margin-top:4px">${alertLine}</div>
+      <div class="row2"><button class="exp" type="button" data-ex="${e.id}" aria-expanded="${open}" aria-controls="ed-${e.id}">${open?'Hide':'Show'} detail</button>
+        ${e.status==='ack' ? `<span class="sub">Acknowledged by owner, ${fmtT(e.ackAt)}</span>` : `<button class="btn" type="button" data-ack="${e.id}">Acknowledge</button>`}</div>
+      ${open?`<div class="errd" id="ed-${e.id}">
+        <div class="reason"><p class="sub" style="font-size:12px">SANITIZED MESSAGE <span class="pill good" style="margin-left:6px">secrets redacted</span></p><pre>${esc(e.msg)}</pre></div>
+        <div class="reason"><p class="sub" style="font-size:12px">STACK TRACE <span class="pill good" style="margin-left:6px">secrets redacted</span></p><pre>${esc(e.trace)}</pre></div>
+        <p class="sub">Where: <code>${esc(e.where)}</code></p>
+        <p class="sub">Find it in the logs: <code>cycle_id=${esc(e.ref.cycle)}</code>${e.ref.decision?` <code>decision_id=${esc(e.ref.decision)}</code>`:''} <code>fingerprint=fp-${esc(e.id)}${esc(e.cls.slice(0,4).toLowerCase())}</code></p>
+        <p class="hint">Keys, tokens and passwords are removed before an error is stored. Acknowledging only marks that you have seen it; it does not fix anything. If the same error comes back after you acknowledged it, it returns to "New".</p></div>`:''}
+    </article>`;
+  };
+  return `<div class="stack"><section class="card"><h2>Errors</h2><p class="sub">Every time the code raised an exception, grouped by kind (same error type in the same place). ${all.length?`${all.length} kinds, ${total} occurrences, ${unack} not yet acknowledged.`:''}</p>
+    <div class="filters" style="margin-top:12px">${sel('comp','Component',[['all','All'],...Object.entries(COMP)])}${sel('status','Status',[['all','All'],['new','New'],['seen','Seen'],['ack','Acknowledged']])}</div>
+    <p class="hint" style="margin-top:8px">New: nobody has opened it. Seen: you opened it. Acknowledged: you pressed Acknowledge.</p></section>
+    ${all.length===0 ? '<section class="card"><div class="empty"><span class="ic" aria-hidden="true">✓</span><div><b style="color:var(--text)">No errors recorded since the loop started.</b><p>Every unexpected exception the code raises is written here. An empty list means none has happened.</p></div></div></section>'
+     : rows.length===0 ? '<section class="card"><div class="empty"><div><b style="color:var(--text)">No errors match these filters.</b><p>Clear a filter to see more.</p></div></div></section>'
+     : rows.map(card).join('')}</div>`;
+}
+
+function vSystem(){
+  const m=M, a=m.loop;
+  const audit = [...S.audit, ...(S.scn==='off'?[{t:NOW-95*60e3, who:'cli:owner', k:'rules', on:false, reason:'(sample) Testing the wind-down behaviour'}]:[])];
+  const hist = [{t:START+60e3, who:'cli:owner', k:'-', on:true, reason:'(sample) Strategies registered at first start', sys:true}];
+  const rows = [...audit.sort((x,y)=>y.t-x.t), ...hist];
+  const firing = id => m.attention.filter(x=>x.rule===id && x.alert).length;
+  return `<div class="stack">${bannerHTML(m.banner && (m.banner.t.startsWith('The loop')||m.banner.t.startsWith('Kraken')) ? m.banner : null)}
+    <section class="grid2">
+      <div class="card"><h2>Loop health</h2><dl class="dl" style="margin-top:8px"><dt>State</dt><dd>${a.alive?'<span class="pill good">● Running</span>':'<span class="pill bad">✖ Stalled</span>'}</dd><dt>Last cycle</dt><dd class="num">${fmtT(NOW-a.age*60e3)} (${ago(a.age)})</dd><dt>Next cycle</dt><dd>${esc(a.next)}</dd><dt>Healthy means</dt><dd>some strategy recorded equity in the last 40 minutes</dd><dt>First cycle</dt><dd class="num">${fmtT(START)}</dd><dt>Deployed commit</dt><dd class="num">ef92ac5 (sample)</dd></dl></div>
+      <div class="card"><h2>Backups</h2><dl class="dl" style="margin-top:8px"><dt>Last server backup</dt><dd class="num">${S.scn==='stalled'?'<span class="pill warn">1.6 days ago</span>':'7 h ago'}</dd><dt>Last copy on your Mac</dt><dd class="num">${ago(26*60)} </dd><dt>Restore test</dt><dd>Passed 2 days ago</dd></dl><p class="hint" style="margin-top:8px">Pull a backup to your Mac at least once a day (see the runbook).</p></div>
+    </section>
+    <section class="card"><h2>What alerts you</h2><p class="sub">These rules decide what will reach you on Telegram (a later slice; until then this page is the only place these show). Everything else stays on the page. Thresholds marked "proposed" are my suggestion and need your OK.</p>
+      <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Rule</th><th>It alerts you when</th><th>Threshold (proposed)</th><th>Right now</th></tr></thead><tbody>
+      ${RULES.map(r=>`<tr><td><b>${r.id}</b> ${esc(r.name)}</td><td>${esc(r.when)}</td><td>${esc(r.thr)}</td><td>${firing(r.id)?`<span class="pill bad">● Firing (${firing(r.id)})</span>`:'<span class="pill good">✓ Quiet</span>'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="sub" style="margin-top:10px"><b>How alerts behave (proposed):</b> one message when a condition starts, one "back to normal" message when it ends, and no repeat of the same condition within 6 hours.</p>
+      <h3 style="font-size:15px;margin-top:14px">Page only, never an alert</h3>
+      <ul class="tl" style="margin-top:4px">${PAGE_ONLY.map(x=>`<li><b>${esc(x[0])}</b><span class="sub" style="max-width:60ch">${esc(x[1])}</span></li>`).join('')}</ul></section>
+    <section class="card"><h2>Kraken price freshness</h2><p class="sub">How old the newest price data is for each pair. Over 45 minutes counts as stale, blocks new entries and triggers rule R3.</p>
+      <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Pair</th><th>Newest data</th><th>State</th></tr></thead><tbody>${m.kraken.map(k=>`<tr><td>${k.pair.replace('EUR','/EUR')}</td><td class="num">${k.age<1?'under 1 min ago':ago(k.age)}</td><td>${k.ok?'<span class="pill good">✓ Fresh</span>':'<span class="pill bad">✖ Stale</span>'}</td></tr>`).join('')}</tbody></table></div></section>
+    <section class="card"><h2>On/off audit trail</h2><p class="sub">Every switch change, who made it and why. Newest first. Changes made on this page appear here the moment they are saved.</p>
+      <ul class="tl" style="margin-top:8px">${rows.map(r=>`<li><div><b>${r.sys?'Strategies registered':esc(META[r.k].name)+' switched '+(r.on?'on':'off')}</b><p class="sub">Reason: ${esc(r.reason)}</p></div><div class="sub num" style="text-align:right">${fmtT(r.t)}<br>${esc(r.who)}</div></li>`).join('')}</ul></section></div>`;
+}
+
+function vStates(){
+  const items = [
+    ['stalled','Loop stalled','The loop has not finished a cycle for over 40 minutes. Shows on every page and in the status strip. Alerts you (R2).'],
+    ['stuck','A strategy stopped working','One strategy fails every cycle or records nothing for 40+ minutes. The others carry on. Alerts you (R2).'],
+    ['kraken','Kraken unreachable','Prices are stale over 45 minutes. New entries stop automatically. Alerts you (R3).'],
+    ['errors','Errors present','Unacknowledged errors show a badge on the Errors tab and an item on the Overview. Alerts you if any is unexpected (R1).'],
+    ['budget80','AI budget at 80% or more','A heads-up before the cap: amber meter, an attention item, and a banner. Alerts you (R5).'],
+    ['budget','AI paused: budget used','The USD 10 cap is reached. Does not resume by itself. Calm amber: it is the safety design working. Alerts you (R5).'],
+    ['breaker','AI paused: failure breaker','Five unknown call outcomes in 24 h; the page says when it resumes. Alerts you (R4).'],
+    ['off','Strategy switched off','Wind-down: no new entries, no AI spend, exits still run, curve keeps recording. Page only.'],
+    ['first','First hours, no data yet','Honest about being too early; no verdict is claimed; empty positions explained. Page only.'],
+    ['close','Close race','Verdict says "too early to tell" when the gap is under 1 EUR or the run is under 3 days. Page only.'],
+    ['daily','Daily-loss pause','A strategy lost 3% of its starting capital today; resumes at 00:00 UTC by itself. Page only.'],
+    ['latch','Drawdown latch','10% below the best value; stays until cleared by hand. Needs the owner. Alerts you (R5).']
+  ];
+  const ex = {
+    stalled:{k:'bad',t:'The loop has stopped',p:'No cycle has finished for 73 minutes. Nothing new is being traded or recorded.'},
+    stuck:{k:'bad',t:'The AI strategy has stopped working',p:'Its cycle failed 5 times in a row; nothing recorded for about 66 minutes.'},
+    kraken:{k:'bad',t:'Kraken prices are unreachable',p:'No fresh prices for 47 minutes. No strategy opens new positions meanwhile.'},
+    errors:{k:'bad',t:'3 errors not acknowledged',p:'One is an unexpected ValueError in the AI strategy. Open Errors to read and acknowledge.'},
+    budget80:{k:'warn',t:'The AI has used 83% of its USD 10 budget',p:'USD 1.69 left. It stops asking at 100%.'},
+    budget:{k:'warn',t:'The AI is paused: budget used up',p:'USD 10.00 of 10.00 spent. Exits for held positions still run. No automatic resume.'},
+    breaker:{k:'warn',t:'The AI is paused: failure breaker',p:'5 unknown outcomes in 24 hours. Resumes in about 6 h, when the oldest of the 5 is 24 h old.'},
+    off:{k:'info',t:'Rules breakout is switched off',p:'Wind-down: no new entries; stops and exits still run.'},
+    first:{k:'info',t:'Just started: not much to see yet',p:'About 1 hour of data. Curves become meaningful after a day or two.'},
+    close:{k:'info',t:'Too early to tell',p:'The first two strategies are 0.40 EUR apart, under the 1 EUR we need before calling a leader.'},
+    daily:{k:'warn',t:'Rules breakout paused for today',p:'Lost 3.4% today. Resumes at 00:00 UTC.'},
+    latch:{k:'bad',t:'AI strategy latched by drawdown',p:'10.5% below its best value. Clear it by hand to resume entries.'}
+  };
+  return `<div class="stack"><section class="card"><h2>States gallery</h2><p class="sub">The abnormal states, each shown as the banner the owner would see. Use "Preview state" at the top to see the whole dashboard in any of them. Colour is never the only signal: every state also has an icon, a word and a sentence.</p></section>
+    <div class="gallery">${items.map(i=>`<div class="card gal-item"><h3 style="font-size:15px">${esc(i[1])}</h3><p class="sub">${esc(i[2])}</p>${bannerHTML(ex[i[0]])}<div><button class="btn" type="button" data-prev="${i[0]}">Preview full dashboard in this state</button></div></div>`).join('')}</div></div>`;
+}
+
+function vSignin(){
+  return `<div style="max-width:420px;margin:24px auto" class="stack"><section class="card"><h2 style="font-size:20px">Sign in</h2>
+    <p class="sub" style="margin-top:4px">This page can switch strategies on and off, so it asks for your password first. It is only reachable through your SSH tunnel (localhost).</p>
+    <form id="siform" novalidate style="margin-top:14px"><label for="pw" class="sub">Password</label>
+      <input id="pw" class="inp" type="password" autocomplete="current-password">
+      <p id="pw-err" class="neg" role="alert" style="font-size:14px;margin-top:4px" hidden></p>
+      <button class="btn primary" type="submit" style="margin-top:12px;width:100%">Sign in</button></form></section>
+    <p class="hint">Mock only: any password works except the word "wrong". No password is checked or stored by this page.</p></div>`;
+}
+
+/* ---------- app ---------- */
+function renderWho(){
+  $('#who').innerHTML = S.auth ? '<span class="pill good">● Signed in as owner</span><button class="btn" type="button" data-signout>Sign out</button>' : '<span class="pill off">Signed out</span>';
+}
+function render(){
+  M = model();
+  const v = S.view;
+  renderWho();
+  $('#nav').hidden = !S.auth;
+  if(!S.auth){ main.innerHTML = vSignin(); document.title = 'Sign in - AI Trading Lab (mock)'; $('#scn').value=S.scn; $('#sim').value=S.sim; return; }
+  main.innerHTML = {overview:vOverview, decisions:vDecisions, ai:vAI, errors:vErrors, system:vSystem, states:vStates}[v]();
+  document.querySelectorAll('nav a').forEach(a=>{ if(a.dataset.v===v) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  const ne = $('#nav-err'); ne.innerHTML = 'Errors' + (M.unack ? ` <span class="badge" aria-hidden="true">${M.unack}</span><span class="sr"> (${M.unack} not acknowledged)</span>` : '');
+  $('#scn').value = S.scn; $('#sim').value = S.sim;
+  if(v==='overview') drawChart();
+  document.title = ({overview:'Overview',decisions:'Decisions',ai:'AI & safety',errors:'Errors',system:'System',states:'States'})[v] + ' - AI Trading Lab (mock)';
+}
+function go(v, focus){ S.view = v; if(location.hash !== '#'+v) history.replaceState(null,'','#'+v); render(); if(focus){ main.focus(); window.scrollTo(0,0);} }
+function setScn(s){ S.scn = s; S.on = {rules: s!=='off', ai:true, bench:true}; S.audit = []; S.errs = (s==='errors'||s==='stuck') ? makeErrs(s) : []; S.eopen = {}; }
+
+let toastT;
+function toast(html, linkView){
+  const t = $('#toast'); t.hidden = false;
+  t.innerHTML = `<div>${html}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${linkView?`<button class="btn" type="button" data-go="${linkView}" data-closetoast>View</button>`:''}<button class="btn" type="button" data-closetoast aria-label="Dismiss message">Close</button></div>`;
+  clearTimeout(toastT); toastT = setTimeout(()=>{ t.hidden = true; }, 12000);
+}
+
+/* events */
+document.addEventListener('click', e=>{
+  const t = e.target.closest('[data-range],[data-sw],[data-x],[data-prev],[data-go],[data-ex],[data-ack],[data-signout],[data-closetoast],nav a,#theme');
+  if(!t) return;
+  if(t.matches('[data-closetoast]')){ $('#toast').hidden = true; if(!t.dataset.go) return; }
+  if(t.matches('nav a')){ e.preventDefault(); go(t.dataset.v, true); return; }
+  if(t.id==='theme'){ const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'); document.documentElement.dataset.theme = cur==='dark'?'light':'dark'; if(S.view==='overview'&&S.auth) drawChart(); return; }
+  if(t.dataset.signout!==undefined){ S.auth=false; render(); main.focus(); return; }
+  if(t.dataset.go){ go(t.dataset.go, true); return; }
+  if(t.dataset.range){ S.range = t.dataset.range; render(); $(`[data-range="${S.range}"]`).focus(); return; }
+  if(t.dataset.x){ const id=t.dataset.x; S.open[id]=!S.open[id]; render(); const b=$(`[data-x="${id}"]`); if(b) b.focus(); return; }
+  if(t.dataset.ex){ const id=t.dataset.ex, er=S.errs.find(q=>q.id===id); S.eopen[id]=!S.eopen[id]; if(S.eopen[id] && er.status==='new') er.status='seen'; render(); const b=$(`[data-ex="${id}"]`); if(b) b.focus(); return; }
+  if(t.dataset.ack){ const id=t.dataset.ack, er=S.errs.find(q=>q.id===id); er.status='ack'; er.ackAt=NOW; render(); const b=$(`[data-ex="${id}"]`); if(b) b.focus();
+    toast(`<p><b>Acknowledged.</b> "${esc(er.cls)}" in ${esc(COMP[er.comp])} is marked as seen by you (owner, ${fmtT(NOW)}). It returns to New if it happens again.</p>`); return; }
+  if(t.dataset.prev){ setScn(t.dataset.prev); go('overview', true); return; }
+  if(t.dataset.sw) confirmSwitch(t.dataset.sw, t);
+});
+document.addEventListener('change', e=>{
+  if(e.target.id==='scn'){ setScn(e.target.value); render(); }
+  if(e.target.id==='sim'){ S.sim = e.target.value; }
+  if(e.target.dataset.f){ S.filt[e.target.dataset.f]=e.target.value; render(); $('#f-'+e.target.dataset.f).focus(); }
+  if(e.target.dataset.ef){ S.efilt[e.target.dataset.ef]=e.target.value; render(); $('#ef-'+e.target.dataset.ef).focus(); }
+});
+document.addEventListener('submit', e=>{
+  if(e.target.id!=='siform') return; e.preventDefault();
+  const pw = $('#pw').value, err = $('#pw-err');
+  if(!pw){ err.textContent='Enter your password.'; err.hidden=false; $('#pw').focus(); return; }
+  if(pw==='wrong'){ err.textContent='Wrong password. Try again.'; err.hidden=false; $('#pw').select(); return; }
+  S.auth = true; render(); main.focus(); toast('<p><b>Signed in as owner.</b> You can now switch strategies and acknowledge errors.</p>');
+});
+addEventListener('resize', ()=>{ if(S.view==='overview'&&S.auth) drawChart(); });
+addEventListener('hashchange', ()=>{ const v = location.hash.slice(1); if(VIEWS.includes(v) && v!==S.view){ S.view=v; render(); } });
+
+/* confirm dialog + simulated save */
+const dlg = $('#dlg'); let opener=null;
+const errBox = `<div id="save-err" class="banner bad" role="alert" hidden style="margin-top:12px"><span class="ic" aria-hidden="true">!</span><div><b id="save-t"></b><p id="save-p"></p></div></div>`;
+const whyField = lbl => `<label for="why" class="sub" style="display:block;margin-top:10px">${lbl}</label>
+  <input id="why" class="inp" maxlength="200" autocomplete="off">
+  <p id="why-err" class="neg" role="alert" style="font-size:14px;margin-top:4px" hidden>Please give a short reason.</p>
+  <p class="hint" style="margin-top:6px">Saved in the audit trail with who (owner, signed in), when, and this reason.</p>${errBox}`;
+function confirmSwitch(k, btn){
+  opener = btn; const on = S.on[k], name = META[k].name;
+  const body = $('#dlg-body');
+  if(on){
+    body.innerHTML = `<h2 id="dlg-title">Switch off ${esc(name)}?</h2>
+      <p>This is a wind-down, not a freeze. After you confirm:</p><ul>
+      <li><b>No new positions</b> will be opened.</li>
+      ${k==='ai'?'<li><b>The AI is not asked again</b>, so it costs nothing more.</li>':''}
+      <li>Its <b>stop-loss, take-profit and time exits still run</b>, so nothing is left unwatched.</li>
+      <li>Its value keeps being recorded, so the comparison stays fair.</li>
+      ${k==='bench'?'<li>The benchmark never sells, so this only stops its one-time purchases.</li>':''}</ul>
+      <p class="sub">You can switch it back on at any time. Nothing is sold by this switch.</p>
+      ${whyField('Reason (required)')}
+      <div class="row"><button class="btn" id="no" type="button">Cancel</button><button class="btn danger" id="yes" type="button">Switch off</button></div>`;
+  } else {
+    body.innerHTML = `<h2 id="dlg-title">Switch on ${esc(name)}?</h2><p>It resumes normal operation from the next 15-minute cycle: it may open new positions again${k==='ai'?' and the AI is asked again (this spends from the USD 10 budget)':''}.</p>
+      ${whyField('Reason (required)')}
+      <div class="row"><button class="btn" id="no" type="button">Cancel</button><button class="btn primary" id="yes" type="button">Switch on</button></div>`;
+  }
+  dlg.showModal(); $('#why').focus();
+  $('#no').onclick = ()=>dlg.close();
+  $('#yes').onclick = ()=>{ const w = $('#why').value.trim(); if(!w){ $('#why-err').hidden=false; $('#why').focus(); return; } save(k, !on, w); };
+}
+function showSaveErr(t,p){ $('#save-t').textContent=t; $('#save-p').textContent=p; $('#save-err').hidden=false; }
+function save(k, to, w){
+  const yes=$('#yes'), label=yes.textContent; yes.disabled=true; $('#no').disabled=true; yes.textContent='Saving…'; $('#save-err').hidden=true; $('#why').readOnly=true;
+  setTimeout(()=>{
+    $('#no').disabled=false; $('#why').readOnly=false;
+    if(S.sim==='db'){
+      showSaveErr('Could not save: the database did not answer.', `Nothing was changed: ${META[k].name} is still ${S.on[k]?'on':'off'} and nothing was written to the audit trail. Wait a minute and try again. If it keeps failing, check the System page and the runbook.`);
+      yes.disabled=false; yes.textContent='Try again'; return;
+    }
+    if(S.sim==='expired'){
+      showSaveErr('Could not save: your sign-in has expired.', 'Nothing was changed. Sign in again, then repeat the change.');
+      yes.disabled=false; yes.textContent='Sign in again'; yes.onclick=()=>{ dlg.close(); S.auth=false; render(); main.focus(); }; return;
+    }
+    S.on[k] = to; S.audit.unshift({t:NOW, who:'dashboard:owner', k, on:to, reason:w});
+    dlg.close(); render(); const nb = $(`[data-sw="${k}"]`); if(nb) nb.focus();
+    toast(`<p><b>Saved.</b> ${esc(META[k].name)} is now ${to?'on':'off (wind-down)'}. Recorded in the audit trail: dashboard:owner, ${fmtT(NOW)}, reason "${esc(w)}".</p>`, 'system');
+  }, 700);
+}
+dlg.addEventListener('close', ()=>{ if(opener && document.contains(opener)) opener.focus(); });
+
+/* init */
+(function(){
+  $('#scn').innerHTML = Object.entries(SCENARIOS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  const v = location.hash.slice(1); if(VIEWS.includes(v)) S.view = v;
+  render();
+})();
+</script>
+</body>
+</html>

@@ -158,6 +158,7 @@ class PlannedDecision(FrozenModel):
 
 
 class DecisionRow(FrozenModel):
+    seq: int | None = None
     decision_id: UUID
     strategy_id: str
     pair: str
@@ -537,6 +538,7 @@ class LiveStore:
     @staticmethod
     def _row(r: Any) -> DecisionRow:
         return DecisionRow(
+            seq=r["seq"],
             decision_id=r["decision_id"],
             strategy_id=r["strategy_id"],
             pair=r["pair"],
@@ -547,6 +549,29 @@ class LiveStore:
             result=r["result"],
             detail=r["detail"],
         )
+
+    async def decisions_page(
+        self,
+        *,
+        strategy_id: str | None = None,
+        pair: str | None = None,
+        action: str | None = None,
+        before_seq: int | None = None,
+        limit: int = 50,
+    ) -> list[DecisionRow]:
+        """Newest first, filtered; `before_seq` is the last row's `seq` of the previous page."""
+        statement = select(live_decisions).order_by(live_decisions.c.seq.desc()).limit(limit)
+        if strategy_id is not None:
+            statement = statement.where(live_decisions.c.strategy_id == strategy_id)
+        if pair is not None:
+            statement = statement.where(live_decisions.c.pair == pair)
+        if action is not None:
+            statement = statement.where(live_decisions.c.action == action)
+        if before_seq is not None:
+            statement = statement.where(live_decisions.c.seq < before_seq)
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement)).mappings().all()
+        return [self._row(r) for r in rows]
 
     async def decisions(self, strategy_id: str, limit: int = 1000) -> list[DecisionRow]:
         async with self.engine.connect() as connection:

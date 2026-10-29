@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     xai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     database_timeout_seconds: float = Field(default=2, gt=0, le=30)
+    # Dashboard sign-in: a scrypt hash (`atl-dashboard hash-password`) and a random secret.
+    # Without both the dashboard refuses every sign-in.
+    dashboard_password_hash: SecretStr | None = None
+    dashboard_session_secret: SecretStr | None = Field(default=None, min_length=32, max_length=200)
+    dashboard_idle_minutes: int = Field(default=30, ge=5, le=480)
+    # A commit id or an image tag such as `local`: shown on the page, so it must never stop startup.
+    deployed_commit: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9._-]*$")
 
     @field_validator("database_url")
     @classmethod
@@ -48,7 +55,14 @@ class Settings(BaseSettings):
             raise ValueError("Invalid PostgreSQL URL") from None
         return value
 
-    @field_validator("reporting_username", "reporting_password", mode="before")
+    @field_validator(
+        "reporting_username",
+        "reporting_password",
+        "dashboard_password_hash",
+        "dashboard_session_secret",
+        "deployed_commit",
+        mode="before",
+    )
     @classmethod
     def empty_reporting_secret(cls, value: object) -> object:
         return None if value == "" else value

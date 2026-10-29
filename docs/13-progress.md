@@ -1720,3 +1720,11 @@ Owner asked for visibility and error tracking before relying on the unattended r
 `error_occurrences` (migration 0015), `live/journal.py` (redaction, fingerprints, bounded retention, containment), wiring into the
 engine, the AI path and the worker, `atl-live errors` / `ack`, and the journal summary in `status`. DEC-045 raised the AI cap to USD 15.
 Slices renumbered: 7 = dashboard, 8 = Telegram alerts, 9 = self-review, 10 = report, 11 = live pilot (docs/29 section 5).
+
+## 2026-10-29 — Slice 6 deployed; slice 7 dashboard (branch `feature/s7-dashboard`)
+
+PR #16 merged and deployed (commit c3cdb69, migration 0015 ran, loop healthy, `atl-live errors` works; the first cycle after the
+restart logged three Kraken `source_error` warnings, which the journal captured without a cause: the error carries no detail).
+Slice 7 adds the `dashboard` package (sign-in, read models, working switches, acknowledgement, shared alert rules), the static page,
+a `dashboard` service published on 127.0.0.1 only, and DEC-046 (alert thresholds approved by the owner). Not yet deployed.
+

@@ -15,12 +15,28 @@ SERVICES = COMPOSE["services"]
 SCRIPTS = sorted((ROOT / "deploy").glob("*.sh"))
 
 
-def test_the_production_stack_publishes_no_port_at_all() -> None:
-    assert set(SERVICES) == {"db", "migrate", "live"}
+def test_only_the_dashboard_is_published_and_only_on_the_servers_own_loopback() -> None:
+    assert set(SERVICES) == {"db", "migrate", "live", "dashboard"}
     for name, service in SERVICES.items():
-        assert "ports" not in service, name
         assert "network_mode" not in service, name
         assert service.get("privileged") is not True, name
+        if name != "dashboard":
+            assert "ports" not in service, name
+    assert SERVICES["dashboard"]["ports"] == ["127.0.0.1:8000:8000"]
+
+
+def test_the_dashboard_cannot_trade_or_spend_and_is_locked_down() -> None:
+    dashboard = SERVICES["dashboard"]
+    environment = dashboard["environment"]
+    assert environment["ATL_EXECUTION_MODE"] == "PAPER_ONLY"
+    assert not any("API_KEY" in key for key in environment)  # it never holds a provider key
+    assert environment["ATL_DASHBOARD_PASSWORD_HASH"] == "${ATL_DASHBOARD_PASSWORD_HASH:-}"
+    assert dashboard["command"] == ["/app/.venv/bin/atl-dashboard", "serve"]
+    assert dashboard["read_only"] is True and dashboard["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in dashboard["security_opt"]
+    assert dashboard["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
+    assert dashboard["restart"] == "unless-stopped"
+    assert dashboard["healthcheck"]["test"][0] == "CMD"
 
 
 def test_the_loop_is_paper_only_whatever_the_env_file_says() -> None:
@@ -54,7 +70,7 @@ def test_the_loop_restarts_checks_itself_and_is_locked_down() -> None:
 
 def test_the_database_password_is_mandatory_and_never_literal() -> None:
     text = (ROOT / "compose.prod.yaml").read_text()
-    assert text.count("${POSTGRES_PASSWORD:?") == 2
+    assert text.count("${POSTGRES_PASSWORD:?") == 2  # once for db, once in the shared URL
     assert not re.search(r"PASSWORD:\s*[A-Za-z0-9]", text)
     assert "local_example_only" not in text
     assert SERVICES["db"]["restart"] == "unless-stopped"
@@ -69,7 +85,7 @@ def test_every_service_rotates_its_logs(name: str) -> None:
 
 def test_the_image_provides_the_commands_the_stack_runs() -> None:
     scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
-    assert "atl-live" in scripts
+    assert "atl-live" in scripts and "atl-dashboard" in scripts
     assert (ROOT / "alembic.ini").exists() and (ROOT / "migrations").is_dir()
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert "alembic.ini" in dockerfile and "migrations" in dockerfile
@@ -142,3 +158,10 @@ def test_the_runbook_only_asks_for_commands_the_deployment_account_can_run() -> 
     commands = [ln for ln in text.splitlines() if ln.strip().startswith("sudo ")]
     assert commands == []
     assert "scp -r deploy" in text and "run --rm live" not in text
+
+
+@pytest.mark.parametrize("tag", ["local", "v0.1", "c3cdb69", "feature-x_1", ""])
+def test_any_sensible_image_tag_lets_the_dashboard_start(tag: str) -> None:
+    from ai_trading_lab.config import Settings
+
+    assert Settings(_env_file=None, deployed_commit=tag).deployed_commit in (tag, None)

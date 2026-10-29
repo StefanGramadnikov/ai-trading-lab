@@ -18,7 +18,7 @@ from typing import Any
 import httpx2
 from sqlalchemy.exc import SQLAlchemyError
 
-from ai_trading_lab.alerts.monitor import AlertRunner, log
+from ai_trading_lab.alerts.monitor import AlertRunner, DatabaseWatch, log
 from ai_trading_lab.alerts.state import AlertState
 from ai_trading_lab.config import Settings
 from ai_trading_lab.dashboard.queries import DashboardData
@@ -98,7 +98,12 @@ async def run(arguments: argparse.Namespace) -> int:
     if arguments.command == "find-chat":
         return await find_chat(settings)
     engine = create_database_engine(settings)
-    adapter = adapter_from(settings)
+    try:
+        adapter = adapter_from(settings)
+    except ValueError:
+        # A mistyped token or chat id: say so (never the value) and idle instead of crash-looping.
+        log({"alerts": "telegram_settings_invalid", "hint": "check the token and chat id"})
+        adapter = None
     outbox = NotificationStore(engine)
     try:
         if arguments.command == "test":
@@ -119,6 +124,7 @@ async def run(arguments: argparse.Namespace) -> int:
         data = DashboardData(engine, settings)
         journal = ErrorJournal(engine)
         runner = AlertRunner(AlertState(engine), outbox, adapter)
+        watch = DatabaseWatch()
         if not runner.sending:
             log({"alerts": "telegram_not_configured", "sending": False})
         stop = asyncio.Event()
@@ -126,16 +132,29 @@ async def run(arguments: argparse.Namespace) -> int:
         for name in ("SIGINT", "SIGTERM"):
             loop.add_signal_handler(getattr(signal, name), stop.set)
         while not stop.is_set():
+            now = datetime.now(UTC)
             try:
-                now = datetime.now(UTC)
                 if runner.sending:
                     counts = await runner.tick(await data.overview(), now)
                     if counts["sent"] or counts["failed"]:
                         log({"alerts": counts, "at": now.isoformat()})
+                    await watch.up(adapter, now)
                 await asyncio.to_thread(HEALTH_FILE.touch)
-            except (SQLAlchemyError, OSError, TimeoutError, ValueError, RuntimeError) as exc:
+            except Exception as exc:  # noqa: BLE001 - nothing may kill the watcher
                 log({"alerts": "check_failed", "error": type(exc).__name__})
-                await journal.record_exception("alerts", exc, at=datetime.now(UTC))
+                if isinstance(exc, SQLAlchemyError | OSError | TimeoutError):
+                    # The outbox lives in the database, so say so without it.
+                    try:
+                        await watch.down(adapter, now)
+                    except Exception as sending:  # noqa: BLE001
+                        log({"alerts": "db_notice_failed", "error": type(sending).__name__})
+                else:
+                    try:
+                        await journal.record_exception("alerts", exc, at=now)
+                    except Exception:  # noqa: BLE001
+                        pass
+                # Alive and trying: the health file is for "is the watcher running".
+                await asyncio.to_thread(HEALTH_FILE.touch)
             if arguments.once:
                 break
             try:

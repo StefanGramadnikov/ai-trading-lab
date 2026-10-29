@@ -19,7 +19,9 @@ alert_state = Table(
     Column("title", String(200), nullable=False),
     Column("detail", String(500), nullable=False),
     Column("first_fired_utc", DateTime(timezone=True), nullable=False),
+    Column("last_firing_utc", DateTime(timezone=True), nullable=False),  # last check that saw it
     Column("last_sent_utc", DateTime(timezone=True)),  # None: never delivered yet
+    Column("last_attempt_utc", DateTime(timezone=True)),  # last try, delivered or not
     Column("resolved_at_utc", DateTime(timezone=True)),  # None: still firing
     Column("episode", Integer, nullable=False),
     Column("failed_sends", Integer, nullable=False, server_default="0"),
@@ -34,7 +36,9 @@ class Row:
     title: str
     detail: str
     first_fired_utc: datetime
+    last_firing_utc: datetime
     last_sent_utc: datetime | None
+    last_attempt_utc: datetime | None
     resolved_at_utc: datetime | None
     episode: int
     failed_sends: int
@@ -56,7 +60,9 @@ class AlertState:
             "title": row.title[:200],
             "detail": row.detail[:500],
             "first_fired_utc": row.first_fired_utc,
+            "last_firing_utc": row.last_firing_utc,
             "last_sent_utc": row.last_sent_utc,
+            "last_attempt_utc": row.last_attempt_utc,
             "resolved_at_utc": row.resolved_at_utc,
             "episode": row.episode,
             "failed_sends": row.failed_sends,

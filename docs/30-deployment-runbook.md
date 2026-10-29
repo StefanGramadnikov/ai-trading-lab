@@ -195,7 +195,7 @@ $dc exec -T alerts /app/.venv/bin/atl-alerts test                       # you sh
 ```
 
 `alerts` appears in `dc ps` and reports `healthy` once it has checked. If the test message does not arrive, `dc logs --tail 50 alerts`
-shows the reason without ever printing the token. To stop alerts: set `ATL_TELEGRAM_ENABLED=false` and `up -d alerts`.
+shows the reason without ever printing the token (`telegram_settings_invalid` means the token or chat id has the wrong shape; the container keeps running and sends nothing until you fix the env file and `up -d alerts`). To stop alerts: set `ATL_TELEGRAM_ENABLED=false` and `up -d alerts`.
 
 ## 10. Security notes
 

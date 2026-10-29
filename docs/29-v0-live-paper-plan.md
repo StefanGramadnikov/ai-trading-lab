@@ -395,13 +395,19 @@ rules R1-R6 of `dashboard/alerts.py`, thresholds in DEC-046) and sends them to o
 single-attempt outbox (`notifications/`), so nothing is sent twice by a crash and a message carrying a secret-shaped string is refused.
 
 Behaviour (`alerts/monitor.py`, pure `plan()` plus a runner): a new problem is sent once; the same problem is never repeated within
-6 hours (then one "still not fixed" reminder); when it clears you get one "Resolved" note; a message that could not be delivered is
-retried on the next check, at most 5 times, then it waits for the next 6 hour window; one problem failing to send never blocks others.
-Message text is fixed wording from our own code (rule title, detail sentence, rule id, how to open the dashboard); nothing from the
-market, the AI or an exception message is ever copied into it.
+6 hours (then one "still not fixed" reminder); a problem is announced as "Resolved" only after 30 quiet minutes, so a value hovering
+at a threshold stays one episode instead of flooding the chat; a message that could not be delivered is retried after growing pauses
+(5 min, 15 min, 1 h, 3 h, then every 6 h), and one problem failing to send never blocks the others. Each send is recorded as "told"
+before it is attempted and rolled back if it failed, so a crash can lose one message but never send a second copy. Telegram's
+"unknown" outcome (timeout, 5xx) counts as a failure and is retried: a duplicate message is possible there, a deliberate trade for
+alerts (the single-attempt rule protects orders). Message text is fixed wording from our own code (rule title, detail sentence, rule
+id, how to open the dashboard); nothing from the market, the AI or an exception message is ever copied into it.
+
+If the database itself is unreachable, the outbox is too, so a small in-memory path sends one fixed "the database does not answer"
+message straight through Telegram (again after 6 hours) and one "answers again" note on recovery.
 
 Added by the assistant, not requested: a **daily check** message at 07:00 UTC or later (values per strategy, alerts active, errors to
-review, AI state). Without it, silence could mean "all fine" or "the alerter is dead". Tell me if you do not want it.
+review, AI state), retried hourly the same day if Telegram was down. Without it, silence could mean "all fine" or "the alerter is dead". Tell me if you do not want it.
 
 Not covered: the alerter itself dying (Docker restarts it and its healthcheck shows on `docker compose ps`, but nothing outside the
 server watches it; the daily check going missing is your signal), and the whole server being down (no alert can come from it; an

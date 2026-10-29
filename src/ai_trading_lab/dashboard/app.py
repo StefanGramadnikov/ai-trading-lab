@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ai_trading_lab.config import Settings
 from ai_trading_lab.dashboard.auth import (
@@ -143,6 +144,12 @@ def create_dashboard_app(
             raise HTTPException(403, "cross_origin")
         return session
 
+    def renewed(out: Response, session: Session) -> Response:
+        """A response built by hand does not carry the dependency's cookie, so renew it here."""
+        assert signer is not None
+        _set_cookie(out, signer.issue(now=wall(), previous=session))
+        return out
+
     def _set_cookie(response: Response, value: str) -> None:
         response.set_cookie(
             COOKIE_NAME,
@@ -153,8 +160,8 @@ def create_dashboard_app(
             path="/",
         )
 
-    @app.exception_handler(HTTPException)
-    async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         messages = {
             "not_signed_in": "Sign in to continue.",
             "csrf": "The page is out of date. Reload it and try again.",
@@ -207,12 +214,13 @@ def create_dashboard_app(
                 },
                 headers={**HEADERS, "Retry-After": str(wait)},
             )
+        # Count the attempt before the slow check, so parallel guesses cannot slip past the limit.
+        throttle.failed(monotonic())
         # scrypt takes a moment and blocks: keep it off the event loop.
         ok = await asyncio.to_thread(
             verify_password, body.password, config.dashboard_password_hash.get_secret_value()
         )
         if not ok:
-            throttle.failed(monotonic())
             return _error(401, "wrong_password", "That password is not right.")
         throttle.succeeded()
         cookie = signer.issue(now=wall())
@@ -246,7 +254,7 @@ def create_dashboard_app(
     async def decisions(
         request: Request,
         _: Annotated[Session, Depends(session_of)],
-        strategy_id: Annotated[str | None, Query(pattern=STRATEGY_ID.pattern)] = None,
+        strategy_id: Annotated[str | None, Query(pattern=f"^{STRATEGY_ID.pattern}$")] = None,
         pair: Annotated[str | None, Query(pattern=r"^[A-Z]{3,10}$")] = None,
         action: Annotated[str | None, Query(pattern=r"^[a-z_]{1,20}$")] = None,
         before_seq: Annotated[int | None, Query(ge=1)] = None,
@@ -294,7 +302,7 @@ def create_dashboard_app(
         strategy_id: str,
         body: Toggle,
         request: Request,
-        _: Annotated[Session, Depends(writer_of)],
+        session: Annotated[Session, Depends(writer_of)],
     ) -> Response:
         if not STRATEGY_ID.fullmatch(strategy_id):
             raise HTTPException(404, "not_found")
@@ -309,14 +317,17 @@ def create_dashboard_app(
         except ValueError:
             raise HTTPException(404, "not_found") from None
         audit_rows = await data.store.audit(strategy_id, 1)
-        return JSONResponse(
-            {
-                "strategy_id": strategy_id,
-                "enabled": body.enabled,
-                "changed": changed,
-                "audit": audit_rows[0].model_dump(mode="json") if audit_rows else None,
-            },
-            headers=HEADERS,
+        return renewed(
+            JSONResponse(
+                {
+                    "strategy_id": strategy_id,
+                    "enabled": body.enabled,
+                    "changed": changed,
+                    "audit": audit_rows[0].model_dump(mode="json") if audit_rows else None,
+                },
+                headers=HEADERS,
+            ),
+            session,
         )
 
     @app.post("/api/errors/{fingerprint}/ack")
@@ -324,7 +335,7 @@ def create_dashboard_app(
         fingerprint: str,
         body: Acknowledge,
         request: Request,
-        _: Annotated[Session, Depends(writer_of)],
+        session: Annotated[Session, Depends(writer_of)],
     ) -> Response:
         if not FINGERPRINT.fullmatch(fingerprint):
             raise HTTPException(404, "not_found")
@@ -337,7 +348,7 @@ def create_dashboard_app(
             )
         except ValueError:
             return _error(409, "ambiguous", "That prefix matches more than one problem.")
-        return JSONResponse({"acknowledged": count}, headers=HEADERS)
+        return renewed(JSONResponse({"acknowledged": count}, headers=HEADERS), session)
 
     return app
 

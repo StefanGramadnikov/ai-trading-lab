@@ -158,3 +158,10 @@ def test_the_runbook_only_asks_for_commands_the_deployment_account_can_run() -> 
     commands = [ln for ln in text.splitlines() if ln.strip().startswith("sudo ")]
     assert commands == []
     assert "scp -r deploy" in text and "run --rm live" not in text
+
+
+@pytest.mark.parametrize("tag", ["local", "v0.1", "c3cdb69", "feature-x_1", ""])
+def test_any_sensible_image_tag_lets_the_dashboard_start(tag: str) -> None:
+    from ai_trading_lab.config import Settings
+
+    assert Settings(_env_file=None, deployed_commit=tag).deployed_commit in (tag, None)

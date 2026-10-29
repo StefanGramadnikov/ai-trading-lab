@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ai_trading_lab.ai.budget import BudgetStore
 from ai_trading_lab.config import Settings
 from ai_trading_lab.dashboard import alerts
+from ai_trading_lab.live.ai_strategy import AIConfig
+from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.journal import ErrorJournal
 from ai_trading_lab.live.store import DecisionRow, LiveStore
 from ai_trading_lab.paper_execution.store import PaperStore
@@ -21,7 +23,7 @@ ORDER = {"rules": 0, "ai": 1, "benchmark": 2}
 PAIRS = ("XBTEUR", "ETHEUR", "SOLEUR")
 CANDLE_MINUTES = 15
 CURVE_POINTS = 400
-BREAKER_LIMIT = 5  # unknown outcomes in 24 h that stop the AI (AIConfig.max_unknown_per_day)
+BREAKER_LIMIT = AIConfig().max_unknown_per_day  # unknown outcomes in 24 h that stop the AI
 HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
 
@@ -128,7 +130,7 @@ class DashboardData:
 
     async def overview(self) -> dict[str, Any]:
         now = self.clock()
-        initial = Decimal(100)
+        initial = LiveConfig().initial_cash
         prices: dict[str, Decimal] = {}
         price_age: dict[str, timedelta | None] = {}
         for pair in PAIRS:

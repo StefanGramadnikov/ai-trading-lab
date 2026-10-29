@@ -98,8 +98,8 @@ class SessionSigner:
 
     def read(self, value: str | None, *, now: float | None = None) -> Session | None:
         """The session if the signature is right and neither timeout has passed; else None."""
-        if not value or value.count(".") != 1 or len(value) > 512:
-            return None
+        if not value or value.count(".") != 1 or len(value) > 512 or not value.isascii():
+            return None  # compare_digest refuses non-ASCII text, so never let it get that far
         payload, signature = value.split(".")
         if not hmac.compare_digest(self._sign(payload), signature):
             return None

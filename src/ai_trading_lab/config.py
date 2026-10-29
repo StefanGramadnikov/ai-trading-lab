@@ -41,7 +41,8 @@ class Settings(BaseSettings):
     dashboard_password_hash: SecretStr | None = None
     dashboard_session_secret: SecretStr | None = Field(default=None, min_length=32, max_length=200)
     dashboard_idle_minutes: int = Field(default=30, ge=5, le=480)
-    deployed_commit: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-f]*$")
+    # A commit id or an image tag such as `local`: shown on the page, so it must never stop startup.
+    deployed_commit: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9._-]*$")
 
     @field_validator("database_url")
     @classmethod

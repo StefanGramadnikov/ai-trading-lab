@@ -370,3 +370,57 @@ async def test_a_database_outage_is_a_503_that_says_nothing_changed(
     assert (reply.status_code, reply.json()["error"]) == (503, "database_unavailable")
     assert "Nothing was changed" in reply.json()["message"]
     assert await seeded.store.is_enabled(seeded.rules_id) is True
+
+
+async def test_a_garbage_cookie_is_a_plain_401_and_creates_no_journal_entry(
+    client: TestClient, seeded: LiveEngine
+) -> None:
+    for cookie in ("a.bé", "é.é", "x" * 600, "no-dot", "."):
+        raw = f"atl_session={cookie}".encode("latin-1")
+        reply = client.get("/api/me", headers=[(b"cookie", raw)])
+        assert reply.status_code == 401, cookie
+    assert await ErrorJournal(seeded.engine).groups() == []
+
+
+async def test_unknown_routes_and_wrong_methods_still_carry_the_security_headers(
+    client: TestClient,
+) -> None:
+    missing = client.get("/api/nothing-here")
+    assert missing.status_code == 404
+    assert missing.headers["cache-control"] == "no-store"
+    assert missing.headers["x-content-type-options"] == "nosniff"
+    assert missing.json()["error"] == "Not Found"
+
+
+async def test_parallel_wrong_passwords_cannot_all_get_past_the_throttle(
+    client: TestClient,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        codes = list(
+            pool.map(
+                lambda _: (
+                    client.post("/api/login", json={"password": "wrong password!"}).status_code
+                ),
+                range(12),
+            )
+        )
+    assert codes.count(401) == 5 and codes.count(429) == 7
+
+
+async def test_a_write_renews_the_session_cookie(client: TestClient, seeded: LiveEngine) -> None:
+    page = Browser(client)
+    page.sign_in()
+    reply = page.post(
+        f"/api/strategies/{seeded.rules_id}/enabled", {"enabled": False, "reason": "renew"}
+    )
+    cookie = reply.headers["set-cookie"]
+    assert cookie.startswith("atl_session=")
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie
+
+
+async def test_the_sign_in_cookie_is_http_only_and_same_site_strict(client: TestClient) -> None:
+    reply = client.post("/api/login", json={"password": PASSWORD})
+    cookie = reply.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Path=/" in cookie

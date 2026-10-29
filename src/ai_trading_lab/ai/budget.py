@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, localcontext
 from typing import Literal
@@ -173,6 +174,16 @@ def _outcome(call: _Call, result: ProviderResult | None) -> tuple[Decimal, bool]
         or result.status not in ("completed", "refused", "invalid", "settled")
     )
     return (max(call.reservation, amount), True) if exceeded else (amount, False)
+
+
+@dataclass(frozen=True)
+class CallFact:
+    """One call as the review sees it: when, how it ended, what it cost and what is still held."""
+
+    at: datetime
+    status: str | None  # None: reserved and never finished
+    amount: Decimal  # estimated spend (a call settled at its maximum counts as spent)
+    held: Decimal  # reserved while the outcome is unknown
 
 
 class BudgetStore:
@@ -487,6 +498,37 @@ class BudgetStore:
             for call, result in history
             if result is not None and result.status == "settled" and call.at >= since
         )
+
+    async def calls_between(
+        self,
+        budget_id: PyUUID,
+        start: datetime,
+        end: datetime,
+        *,
+        snapshot: AsyncConnection | None = None,
+    ) -> list[CallFact]:
+        """Per-call facts in [start, end), read without locking: status, estimated cost and any
+        amount still held because the outcome is unknown. Pass one `snapshot` connection to read
+        several envelopes from the same moment."""
+        if snapshot is not None:
+            _, history = await self._load(snapshot, budget_id, for_update=False)
+        else:
+            async with self.engine.connect() as connection:
+                _, history = await self._load(connection, budget_id, for_update=False)
+        facts: list[CallFact] = []
+        for call, result in history:
+            if not start <= call.at < end:
+                continue
+            amount, unknown = _outcome(call, result)
+            facts.append(
+                CallFact(
+                    at=call.at,
+                    status=None if result is None else result.status,
+                    amount=Decimal(0) if unknown else amount,
+                    held=amount if unknown else Decimal(0),
+                )
+            )
+        return facts
 
     async def budget_ids(self) -> list[PyUUID]:
         async with self.engine.connect() as connection:

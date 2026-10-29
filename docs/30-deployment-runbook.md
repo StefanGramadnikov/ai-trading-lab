@@ -208,6 +208,21 @@ $dc exec -T alerts /app/.venv/bin/atl-alerts test                       # you sh
 `alerts` appears in `dc ps` and reports `healthy` once it has checked. If the test message does not arrive, `dc logs --tail 50 alerts`
 shows the reason without ever printing the token (`telegram_settings_invalid` means the token or chat id has the wrong shape; the container keeps running and sends nothing until you fix the env file and `up -d alerts`). To stop alerts: set `ATL_TELEGRAM_ENABLED=false` and `up -d alerts`.
 
+## 9d. Daily review (slice 9)
+
+Nothing to configure: it runs inside the `alerts` container once Telegram alerts work (9c). The update brings migration 0017 (`dc up -d` runs
+`migrate` first). The first review appears about 30 minutes after the next UTC midnight. To try it at once, or to read or answer:
+
+```bash
+dc exec -T alerts /app/.venv/bin/atl-review run --day 2026-10-30     # build and store one day (no Telegram message)
+dc exec -T alerts /app/.venv/bin/atl-review show                     # the newest stored review
+dc exec -T alerts /app/.venv/bin/atl-review suggestions --status pending
+dc exec -T alerts /app/.venv/bin/atl-review approve <id> --reason "try a faster version"
+```
+
+Answering a suggestion only records it (see docs/29 section 18). If the message does not arrive, `dc logs --tail 50 alerts` shows `{"review": ...}` lines;
+a failure is also in the error list as component `review`.
+
 ## 10. Security notes
 
 - No inbound port except SSH; the dashboard is published on the server's loopback only (SSH tunnel); the database has no published port; the containers run read-only with all capabilities dropped.

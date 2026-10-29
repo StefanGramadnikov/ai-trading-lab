@@ -101,3 +101,62 @@ def test_the_parser_knows_run_test_and_find_chat() -> None:
     assert (parsed.command, parsed.once) == ("run", True)
     assert cli.parser().parse_args(["test"]).command == "test"
     assert cli.parser().parse_args(["find-chat"]).command == "find-chat"
+
+
+@pytest.mark.asyncio
+async def test_a_failing_daily_review_is_journaled_and_never_stops_the_watcher(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, MagicMock
+
+    now = datetime(2026, 10, 30, 0, 40, tzinfo=UTC)
+    reviews, journal = MagicMock(), MagicMock()
+    reviews.run_due = AsyncMock(side_effect=RuntimeError("boom"))
+    journal.record_exception = AsyncMock()
+    runner = MagicMock(sending=False)
+    await cli.daily_review(reviews, runner, journal, now)  # must not raise
+    journal.record_exception.assert_awaited_once()
+    assert journal.record_exception.await_args.args[0] == "review"
+    assert '"review": "failed"' in capsys.readouterr().out
+    journal.record_exception = AsyncMock(side_effect=OSError("db down too"))
+    await cli.daily_review(reviews, runner, journal, now)  # still contained
+
+
+@pytest.mark.asyncio
+async def test_the_daily_review_sends_through_the_alert_outbox_only_when_alerts_can_send(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, MagicMock
+
+    now = datetime(2026, 10, 30, 0, 40, tzinfo=UTC)
+    reviews = MagicMock()
+    reviews.run_due = AsyncMock(return_value={"day": "2026-10-29", "created": True, "sent": True})
+    runner = MagicMock(sending=True)
+    await cli.daily_review(reviews, runner, MagicMock(), now)
+    assert reviews.run_due.await_args.args[1] == runner.deliver_text
+    assert '"created": true' in capsys.readouterr().out
+    runner.sending = False
+    await cli.daily_review(reviews, runner, MagicMock(), now)
+    assert reviews.run_due.await_args.args[1] is None
+
+
+@pytest.mark.asyncio
+async def test_a_review_that_hangs_is_cut_off_and_the_watcher_goes_on(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import asyncio
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def hang(*_: object) -> None:
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(cli, "REVIEW_TIMEOUT_SECONDS", 0.05)
+    reviews, journal = MagicMock(), MagicMock()
+    reviews.run_due = hang
+    journal.record_exception = AsyncMock()
+    await cli.daily_review(reviews, MagicMock(sending=False), journal, datetime.now(UTC))
+    journal.record_exception.assert_awaited_once()
+    assert '"review": "failed"' in capsys.readouterr().out

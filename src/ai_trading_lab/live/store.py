@@ -573,6 +573,29 @@ class LiveStore:
             rows = (await connection.execute(statement)).mappings().all()
         return [self._row(r) for r in rows]
 
+    async def decisions_between(
+        self, strategy_id: str, start: datetime, end: datetime, limit: int = 5000
+    ) -> list[DecisionRow]:
+        """Decisions whose cycle time is in [start, end), oldest first."""
+        async with self.engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        select(live_decisions)
+                        .where(
+                            live_decisions.c.strategy_id == strategy_id,
+                            live_decisions.c.cycle_at_utc >= start,
+                            live_decisions.c.cycle_at_utc < end,
+                        )
+                        .order_by(live_decisions.c.seq)
+                        .limit(limit)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [self._row(r) for r in rows]
+
     async def decisions(self, strategy_id: str, limit: int = 1000) -> list[DecisionRow]:
         async with self.engine.connect() as connection:
             rows = (
@@ -661,6 +684,60 @@ class LiveStore:
             cash=r["cash"],
             positions_value=r["positions_value"],
         )
+
+    async def first_equity_at(self, strategy_id: str) -> datetime | None:
+        async with self.engine.connect() as connection:
+            first: datetime | None = await connection.scalar(
+                select(func.min(live_equity.c.at_utc)).where(
+                    live_equity.c.strategy_id == strategy_id
+                )
+            )
+        return first
+
+    async def equity_between(
+        self, strategy_id: str, start: datetime, end: datetime
+    ) -> list[EquityPoint]:
+        """Equity points in [start, end), plus the last one before `start`; oldest first."""
+        async with self.engine.connect() as connection:
+            before = (
+                (
+                    await connection.execute(
+                        select(live_equity)
+                        .where(
+                            live_equity.c.strategy_id == strategy_id,
+                            live_equity.c.at_utc < start,
+                        )
+                        .order_by(live_equity.c.at_utc.desc())
+                        .limit(1)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            inside = (
+                (
+                    await connection.execute(
+                        select(live_equity)
+                        .where(
+                            live_equity.c.strategy_id == strategy_id,
+                            live_equity.c.at_utc >= start,
+                            live_equity.c.at_utc < end,
+                        )
+                        .order_by(live_equity.c.at_utc)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            EquityPoint(
+                at_utc=r["at_utc"],
+                equity=r["equity"],
+                cash=r["cash"],
+                positions_value=r["positions_value"],
+            )
+            for r in (*before, *inside)
+        ]
 
     async def equity_curve(self, strategy_id: str, limit: int = 5000) -> list[EquityPoint]:
         """The newest `limit` equity points, oldest first."""

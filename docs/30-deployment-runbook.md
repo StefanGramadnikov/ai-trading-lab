@@ -140,6 +140,13 @@ Do this only after sections 5 and 6 pass and the loop has run a few hours. The A
 To switch the AI off without touching the key: `dc exec live /app/.venv/bin/atl-live disable ai --reason "..."` (takes effect
 within one cycle and spends nothing from then on). To remove the key entirely, delete it from the env file and recreate `live`.
 
+### Editing the env file safely
+
+Edit by variable name, never by line number (the file changes between edits). Keep exactly one line per variable: Compose uses the
+**last** occurrence, so a stale default further down silently overrides a new line. After editing, `cut -d= -f1 /opt/atl/.env.prod | grep -v '^#' | sort | uniq -d`
+must print nothing. Do not make backup copies of it (they contain the keys); if you do, delete them once the change works. After any change,
+`dc up -d` and check `dc logs live | grep '"ai"' | tail -1` and that the dashboard still signs in.
+
 ## 8. Daily routine during the run (5 minutes)
 
 - `dc ps` (live is `healthy`), `atl-live health`, `atl-live status` (equity per strategy, holdings, recent decisions).
@@ -158,7 +165,7 @@ within one cycle and spends nothing from then on). To remove the key entirely, d
   and "the paper ledger failed an integrity check". Neither trades on a bad state (each cycle fails again at once), but if
   `dc ps` shows it restarting, run `deploy/kill-switch.sh`, keep the logs and a backup, and ask for help.
 - **Pause one strategy:** `atl-live disable <rules|ai|benchmark> --reason "..."`. Exits still run (docs/29 section 12).
-- **Update:** send a new tarball (section 4), `dc build`, then `dc up -d migrate live`. Record the new commit id. Never change
+- **Update:** send a new tarball (section 4), `dc build`, then `dc up -d` (every service: the dashboard and alerts read some of the same variables). Record the new commit id. Never change
   numbers (risk, fees, intervals) mid-experiment without a new decision; changing the strategy changes the experiment.
 - **Roll back:** extract the previous tarball, `dc build`, `dc up -d live`. A migration that already ran is not undone
   automatically; restore the last backup if the old code cannot read the new schema.

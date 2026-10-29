@@ -19,6 +19,7 @@ def isolate_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "ATL_AI_ENABLED",
         "ATL_AI_TOTAL_LIMIT_USD",
         "ATL_AI_REVIEWED_PRICES",
+        "ATL_AI_MODEL",
         "ATL_OPENAI_API_KEY",
         "ATL_XAI_API_KEY",
         "ATL_ANTHROPIC_API_KEY",

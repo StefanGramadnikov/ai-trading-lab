@@ -286,6 +286,11 @@ uses US$2.50 input to cover the documented cache-write multiplier. Pricing expir
 24 hours after its verification time; verify/update it explicitly before new calls
 if stale. Do not invent a new envelope to retry an uncertain outcome.
 
+For the V0 model (`gpt-6.1-sol`, DEC-047) the same one-call check is
+`tests/fixtures/ai_openai_smoke_gpt_6_1_sol.json`: reasoning effort `low`, a 2000-token output
+allowance, its own US$1 envelope, and a conservative reservation of about US$0.06. Its price
+was read from OpenAI's pricing page on 2026-10-29 and, like every price, goes stale after 24 hours.
+
 The doctor command prints configuration booleans only. Repeating a completed run
 replays the recorded response without another paid call. An uncertain/mismatched
 billing outcome holds the reservation and blocks new inference pending investigation;

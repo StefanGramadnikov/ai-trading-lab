@@ -52,6 +52,7 @@ def test_the_ai_strategy_is_off_and_unfunded_unless_the_env_file_turns_it_on() -
     assert environment["ATL_AI_ENABLED"] == "${ATL_AI_ENABLED:-false}"
     assert environment["ATL_AI_TOTAL_LIMIT_USD"] == "${ATL_AI_TOTAL_LIMIT_USD:-0}"
     assert environment["ATL_AI_REVIEWED_PRICES"] == "${ATL_AI_REVIEWED_PRICES:-[]}"
+    assert environment["ATL_AI_MODEL"] == "${ATL_AI_MODEL:-gpt-6.1-sol}"
     assert environment["ATL_OPENAI_API_KEY"] == "${ATL_OPENAI_API_KEY:-}"
 
 
@@ -101,6 +102,7 @@ def test_the_env_example_carries_no_secret_and_keeps_everything_off() -> None:
     )
     assert values["ATL_AI_ENABLED"] == "false" and values["ATL_AI_TOTAL_LIMIT_USD"] == "0"
     assert values["ATL_OPENAI_API_KEY"] == "" and values["ATL_AI_REVIEWED_PRICES"] == "[]"
+    assert values["ATL_AI_MODEL"] == "gpt-6.1-sol"
     assert "EXECUTION_MODE" not in text.replace("PAPER", "")  # no way to set it from here
 
 

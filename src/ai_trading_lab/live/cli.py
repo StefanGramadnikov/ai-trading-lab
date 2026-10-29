@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_trading_lab.ai.budget import BudgetStore
-from ai_trading_lab.ai.providers import HTTPProvider
+from ai_trading_lab.ai.providers import OPENAI_REASONING_EFFORT, HTTPProvider
 from ai_trading_lab.config import Settings
 from ai_trading_lab.database import create_database_engine
 from ai_trading_lab.live.ai_strategy import AIConfig, AIDeps
@@ -127,7 +127,9 @@ def build_ai(settings: Settings, engine: AsyncEngine) -> tuple[AIDeps | None, st
         return None, "ai_key_missing"
     if settings.ai_total_limit_usd <= 0:
         return None, "ai_spending_cap_is_zero"
-    config = AIConfig()
+    config = AIConfig(model=settings.ai_model)
+    if config.model not in OPENAI_REASONING_EFFORT:
+        return None, "ai_model_unsupported"
     price = next(
         (
             p

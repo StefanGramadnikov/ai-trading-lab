@@ -65,10 +65,11 @@ class AIConfig(FrozenModel):
     """How the AI strategy asks. The binding money ceiling is the global cap in Settings."""
 
     provider: Literal["openai", "fixture"] = "openai"
-    model: str = Field(default="gpt-5.6-terra", pattern=r"^[A-Za-z0-9_.:-]+$", max_length=200)
+    model: str = Field(default="gpt-6.1-sol", pattern=r"^[A-Za-z0-9_.:-]+$", max_length=200)
     review_interval_hours: int = Field(default=4, ge=1, le=24, strict=True)
     max_input_tokens: int = Field(default=6000, ge=1000, le=32768, strict=True)
-    max_output_tokens: int = Field(default=400, ge=50, le=8192, strict=True)
+    # Counts hidden reasoning tokens too: a reasoning model needs room beyond the ~150-token answer.
+    max_output_tokens: int = Field(default=2000, ge=50, le=8192, strict=True)
     # Calls with an unknown outcome allowed per day before the AI pauses until the day passes.
     max_unknown_per_day: int = Field(default=5, ge=1, le=100, strict=True)
     timeout_seconds: int = Field(default=30, ge=1, le=60, strict=True)

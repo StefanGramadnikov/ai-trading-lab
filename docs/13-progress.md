@@ -1746,3 +1746,12 @@ and a daily check message. Not deployed; waits for the owner's bot token (docs/3
 PR #19 merged and deployed (commit 29b2d43). Telegram alerts enabled; test and daily check messages received. All services healthy.
 Observed one contained `malformed_candles` warning (ETHEUR, 13:15 UTC) — to be watched.
 Next: AI activation (needs the owner's new OpenAI key with a hard monthly limit; verified model price first).
+
+## 2026-10-29 — Slice 8b: AI model setting, `gpt-6.1-sol` (branch `feature/s9-ai-model-setting`, DEC-047)
+
+Owner chose the GPT-6 family. OpenAI's pricing and model pages (read 2026-10-29): `gpt-6.1-sol` $2.00 / $10 per million tokens, reasoning
+effort low..max with no `none`. Adds the setting `ATL_AI_MODEL` (default `gpt-6.1-sol`), a per-model reasoning table in the OpenAI
+adapter (`gpt-5.6-terra`: none, `gpt-6.1-sol`: low), a fail-closed check (`ai_model_unsupported`) and raises the default output
+allowance from 400 to 2000 tokens (reasoning counts inside it). Two integration-test constants for the reserved amount changed
+accordingly; the cap invariant they test is unchanged. Independent review: no confirmed money-safety defect; findings (reasoning allowance exhaustion, model-id mismatch cost, stale README/fixture, comment overstating fail-closed) fixed or recorded in DEC-047; a gpt-6.1-sol smoke fixture added. Gate: ruff, mypy clean, 1675 passed, coverage 95.15%. Not deployed. Not
+verified: a real call to the API (accepted `reasoning.effort=low`, returned model id) — the first call after activation will show it.

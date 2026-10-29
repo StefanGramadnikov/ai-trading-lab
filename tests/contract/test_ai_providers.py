@@ -448,6 +448,36 @@ def test_documented_openai_model_disables_reasoning_explicitly() -> None:
     assert "reasoning" not in json.loads(_body(request()))
 
 
+def test_gpt_6_1_sol_asks_for_the_lowest_documented_reasoning_effort() -> None:
+    # Its model page lists low, medium (default), high, xhigh and max, and no "none".
+    body = json.loads(_body(request(model="gpt-6.1-sol")))
+    assert body["reasoning"] == {"effort": "low"}
+    assert body["model"] == "gpt-6.1-sol" and body["service_tier"] == "default"
+
+
+def test_an_unlisted_openai_model_gets_no_reasoning_setting_from_the_adapter() -> None:
+    # The live loop refuses such a model (build_ai); the adapter itself never guesses an effort.
+    assert "reasoning" not in json.loads(_body(request(model="gpt-9-unreviewed")))
+
+
+@pytest.mark.asyncio
+async def test_a_reasoning_model_that_spends_its_allowance_is_charged_and_returns_no_answer() -> (
+    None
+):
+    # Documented shape (not a recorded reply): a reasoning item, then status "incomplete" because
+    # the output allowance (reasoning included) ran out before any message was written.
+    payload = response(
+        model="gpt-6.1-sol",
+        status="incomplete",
+        incomplete_details={"reason": "max_output_tokens"},
+        output=[{"type": "reasoning", "summary": []}],
+        usage={"input_tokens": 100, "output_tokens": 512},
+    )
+    result = await run(payload, request(model="gpt-6.1-sol"))
+    assert result.status == "invalid" and result.answer is None
+    assert result.usage is not None and result.usage.output_tokens == 512  # real spend is kept
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider", ["openai", "xai", "anthropic"])
 @pytest.mark.parametrize("returned_model", ["different-expensive-model", None, 123, ""])

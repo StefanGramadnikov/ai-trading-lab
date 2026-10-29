@@ -327,9 +327,9 @@ async def test_a_stop_loss_still_exits_while_the_model_is_down(engine: AsyncEngi
 async def test_the_spending_cap_stops_paid_calls_before_they_are_sent(
     engine: AsyncEngine,
 ) -> None:
-    # Each call reserves 6000 input and 400 output tokens (about USD 0.0198) and reports that.
-    stub = Stub(lambda _body: "abstain", usage=(6000, 400))
-    settings = Settings(_env_file=None, ai_total_limit_usd=D("0.05"))
+    # Each call reserves 6000 input and 2000 output tokens (USD 0.039 at 2.5/12) and reports that.
+    stub = Stub(lambda _body: "abstain", usage=(6000, 2000))
+    settings = Settings(_env_file=None, ai_total_limit_usd=D("0.09"))
     r = await start(engine, stub, provider="openai", settings=settings)
     report = await r.cycle()
     assert report.errors == []
@@ -344,8 +344,8 @@ async def test_the_spending_cap_stops_paid_calls_before_they_are_sent(
     assert later.errors == [] and len(stub.requests) == 2  # still capped
     assert r.live.proposer is not None
     totals = await BudgetStore(engine, settings).summary(r.live.proposer.budget_id)
-    assert D(str(totals["spent_estimated"])) == D("0.0396")  # two calls, 6000 in and 400 out each
-    assert D(str(totals["spent_estimated"])) <= D("0.05")
+    assert D(str(totals["spent_estimated"])) == D("0.078")  # two calls, 6000 in and 2000 out each
+    assert D(str(totals["spent_estimated"])) <= D("0.09")
 
 
 async def test_paid_calls_are_refused_while_spending_is_disabled_or_the_price_unreviewed(

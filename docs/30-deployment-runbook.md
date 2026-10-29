@@ -124,12 +124,16 @@ A backup you have never restored is not a backup: `restore-test.sh` loads it int
 Do this only after sections 5 and 6 pass and the loop has run a few hours. The AI strategy costs real (small) money.
 
 1. Verify the model and its current price on OpenAI's pricing page yourself, today. Tell me the model name and the input and
-   output price per million tokens; I will build the exact `ATL_AI_REVIEWED_PRICES` line. The default model name in the code
-   (`gpt-5.6-terra`) comes from a 2026-10-19 note and may be out of date.
+   output price per million tokens; I will build the exact `ATL_AI_REVIEWED_PRICES` line. The model is the setting `ATL_AI_MODEL`
+   (default `gpt-6.1-sol`, DEC-047); the price line must name the same model.
 2. Put the separate server key in `/opt/atl/.env.prod` as `ATL_OPENAI_API_KEY`, set `ATL_AI_ENABLED=true`,
-   `ATL_AI_TOTAL_LIMIT_USD=15` and the price line. Never paste the key into chat, git or a ticket.
+   `ATL_AI_TOTAL_LIMIT_USD=15`, `ATL_AI_MODEL=gpt-6.1-sol` and the price line. Never paste the key into chat, git or a ticket.
 3. `dc up -d live` (recreates the container; the loop registers the AI strategy itself on start), then
    `dc logs live | grep '"ai"' | tail -1`: it must say `{"ai": "ai_enabled"}`. Any other value names what is missing.
+   Watch the first reviews: if the error list shows "The AI reply could not be used" (`invalid_provider_response`), switch the AI off
+   on the dashboard and tell me; it can mean the model ran out of its reasoning allowance or the API answered with another model id.
+   Optional first, with your own key in the ignored local `.env` (README, "Real inference"): the one-call check
+   `uv run --locked atl-ai run tests/fixtures/ai_openai_smoke_gpt_6_1_sol.json` (about USD 0.06 reserved; price file expires after 24 h).
 4. After the first 4-hour review window, `atl-live status` shows the AI decisions with their cost. Check the cost against the
    OpenAI dashboard once; the application's figures are estimates, the invoice is authoritative.
 

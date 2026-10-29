@@ -179,9 +179,9 @@ def ai_settings(**changes: Any) -> Settings:
 
     price = PriceSnapshot(
         provider="openai",
-        model="gpt-5.6-terra",
-        input_per_million="2.5",
-        output_per_million="12",
+        model="gpt-6.1-sol",
+        input_per_million="2",
+        output_per_million="10",
         source_url="https://example.test/pricing",
         verified_at_utc="2026-10-25T00:00:00Z",
         version="test",
@@ -202,6 +202,7 @@ def ai_settings(**changes: Any) -> Settings:
         ({"openai_api_key": None}, "ai_key_missing"),
         ({"ai_total_limit_usd": "0"}, "ai_spending_cap_is_zero"),
         ({"ai_reviewed_prices": ()}, "ai_price_not_reviewed"),
+        ({"ai_model": "gpt-9-unreviewed"}, "ai_model_unsupported"),
     ],
 )
 def test_the_ai_strategy_stays_off_unless_fully_and_explicitly_configured(
@@ -214,8 +215,22 @@ def test_the_ai_strategy_stays_off_unless_fully_and_explicitly_configured(
 def test_a_fully_configured_ai_strategy_is_built_with_the_reviewed_price() -> None:
     deps, why = cli.build_ai(ai_settings(), MagicMock())
     assert why == "ai_enabled" and deps is not None
-    assert deps.price.model == deps.config.model == "gpt-5.6-terra"
+    assert deps.price.model == deps.config.model == "gpt-6.1-sol"
     assert deps.config.provider == "openai" and deps.config.total_limit_usd == 15
+
+
+def test_the_model_is_chosen_by_setting_and_needs_its_own_reviewed_price() -> None:
+    # The price on file is for gpt-6.1-sol; asking for the other supported model finds no price.
+    deps, why = cli.build_ai(ai_settings(ai_model="gpt-5.6-terra"), MagicMock())
+    assert deps is None and why == "ai_price_not_reviewed"
+    assert Settings(_env_file=None).ai_model == "gpt-6.1-sol"
+
+
+def test_the_reasoning_allowance_covers_a_reasoning_model() -> None:
+    # Reasoning tokens are billed and counted inside max_output_tokens: 400 would cut every answer.
+    from ai_trading_lab.live.ai_strategy import AIConfig
+
+    assert AIConfig().max_output_tokens >= 2000
 
 
 def test_toggle_commands_need_a_strategy_and_a_reason() -> None:

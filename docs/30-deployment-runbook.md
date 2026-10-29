@@ -223,6 +223,18 @@ dc exec -T alerts /app/.venv/bin/atl-review approve <id> --reason "try a faster 
 Answering a suggestion only records it (see docs/29 section 18). If the message does not arrive, `dc logs --tail 50 alerts` shows `{"review": ...}` lines;
 a failure is also in the error list as component `review`.
 
+## 9e. Evaluation report (slice 10)
+
+Read-only; run it any time (it needs the `alerts` container, which has the database settings):
+
+```bash
+dc exec -T alerts /app/.venv/bin/atl-report > /tmp/report.md && cat /tmp/report.md
+dc exec -T alerts /app/.venv/bin/atl-report --format json
+```
+
+Read the verdict first, then "What is missing" (almost always: not enough days or trades yet), then the AI cost and "Can the data be trusted?". Details and
+the thresholds are in docs/29 section 19 and DEC-049 (proposed, not yet approved by the owner).
+
 ## 10. Security notes
 
 - No inbound port except SSH; the dashboard is published on the server's loopback only (SSH tunnel); the database has no published port; the containers run read-only with all capabilities dropped.

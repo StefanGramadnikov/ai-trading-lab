@@ -97,8 +97,8 @@ change needs a new decision.
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | **Done (merged, PR #19; deployed 2026-10-29), section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 8b | **Done (merged, PR #21; deployed and AI activated 2026-10-29), section 17 record (DEC-047):** model chosen by setting (`ATL_AI_MODEL`, default `gpt-6.1-sol`), per-model reasoning setting, fail-closed model list; first real call still to be made | Gate green; first real calls verified (6 validated, 2026-10-29) |
-| 9 | **Built on `feature/s9-daily-review` (DEC-048), section 18.** Self-review job: nightly summary of trades/losses/costs; rule-based suggestions (AI-authored ones deferred) as advice the user approves or rejects; a change is always a **new version** | One review produced and a suggestion answered end to end (integration test) |
-| 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
+| 9 | **Done (merged, PR #23; not yet deployed), DEC-048, section 18.** Self-review job: nightly summary of trades/losses/costs; rule-based suggestions (AI-authored ones deferred) as advice the user approves or rejects; a change is always a **new version** | One review produced and a suggestion answered end to end (integration test) |
+| 10 | **Done (PR #24; not yet deployed), DEC-049 (thresholds proposed, not approved), section 19.** Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report generated from real data on the server |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
 
 ## 6. How to work in this repository
@@ -477,3 +477,32 @@ A day on which the loop ran no cycle at all (after it first started) is still re
 Not built, on purpose: AI-written suggestions (they need the OpenAI adapter's fixed trade-answer schema generalised and a spend decision), a dashboard
 page for reviews (Telegram and the command line only in V0). Backfill: on first start the job also writes the up to two earlier days that have data, but
 only the newest day is ever sent; older ones are kept for reference.
+
+## 19. Evaluation report (slice 10)
+
+`atl-report` reads what the loop wrote and prints one page (Markdown, or JSON with `--format json`, to the screen or `--out FILE`). It never writes to
+the database and holds no lock the loop needs. Run it on the server:
+
+```bash
+dc exec -T alerts /app/.venv/bin/atl-report                      # Markdown on the screen
+dc exec -T alerts /app/.venv/bin/atl-report --usd-eur 0.86       # net the AI bill at a real rate
+dc exec -T alerts /app/.venv/bin/atl-report --since 2026-10-29T14:00:00+00:00 --until 2026-11-12T00:00:00+00:00
+```
+
+**What it compares.** Over the **common window** (it starts when the youngest strategy started: the AI joined on 2026-10-29 at 14:04 UTC, a day after the
+others, so that is the start for all three): per strategy the P&L in EUR and %, the worst peak-to-trough fall, entries, closed trades, fees and turnover;
+day by day (UTC days) the AI against buy-and-hold, the AI against the rules strategy and the rules strategy against buy-and-hold: on how many days ahead
+and the average difference with its standard error (from three days). Equity already contains trading fees and the simulated spread; the AI provider's
+bill (calls in the window, estimated from usage) is netted on top (1 USD = 1 EUR unless `--usd-eur`). It also shows whether the data can be trusted:
+loop coverage, unacknowledged errors, and strategy switches inside the window.
+
+**Verdict** (DEC-049, thresholds proposed and awaiting the owner). STOP first if the AI hit its own risk limit (10% drawdown or its latch), whatever else is
+missing. Otherwise EXTEND unless the sample is trustworthy (7+ days, 90%+ coverage for the worst strategy, data not older than 45 minutes, history not truncated,
+no unacknowledged errors, no strategy switched in the window, 5+ filled AI sells); then STOP (loses money after its bill while trailing buy-and-hold by more than
+1 percentage point) or GO (positive after its bill, ahead of buy-and-hold by 1+ percentage point, not behind the rules strategy, ahead of buy-and-hold on most
+days with an average gap beyond one standard error). Returns are compared in percent of each strategy's own starting equity. GO means "worth proposing a small
+real-money pilot for a separate decision"; it never approves trading, and it does not adjust for risk (cash in a falling week can look good). With no entries by
+the AI and the rules strategy (the situation on 2026-10-29: a quiet market) the honest verdict is EXTEND for "too few closed trades", and the report says so.
+
+**Not built.** A dashboard page for the report (command line only in V0); a real report on live data was not generated by the assistant because nothing was
+deployed while the owner was away. Statistical significance is not claimed: with a handful of days the standard error is large and the report says "small sample".

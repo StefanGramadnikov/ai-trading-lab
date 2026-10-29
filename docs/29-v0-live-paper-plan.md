@@ -93,7 +93,7 @@ change needs a new decision.
 | 4 | **Done (merged, PR #13), section 12:** Strategy registry with persisted on/off flags and audited toggles; rules vs AI side by side, separate portfolios | Toggle via CLI works and is journaled |
 | 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
-| 7 | **Built on `feature/s7-dashboard`, section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
+| 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
@@ -378,3 +378,11 @@ recent occurrences, sign-in audit.
 
 The page text, the plain-language reason table and the chart are `dashboard/static/{index.html,app.js,app.css}`: no inline script or
 style, no external resource (CSP `default-src 'none'; script-src 'self'; style-src 'self'`), all server text inserted as text.
+
+### Deployment record (slice 7, 2026-10-29)
+
+Deployed commit 42d9f15 (backup `atl-20261029T091502Z.dump` taken first). `dashboard`, `live` and `db` healthy; migrate exited 0. The owner
+set the password on the server with `/opt/atl/set-dashboard-password.sh` (hidden prompt; hash and session secret written to the 600
+env file, never displayed) and signed in through the SSH tunnel. Checked from the server afterwards: three consecutive cycles
+(09:15, 09:30, 09:45 UTC) without failures, no unacknowledged errors, the only journal entry is the three Kraken warnings from the
+first cycle after the slice 6 restart (a startup hiccup, never repeated). The switch was not exercised by the assistant; the owner tests it from the page.

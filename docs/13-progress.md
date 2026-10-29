@@ -1713,3 +1713,10 @@ env template) and docs/30. Rehearsed end to end locally in an isolated Compose p
 The V0 paper loop runs on the Hetzner server (docs/29 section 14). First real cycle 2026-10-28T16:20:47Z: three pairs observed,
 benchmark filled, no errors; backup and restore test passed. Rules and benchmark strategies are running; the AI strategy is off
 until activated by the owner. The 1-2 week evaluation clock started with the first cycle.
+
+## 2026-10-28 — V0 slice 6: error journal (branch `feature/s6-error-journal`)
+
+Owner asked for visibility and error tracking before relying on the unattended run, with bounded storage. Adds `error_groups` and
+`error_occurrences` (migration 0015), `live/journal.py` (redaction, fingerprints, bounded retention, containment), wiring into the
+engine, the AI path and the worker, `atl-live errors` / `ack`, and the journal summary in `status`. DEC-045 raised the AI cap to USD 15.
+Slices renumbered: 7 = dashboard, 8 = Telegram alerts, 9 = self-review, 10 = report, 11 = live pilot (docs/29 section 5).

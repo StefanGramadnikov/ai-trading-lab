@@ -65,6 +65,10 @@ class Stub:
     async def analyze(self, request: AIRequest) -> ProviderResult:
         self.requests.append(request)
         action = self.decide(json.loads(request.evidence.payload))
+        if action == "invalid":
+            return ProviderResult(
+                status="invalid", model=request.model, reason="invalid_provider_response"
+            )
         if action == "error":
             return ProviderResult(
                 status="error", model=request.model, reason="http_error_unknown_billing"
@@ -467,3 +471,57 @@ async def test_switching_off_mid_cycle_stops_the_remaining_calls_and_the_pending
     assert len(stub.requests) == 1  # the first call was already under way; no more were made
     assert (await r.portfolio()).positions == ()  # and its entry was dropped, not sent
     assert "strategy_disabled" in {d.reason for d in await r.decisions()}
+
+
+async def clear_errors(engine: AsyncEngine) -> None:
+    from ai_trading_lab.live.journal import error_groups, error_occurrences
+
+    async with engine.begin() as connection:
+        await connection.execute(delete(error_occurrences))
+        await connection.execute(delete(error_groups))
+
+
+async def test_an_unreachable_ai_provider_is_journaled_but_a_budget_refusal_is_not(
+    engine: AsyncEngine,
+) -> None:
+    await clear_errors(engine)
+    down = await start(engine, Stub(lambda _body: "error"))
+    await down.cycle()
+    groups = await down.live.journal.groups(level="warning")
+    outage = [g for g in groups if g.component == "ai_provider"]
+    assert len(outage) == 1 and outage[0].error_type == "settled_http_error_unknown_billing"
+    assert outage[0].count == 3 and outage[0].status == "seen"  # one per pair, one problem
+    await clear_errors(engine)
+    refused = await start(
+        engine, Stub(lambda _body: "buy"), provider="openai", settings=Settings(_env_file=None)
+    )
+    await refused.cycle()
+    assert [g for g in await refused.live.journal.groups() if g.component == "ai_provider"] == []
+
+
+async def test_an_exception_inside_the_ai_path_is_journaled_and_contained(
+    engine: AsyncEngine,
+) -> None:
+    await clear_errors(engine)
+
+    def decide(_body: dict[str, object]) -> str:
+        raise RuntimeError("model client crashed, token=abcdef123456")
+
+    r = await start(engine, Stub(decide))
+    report = await r.cycle()
+    assert report.errors == []  # contained: the AI strategy still finished its cycle
+    (group,) = await r.live.journal.groups(level="error")
+    assert (group.component, group.error_type) == ("ai_strategy", "RuntimeError")
+    assert group.last_strategy_id == r.live.ai_id
+    # The crash left its call reserved, so the budget guard refuses the other pai
+
+
+async def test_an_unusable_ai_reply_is_a_quality_warning_not_an_outage(
+    engine: AsyncEngine,
+) -> None:
+    await clear_errors(engine)
+    r = await start(engine, Stub(lambda _body: "invalid"))
+    await r.cycle()
+    kinds = {(g.component, g.error_type) for g in await r.live.journal.groups(level="warning")}
+    assert ("ai_strategy", "invalid_provider_response") in kinds
+    assert all(component != "ai_provider" for component, _ in kinds)

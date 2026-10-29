@@ -221,3 +221,71 @@ async def test_strategy_errors_in_a_cycle_count_as_a_failed_cycle_but_are_contai
     )
     assert (done.done, done.failed) == (2, 2)
     assert events[0]["detail"] == ["v0-benchmark:ValueError"]
+
+
+@pytest.mark.asyncio
+async def test_unexpected_cycle_failures_and_integrity_failures_reach_the_error_hook() -> None:
+    clock = Clock()
+    seen: list[BaseException] = []
+
+    async def hook(exc: BaseException) -> None:
+        seen.append(exc)
+
+    async def flaky() -> Any:
+        raise TimeoutError("venue timed out")
+
+    result = await run_loop(
+        flaky,
+        cycles=2,
+        interval=900,
+        offset=20,
+        clock=clock,
+        sleep=clock.sleep,
+        emit=lambda _e: None,
+        on_error=hook,
+    )
+    assert result.failed == 2 and [type(e) for e in seen] == [TimeoutError, TimeoutError]
+
+    async def corrupt() -> Any:
+        raise LoopIntegrityError("ledger clock went backwards")
+
+    seen.clear()
+    with pytest.raises(LoopIntegrityError):
+        await run_loop(
+            corrupt,
+            cycles=3,
+            interval=900,
+            offset=20,
+            clock=clock,
+            sleep=clock.sleep,
+            emit=lambda _e: None,
+            on_error=hook,
+        )
+    assert [type(e) for e in seen] == [LoopIntegrityError]
+
+
+@pytest.mark.asyncio
+async def test_giving_up_after_repeated_failures_is_itself_reported_with_a_stack() -> None:
+    clock = Clock()
+    seen: list[BaseException] = []
+
+    async def hook(exc: BaseException) -> None:
+        seen.append(exc)
+
+    async def always_fails() -> Any:
+        raise TimeoutError("venue timed out")
+
+    with pytest.raises(RuntimeError, match="consecutive failed cycles"):
+        await run_loop(
+            always_fails,
+            cycles=None,
+            interval=900,
+            offset=20,
+            clock=clock,
+            sleep=clock.sleep,
+            emit=lambda _e: None,
+            on_error=hook,
+            max_failures=3,
+        )
+    assert [type(e).__name__ for e in seen] == ["TimeoutError"] * 3 + ["RuntimeError"]
+    assert seen[-1].__traceback__ is not None and isinstance(seen[-1].__cause__, TimeoutError)

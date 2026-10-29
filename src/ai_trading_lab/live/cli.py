@@ -7,6 +7,7 @@ import asyncio
 import getpass
 import json
 import os
+import re
 import signal
 import sys
 from datetime import timedelta
@@ -23,6 +24,7 @@ from ai_trading_lab.live.ai_strategy import AIConfig, AIDeps
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.engine import LiveEngine
 from ai_trading_lab.live.errors import CycleErrors, LoopIntegrityError
+from ai_trading_lab.live.journal import ErrorJournal
 from ai_trading_lab.live.status import health, summary
 from ai_trading_lab.live.worker import (
     AlreadyRunning,
@@ -48,6 +50,16 @@ def _user() -> str:
         return getpass.getuser()
     except (KeyError, OSError):
         return f"uid:{os.getuid()}"
+
+
+def _fingerprint(value: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{4,64}", value):
+        raise argparse.ArgumentTypeError("must be 4 to 64 hex characters (a fingerprint prefix)")
+    return value
+
+
+def _fingerprint_or_all(value: str) -> str:
+    return value if value == "all" else _fingerprint(value)
 
 
 def _reason(value: str) -> str:
@@ -77,6 +89,16 @@ def parser() -> argparse.ArgumentParser:
         )
     probe = commands.add_parser("health", help="exit 0 if the loop recorded equity recently")
     probe.add_argument("--max-age-minutes", type=_positive, default=40)
+    errors = commands.add_parser("errors", help="list recorded problems, or show one in full")
+    errors.add_argument(
+        "--show", metavar="FINGERPRINT", type=_fingerprint, help="full detail for one problem"
+    )
+    errors.add_argument("--status", choices=("new", "seen", "acknowledged"))
+    errors.add_argument("--level", choices=("error", "warning"))
+    errors.add_argument("--limit", type=_positive, default=30)
+    ack = commands.add_parser("ack", help="acknowledge a recorded error (or all new ones)")
+    ack.add_argument("fingerprint", type=_fingerprint_or_all, help="a fingerprint prefix, or 'all'")
+    ack.add_argument("--reason", required=True, type=_reason)
     audit = commands.add_parser("audit", help="print the on/off audit trail, newest first")
     audit.add_argument("--limit", type=_positive, default=20)
     loop = commands.add_parser("run", help="run the loop")
@@ -130,7 +152,8 @@ async def run(arguments: argparse.Namespace) -> int:
     engine = create_database_engine(settings)
     config = LiveConfig()
     ai, ai_note = build_ai(settings, engine)
-    live = LiveEngine(engine, lambda: HttpTransport(), config, ai=ai)
+    journal = ErrorJournal(engine)
+    live = LiveEngine(engine, lambda: HttpTransport(), config, ai=ai, journal=journal)
     if arguments.command in ("setup", "cycle", "run"):
         _emit({"ai": ai_note})
     try:
@@ -155,6 +178,45 @@ async def run(arguments: argparse.Namespace) -> int:
             verdict = await health(live, live.clock(), timedelta(minutes=arguments.max_age_minutes))
             _emit(verdict)
             return 0 if verdict["healthy"] else 1
+        elif arguments.command == "errors":
+            if arguments.show:
+                group = await journal.group(arguments.show)
+                if group is None:
+                    _emit({"status": "failed", "error": "no single problem matches that prefix"})
+                    return 2
+                seen = await journal.occurrences(group.fingerprint)
+                _emit(
+                    {
+                        "problem": group.model_dump(mode="json"),
+                        "recent_occurrences": [o.model_dump(mode="json") for o in seen],
+                    }
+                )
+            else:
+                found = await journal.groups(
+                    status=arguments.status, level=arguments.level, limit=arguments.limit
+                )
+                _emit(
+                    {
+                        "summary": (await journal.summary()).model_dump(mode="json"),
+                        "problems": [
+                            g.model_dump(
+                                mode="json", exclude={"last_traceback", "last_context", "location"}
+                            )
+                            | {"fingerprint": g.fingerprint[:12]}
+                            for g in found
+                        ],
+                    }
+                )
+        elif arguments.command == "ack":
+            target = None if arguments.fingerprint == "all" else arguments.fingerprint
+            try:
+                count = await journal.acknowledge(
+                    target, actor=f"cli:{_user()}", reason=arguments.reason
+                )
+            except ValueError:
+                _emit({"status": "failed", "error": "that prefix matches more than one problem"})
+                return 2
+            _emit({"acknowledged": count})
         elif arguments.command == "audit":
             rows = await live.store.audit(limit=arguments.limit)
             _emit({"audit": [row.model_dump(mode="json") for row in rows]})
@@ -174,6 +236,12 @@ async def run(arguments: argparse.Namespace) -> int:
             async with single_instance(engine) as lease:
                 await live.setup()
 
+                async def record_worker_error(exc: BaseException) -> None:
+                    # Strategy failures were already journaled with their detail by the engine.
+                    # Integrity failures were journaled by the engine as `paper_broker`.
+                    if not isinstance(exc, CycleErrors | LoopIntegrityError):
+                        await journal.record_exception("worker", exc, at=live.clock())
+
                 async def cycle() -> Any:
                     report = await live.run_cycle()
                     if report.errors:
@@ -189,6 +257,7 @@ async def run(arguments: argparse.Namespace) -> int:
                     sleep=stop_aware_sleep(stop),
                     emit=_emit,
                     heartbeat=lease.verify,
+                    on_error=record_worker_error,
                 )
             return 0 if result.failed == 0 else 1
     finally:

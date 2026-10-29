@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ai_trading_lab.live.ai_strategy import AIDeps, Proposer, held_info
 from ai_trading_lab.live.config import LiveConfig
 from ai_trading_lab.live.errors import LoopIntegrityError
+from ai_trading_lab.live.journal import ErrorJournal
 from ai_trading_lab.live.risk import RiskState, update_risk
 from ai_trading_lab.live.store import LiveStore, LoopState, PlannedDecision, StrategyRow
 from ai_trading_lab.live.strategies import (
@@ -46,6 +47,11 @@ from ai_trading_lab.paper_execution.simulation import simulate
 from ai_trading_lab.paper_execution.store import PaperStore
 
 TransportFactory = Callable[[], AbstractAsyncContextManager[Transport]]
+COMPONENT_OF_KIND = {
+    "rules": "rules_strategy",
+    "ai": "ai_strategy",
+    "benchmark": "benchmark_strategy",
+}
 # The paper ledger clock cannot move back and includes the simulated latency.
 ORDER_SPACING = timedelta(seconds=2)
 # Every submitted order, even a refused one, is a permanent ledger command and the history is capped
@@ -161,11 +167,13 @@ class LiveEngine:
         clock: Callable[[], datetime] = _utcnow,
         session: str = "v0",
         ai: AIDeps | None = None,
+        journal: ErrorJournal | None = None,
     ) -> None:
         self.engine, self.transport, self.config = engine, transport, config
         self.clock, self.session = clock, session
+        self.journal = journal if journal is not None else ErrorJournal(engine, clock=clock)
         # Without AI dependencies the AI strategy does not exist: nothing is asked or paid for.
-        self.proposer = Proposer(ai, session) if ai is not None else None
+        self.proposer = Proposer(ai, session, self.journal) if ai is not None else None
         self.store, self.paper = LiveStore(engine), PaperStore(engine)
         self.observations = ObservationStore(engine)
 
@@ -237,6 +245,7 @@ class LiveEngine:
             if p not in markets
             and any(o.instrument.metadata.get("altname") == p for o in batch.observations)
         ]
+        await self._note_failures(batch, markets, now)
         reports: dict[str, StrategyReport] = {}
         errors: list[str] = []
         # The strategy that owns the mechanical exits runs first.
@@ -249,10 +258,19 @@ class LiveEngine:
             try:
                 await self._recover(strategy, now)
                 reports[strategy.strategy_id] = await self._step(strategy, markets, now)
-            except LoopIntegrityError:
+            except LoopIntegrityError as exc:
+                await self.journal.record_exception(
+                    "paper_broker", exc, strategy_id=strategy.strategy_id, at=now
+                )
                 raise
             except Exception as exc:  # one strategy's bug must not starve the other
                 errors.append(f"{strategy.strategy_id}:{type(exc).__name__}")
+                await self.journal.record_exception(
+                    COMPONENT_OF_KIND.get(strategy.kind, "rules_strategy"),
+                    exc,
+                    strategy_id=strategy.strategy_id,
+                    at=now,
+                )
                 reports[strategy.strategy_id] = StrategyReport(
                     equity=None, blocked="strategy_error"
                 )
@@ -263,6 +281,32 @@ class LiveEngine:
             strategies=reports,
             errors=errors,
         )
+
+    async def _note_failures(
+        self, batch: Batch, markets: Mapping[str, Market], now: datetime
+    ) -> None:
+        """Data the loop could not get is a journal warning: what a "Kraken is down" alert reads."""
+        for failure in batch.failures:
+            await self.journal.record_event(
+                "data_collection",
+                failure.code,
+                f"{failure.target}",
+                headline=f"Kraken request failed: {failure.code}",
+                context={"target": str(failure.target)},
+                at=now,
+            )
+        for pair in self.config.pairs:
+            if pair not in markets and any(
+                o.instrument.metadata.get("altname") == pair for o in batch.observations
+            ):
+                await self.journal.record_event(
+                    "data_collection",
+                    "evidence_invalid",
+                    f"The Kraken data for {pair} did not hold together and was not used.",
+                    pair=pair,
+                    headline="Kraken data for a pair failed validation",
+                    at=now,
+                )
 
     async def _collect(self) -> Batch:
         interval = self.config.breakout.interval_minutes
@@ -536,6 +580,9 @@ class LiveEngine:
             except LoopIntegrityError:
                 raise
             except Exception as exc:  # no AI failure may stop this strategy's other work
+                await self.journal.record_exception(
+                    "ai_strategy", exc, strategy_id=strategy.strategy_id, pair=pair, at=now
+                )
                 proposal = Proposal(
                     action="hold",
                     reason=f"ai_unavailable_{type(exc).__name__.lower()}"[:100],

@@ -215,7 +215,7 @@ def test_a_fully_configured_ai_strategy_is_built_with_the_reviewed_price() -> No
     deps, why = cli.build_ai(ai_settings(), MagicMock())
     assert why == "ai_enabled" and deps is not None
     assert deps.price.model == deps.config.model == "gpt-5.6-terra"
-    assert deps.config.provider == "openai" and deps.config.total_limit_usd == 10
+    assert deps.config.provider == "openai" and deps.config.total_limit_usd == 15
 
 
 def test_toggle_commands_need_a_strategy_and_a_reason() -> None:
@@ -335,3 +335,106 @@ async def test_health_exits_zero_only_when_the_loop_is_alive(
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["healthy"] is healthy
     engine.dispose.assert_awaited_once()
     assert args("health").max_age_minutes == 40
+
+
+def _journal_group(**changes: Any) -> Any:
+    from datetime import UTC, datetime
+
+    from ai_trading_lab.live.journal import ErrorGroup
+
+    values: dict[str, Any] = {
+        "fingerprint": "ab12" * 16,
+        "level": "error",
+        "component": "ai_strategy",
+        "error_type": "ValueError",
+        "location": "live.ai_strategy:propose",
+        "headline": "ValueError in live.ai_strategy:propose",
+        "status": "new",
+        "count": 2,
+        "first_seen_utc": datetime(2026, 1, 1, tzinfo=UTC),
+        "last_seen_utc": datetime(2026, 1, 2, tzinfo=UTC),
+        "last_message": "bad",
+        "last_traceback": "Traceback...",
+    }
+    return ErrorGroup(**(values | changes))
+
+
+async def _run_with_journal(argv: list[str], journal: Any) -> int:
+    engine, live = AsyncMock(), MagicMock()
+    with (
+        patch.object(cli, "Settings", return_value=Settings(_env_file=None)),
+        patch.object(cli, "create_database_engine", return_value=engine),
+        patch.object(cli, "LiveEngine", return_value=live),
+        patch.object(cli, "ErrorJournal", return_value=journal),
+        patch("getpass.getuser", return_value="stefan"),
+    ):
+        return await cli.run(args(*argv))
+
+
+@pytest.mark.asyncio
+async def test_errors_lists_problems_without_the_heavy_fields(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from ai_trading_lab.live.journal import JournalSummary
+
+    journal = MagicMock()
+    journal.groups = AsyncMock(return_value=[_journal_group()])
+    journal.summary = AsyncMock(
+        return_value=JournalSummary(unacknowledged_errors=1, errors_24h=2, warnings_24h=0)
+    )
+    assert await _run_with_journal(["errors", "--status", "new", "--limit", "5"], journal) == 0
+    journal.groups.assert_awaited_once_with(status="new", level=None, limit=5)
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["summary"]["unacknowledged_errors"] == 1
+    (problem,) = out["problems"]
+    assert problem["fingerprint"] == "ab12ab12ab12" and "last_traceback" not in problem
+    assert problem["count"] == 2 and problem["status"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_errors_show_prints_the_full_problem_and_unknown_prefixes_fail(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    journal = MagicMock()
+    journal.group = AsyncMock(return_value=_journal_group())
+    journal.occurrences = AsyncMock(return_value=[])
+    assert await _run_with_journal(["errors", "--show", "ab12"], journal) == 0
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["problem"]["last_traceback"] == "Traceback..." and out["recent_occurrences"] == []
+    journal.group = AsyncMock(return_value=None)
+    assert await _run_with_journal(["errors", "--show", "ffff"], journal) == 2
+    assert "no single problem" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("target", "expected"), [("all", None), ("ab12", "ab12")])
+async def test_ack_records_who_and_why(
+    target: str, expected: str | None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    journal = MagicMock()
+    journal.acknowledge = AsyncMock(return_value=2)
+    assert await _run_with_journal(["ack", target, "--reason", "known issue"], journal) == 0
+    journal.acknowledge.assert_awaited_once_with(expected, actor="cli:stefan", reason="known issue")
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1]) == {"acknowledged": 2}
+    with pytest.raises(SystemExit):
+        args("ack", "all")  # a reason is required
+
+
+def test_fingerprint_arguments_must_be_hex_prefixes() -> None:
+    assert args("errors", "--show", "ab12").show == "ab12"
+    assert args("ack", "all", "--reason", "x").fingerprint == "all"
+    for bad in (
+        ["errors", "--show", "%"],
+        ["errors", "--show", "ab"],
+        ["ack", "_", "--reason", "x"],
+    ):
+        with pytest.raises(SystemExit):
+            args(*bad)
+
+
+@pytest.mark.asyncio
+async def test_an_ambiguous_ack_prefix_is_reported(capsys: pytest.CaptureFixture[str]) -> None:
+    journal = MagicMock()
+    journal.acknowledge = AsyncMock(side_effect=ValueError("ambiguous fingerprint prefix"))
+    assert await _run_with_journal(["ack", "ab12", "--reason", "x"], journal) == 2
+    assert "more than one problem" in capsys.readouterr().out

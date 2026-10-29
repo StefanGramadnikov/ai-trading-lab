@@ -34,6 +34,7 @@ from ai_trading_lab.ai.orchestration import orchestrate
 from ai_trading_lab.ai.providers import Provider
 from ai_trading_lab.ai.service import InferenceService
 from ai_trading_lab.live.config import LiveConfig
+from ai_trading_lab.live.journal import ErrorJournal
 from ai_trading_lab.live.strategies import Market, Proposal
 from ai_trading_lab.market_data.adapters.kraken import Candle
 from ai_trading_lab.market_data.models import FrozenModel
@@ -46,6 +47,17 @@ MAX_CANDLE_AGE = timedelta(minutes=45)
 PENDING_AFTER = timedelta(minutes=10)
 # The orchestration ends a flow early, with these reasons, when the model itself holds back.
 ANSWERED = ("completed", "advisory_abstain", "advisory_veto")
+# Reasons that mean the provider could not be reached or did not answer usably.
+PROVIDER_OUTAGE_PREFIXES = (
+    "settled_",
+    "http_error",
+    "timeout",
+    "transport",
+    "unsafe_",
+    "destination_",
+    "encoded_response",
+    "response_too_large",
+)
 CANDLES_PER_HOUR = 4
 
 
@@ -60,7 +72,7 @@ class AIConfig(FrozenModel):
     # Calls with an unknown outcome allowed per day before the AI pauses until the day passes.
     max_unknown_per_day: int = Field(default=5, ge=1, le=100, strict=True)
     timeout_seconds: int = Field(default=30, ge=1, le=60, strict=True)
-    total_limit_usd: Decimal = Field(default=Decimal(10), gt=0, le=1000)
+    total_limit_usd: Decimal = Field(default=Decimal(15), gt=0, le=1000)
     daily_limit_usd: Decimal = Field(default=Decimal("1.5"), gt=0, le=1000)
 
 
@@ -170,9 +182,10 @@ def _failure(code: str, detail: dict[str, JsonValue] | None = None) -> Proposal:
 class Proposer:
     """Asks the model about one pair at a time; every outcome becomes a `Proposal`."""
 
-    def __init__(self, deps: AIDeps, session: str) -> None:
+    def __init__(self, deps: AIDeps, session: str, journal: ErrorJournal | None = None) -> None:
         self.deps = deps
         self.session = session
+        self.journal = journal
         # An unknown outcome is charged at its reserved maximum and the loop carries on.
         self.service = InferenceService(deps.budget, deps.provider, settle_unknown=True)
         cfg = deps.config
@@ -190,6 +203,45 @@ class Proposer:
             provider_limits=(ProviderLimit(provider=cfg.provider, limit=cfg.total_limit_usd),),
             max_calls=1000,
         )
+
+    async def _note(self, exc: Exception, strategy_id: str, pair: str, now: datetime) -> None:
+        if self.journal is not None:
+            await self.journal.record_exception(
+                "ai_strategy", exc, strategy_id=strategy_id, pair=pair, at=now
+            )
+
+    async def _note_provider(
+        self, last: ProviderResult, strategy_id: str, pair: str, now: datetime
+    ) -> None:
+        """A provider that cannot be reached or answered is the signal behind an "AI is down" alert.
+
+        Budget and policy refusals are not outages and are not recorded here.
+        """
+        if self.journal is None:
+            return
+        if last.reason.endswith("invalid_provider_response"):
+            # The provider answered, but not usably: a quality problem, not "the AI is down".
+            await self.journal.record_event(
+                "ai_strategy",
+                "invalid_provider_response",
+                "The model reply did not validate.",
+                strategy_id=strategy_id,
+                pair=pair,
+                headline="The AI reply could not be used",
+                at=now,
+            )
+            return
+        outage = last.status == "settled" or last.reason.startswith(PROVIDER_OUTAGE_PREFIXES)
+        if outage:
+            await self.journal.record_event(
+                "ai_provider",
+                last.reason[:100],
+                f"status={last.status}",
+                strategy_id=strategy_id,
+                pair=pair,
+                headline=f"AI provider problem: {last.reason}"[:200],
+                at=now,
+            )
 
     async def ensure_budget(self) -> None:
         await self.deps.budget.create(self.policy)
@@ -235,6 +287,7 @@ class Proposer:
                 pair=pair, now=now, market=market, candles=candles, held=held, config=live
             )
         except Exception as exc:  # e.g. a zero price in the history
+            await self._note(exc, strategy_id, pair, now)
             return _failure(_code(exc))
         if evidence is None:
             return _failure("no_recent_candles")
@@ -242,6 +295,7 @@ class Proposer:
             if (paused := await self._housekeeping(now)) is not None:
                 return _failure(paused)
         except Exception as exc:  # the budget ledger must be readable before anything is paid
+            await self._note(exc, strategy_id, pair, now)
             return _failure(_code(exc), {"call_id": str(call_id)})
 
         async def invoke(role: Role, prior: tuple[ModelAnswer, ...]) -> ProviderResult:
@@ -263,6 +317,7 @@ class Proposer:
         try:
             flow = await orchestrate(self._flow(), evidence, invoke)
         except Exception as exc:  # a broken AI path must never stop the mechanical exits
+            await self._note(exc, strategy_id, pair, now)
             return _failure(_code(exc), {"call_id": str(call_id)})
         last = flow.trace[-1].result if flow.trace else None
         detail: dict[str, JsonValue] = {
@@ -279,6 +334,7 @@ class Proposer:
         if last is not None:
             detail["provider_status"] = last.status
             detail["provider_reason"] = last.reason
+            await self._note_provider(last, strategy_id, pair, now)
             if last.usage is not None:
                 price = self.deps.price
                 detail["usage"] = {

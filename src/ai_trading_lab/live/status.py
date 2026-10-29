@@ -32,6 +32,7 @@ async def health(live: LiveEngine, now: datetime, max_age: timedelta) -> dict[st
 async def summary(live: LiveEngine, *, recent: int = 8) -> dict[str, Any]:
     """Strategies, their holdings, latest equity and most recent decisions."""
     out: dict[str, Any] = {"paper_only": True, "strategies": []}
+    out["errors"] = (await live.journal.summary()).model_dump(mode="json")
     own = live.strategy_ids
     for row in await live.store.strategies(enabled_only=False):
         if row.strategy_id not in own:

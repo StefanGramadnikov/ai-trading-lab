@@ -8,6 +8,7 @@ from ai_trading_lab.ai.run_store import ai_runs
 from ai_trading_lab.backtesting.store import research_runs
 from ai_trading_lab.config import Settings
 from ai_trading_lab.experiments.store import experiments
+from ai_trading_lab.live.journal import error_groups
 from ai_trading_lab.live.store import live_strategies
 from ai_trading_lab.notifications.store import notifications
 from ai_trading_lab.runtime.journal import sessions
@@ -20,6 +21,7 @@ assert (
     is notifications.metadata
     is sessions.metadata
     is live_strategies.metadata
+    is error_groups.metadata
 )
 
 

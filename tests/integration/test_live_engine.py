@@ -706,3 +706,71 @@ async def test_health_follows_the_equity_the_loop_records(engine: AsyncEngine) -
     await r.store.set_enabled(r.bench_id, False, actor="test", reason="pause")
     await r.cycle(minutes_later=15)
     assert (await health(r.live, r.now, stale_limit))["healthy"] is True
+
+
+async def clear_journal(engine: AsyncEngine) -> None:
+    from sqlalchemy import delete as sql_delete
+
+    from ai_trading_lab.live.journal import error_groups, error_occurrences
+
+    async with engine.begin() as connection:
+        await connection.execute(sql_delete(error_occurrences))
+        await connection.execute(sql_delete(error_groups))
+
+
+async def test_a_strategy_exception_is_journaled_with_detail_and_the_others_still_run(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await clear_journal(engine)
+    r = await rig(engine)
+    real = r.live._step
+
+    async def failing(strategy, markets, now):  # type: ignore[no-untyped-def]
+        if strategy.strategy_id == r.rules_id:
+            raise ValueError("bad candle, api_key=SuperSecretValue123")
+        return await real(strategy, markets, now)
+
+    monkeypatch.setattr(r.live, "_step", failing)
+    report = await r.cycle()
+    assert report.errors == [f"{r.rules_id}:ValueError"]
+    assert report.strategies[r.bench_id].orders == 3  # the benchmark was not starved
+    (group,) = await r.live.journal.groups(level="error")
+    assert (group.component, group.error_type, group.status) == (
+        "rules_strategy",
+        "ValueError",
+        "new",
+    )
+    assert group.last_strategy_id == r.rules_id
+    assert "SuperSecretValue123" not in (group.last_message or "")
+    assert "SuperSecretValue123" not in (group.last_traceback or "")
+    assert "failing" in (group.last_traceback or "")
+
+
+async def test_an_unreachable_exchange_is_a_journal_warning_not_an_error(
+    engine: AsyncEngine,
+) -> None:
+    await clear_journal(engine)
+    r = await rig(engine)
+    r.venue.time_down = True
+    report = await r.cycle()
+    assert report.failures
+    warnings = await r.live.journal.groups(level="warning")
+    assert {g.component for g in warnings} == {"data_collection"}
+    assert any(g.error_type == "network_error" for g in warnings)
+    assert all(g.status == "seen" for g in warnings)
+    summary = await r.live.journal.summary()
+    assert summary.unacknowledged_errors == 0 and summary.warnings_24h >= 1
+
+
+async def test_an_integrity_failure_is_journaled_before_the_loop_stops(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await clear_journal(engine)
+    r = await rig(engine)
+    monkeypatch.setattr(
+        r.live.paper, "submit", AsyncMock(side_effect=ValueError("Idempotency key conflict"))
+    )
+    with pytest.raises(LoopIntegrityError):
+        await r.cycle()
+    (group,) = await r.live.journal.groups(level="error")
+    assert group.component == "paper_broker" and group.error_type == "LoopIntegrityError"

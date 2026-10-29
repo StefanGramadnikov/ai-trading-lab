@@ -1741,3 +1741,8 @@ Adds the `alerts` package and container (separate process), `alert_state` (migra
 planner that sends each problem once, reminds after 6 h, announces recovery and retries failed deliveries a bounded number of times,
 and a daily check message. Not deployed; waits for the owner's bot token (docs/30 section 9c).
 
+## 2026-10-29 — Slice 8 deployed
+
+PR #19 merged and deployed (commit 29b2d43). Telegram alerts enabled; test and daily check messages received. All services healthy.
+Observed one contained `malformed_candles` warning (ETHEUR, 13:15 UTC) — to be watched.
+Next: AI activation (needs the owner's new OpenAI key with a hard monthly limit; verified model price first).

@@ -94,7 +94,7 @@ change needs a new decision.
 | 5 | **Done (merged, PR #14; deployed 2026-10-28, section 14).** **Deploy to the VPS together with the user** (prod Compose, secrets, backups, restart, health) — **starts the 1–2 week clock** | Loop running unattended; health and backup verified |
 | 6 | **Done (merged, PR #16; deployed 2026-10-29), section 15.** **Error journal and visibility:** every contained exception and every data/AI outage stored in a bounded, redacted journal; `atl-live errors` / `ack` | Problems readable with stack traces and counts; growth bounded; deployed |
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
-| 8 | **Built on `feature/s8-telegram-alerts`, section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
+| 8 | **Done (merged, PR #19; deployed 2026-10-29), section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
@@ -417,3 +417,13 @@ Setup (yours, docs/30 section 9c): create the bot with @BotFather, put the token
 `atl-alerts find-chat` prints your chat id, set `ATL_TELEGRAM_ENABLED=true`, start the container, `atl-alerts test` sends a test
 message. Until enabled the container idles and nothing is marked as sent. New table `alert_state` (migration 0016).
 
+### Deployment record (slice 8, 2026-10-29)
+
+Deployed commit 29b2d43 (backup `atl-20261029T131105Z.dump` taken first); migration 0016 applied; `db`, `live`, `dashboard` and `alerts`
+healthy. The owner created the bot and put the token in the 600 env file; the chat id was found with `atl-alerts find-chat` (the first
+attempt printed `no_chat_yet` because Telegram had already discarded the earlier messages; a fresh message fixed it), then
+`ATL_TELEGRAM_ENABLED=true`. `atl-alerts test` and the first daily check message both arrived. The running loop was not touched
+by the setup commands (throwaway container for `find-chat`; `up -d alerts` replaces only that container). Observed afterwards: one
+`malformed_candles` warning for ETHEUR in the 13:15 UTC cycle (other pairs fine, contained), and the same kind of single-cycle
+hiccup earlier in the day; to be watched, not yet explained. The owner also added a local launcher, `run-ai-trading-lab`
+(outside the repo): opens the SSH tunnel and http://atl.wip:8000.

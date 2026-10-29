@@ -1762,3 +1762,8 @@ PR #21 merged, commit b1b33ea deployed, `ai_enabled` from 14:04 UTC. First 6 rea
 estimated; no errors. Env-file mishap (wrong lines deleted from stale line numbers; dashboard session secret lost) repaired the same
 evening; lesson recorded in docs/29 and docs/30.
 Next: let the run proceed; slice 9 (self-review), slice 10 (evaluation report) and a stale-docs cleanup remain. Live pilot is not approved.
+
+## 2026-10-30 — Slice 9: daily review (branch `feature/s9-daily-review`, DEC-048)
+
+Adds the `review` package (pure digest, stores `daily_reviews` and `review_suggestions` via migration 0017, service, `atl-review` CLI) and the hook that runs it
+inside the alerts watcher. Deterministic and spend-free; rule-based suggestions are advice only. AI-authored suggestions deferred (DEC-048). Independent review found and we fixed: retries that could never resend (each attempt now has its own outbox key), an unbounded retry on a refused message, no review for a day with no cycles, first-day and catch-up figures (expected cycles, spend as of the day's end), a non-repeatable budget read, no timeout around the job. Gate: ruff, mypy clean, 1707 passed, coverage 95.13%. Not deployed (owner away; deployment needs `dc up -d` after merge).

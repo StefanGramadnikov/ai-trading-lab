@@ -97,7 +97,7 @@ change needs a new decision.
 | 7 | **Done (merged, PR #17; deployed 2026-10-29), section 16.** Dashboard v1 (design iterated with the owner, `docs/design/`): strategy cards, working on/off switches behind a sign-in, equity curves, P&L, decisions, AI cost, errors view, plain-language status; reached through an SSH tunnel | Authenticated toggle works; browser tests green |
 | 8 | **Done (merged, PR #19; deployed 2026-10-29), section 17.** Real Telegram alerts (needs the user's bot token): broken code, anything needing attention, a strategy that stopped working, Kraken or the AI provider unreachable | A test alert received |
 | 8b | **Done (merged, PR #21; deployed and AI activated 2026-10-29), section 17 record (DEC-047):** model chosen by setting (`ATL_AI_MODEL`, default `gpt-6.1-sol`), per-model reasoning setting, fail-closed model list; first real call still to be made | Gate green; first real calls verified (6 validated, 2026-10-29) |
-| 9 | Self-review job: nightly summary of trades/losses/costs; AI suggests parameter or prompt changes as **new versions** the user approves | One review produced and approved end to end |
+| 9 | **Built on `feature/s9-daily-review` (DEC-048), section 18.** Self-review job: nightly summary of trades/losses/costs; rule-based suggestions (AI-authored ones deferred) as advice the user approves or rejects; a change is always a **new version** | One review produced and a suggestion answered end to end (integration test) |
 | 10 | Evaluation report after 1–2 weeks: paired comparison after all costs, GO / EXTEND / STOP | Report delivered |
 | 11 | **Separate approval:** live pilot | Not started; needs explicit go, venue and tax/legal check, security review |
 
@@ -451,3 +451,29 @@ configured"). Repaired by appending a new random secret (the password hash was i
 now on: edit the env file by variable name, never by line number; keep one line per variable; check with a names-only listing
 (`cut -d= -f1 /opt/atl/.env.prod | sort | uniq -d` must print nothing); a backup copy of the file contains the key and is removed
 once the change is verified. Any change to an AI or alert variable needs `dc up -d` (all services), not only `live`.
+
+## 18. Daily review (slice 9)
+
+What it is: once a day, shortly after midnight UTC, the `alerts` container writes the review of the previous UTC day and sends it to your
+Telegram chat. It reads only what the loop already wrote (equity points, decisions, the AI budget ledger, the error journal); it calls
+no model and spends nothing. It lives in the alerts process on purpose (one fewer container) and cannot stop it: a failure is journaled
+under the component `review` and the watcher carries on.
+
+What the message contains: cycles run out of 96, errors and warnings in 24 h, per strategy the equity at the end of the day and its change,
+trades and fees, the AI's calls, abstentions, unusable replies and estimated spend against the cap, and any observations (a short list below).
+The same review is stored in `daily_reviews` (one row per day, never rewritten) and can be read with
+`docker compose ... exec alerts /app/.venv/bin/atl-review show [--day 2026-10-30]`.
+
+Observations and suggestions (fixed rules, thresholds named in `review/digest.py`): a rules strategy with no entry for 3+ days (suggests a faster
+variant as a NEW strategy version); an AI that abstained on 95% or more of at least 12 reviews (suggests reviewing the prompt/evidence as a NEW
+version); unusable AI replies or unknown outcomes; AI spend pace above half the cap over two weeks; a day with under 90% of its cycles; fees above 0.5%
+of capital in a day. Only observations that carry advice become **suggestions**, listed with `atl-review suggestions` and answered with
+`atl-review approve|reject <id> --reason "..."`. **Answering records the answer and nothing else**: no code applies a suggestion, no risk limit or
+active configuration can be changed from here (AGENTS.md: never mutate an active experiment in place). The same suggestion is not raised again while it
+waits or after it was approved; a rejected one may return if it still holds.
+
+A day on which the loop ran no cycle at all (after it first started) is still reviewed and sent: that is the night the owner most needs it. Figures are as of the reviewed day (spend up to its end, expected cycles shortened on the day the loop started); the error counts are the 24 hours before the review was written. Delivery: each attempt uses its own outbox key (the outbox tries a key once), at most 6 attempts, then the review stays stored and unsent.
+
+Not built, on purpose: AI-written suggestions (they need the OpenAI adapter's fixed trade-answer schema generalised and a spend decision), a dashboard
+page for reviews (Telegram and the command line only in V0). Backfill: on first start the job also writes the up to two earlier days that have data, but
+only the newest day is ever sent; older ones are kept for reference.

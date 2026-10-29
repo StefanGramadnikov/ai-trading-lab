@@ -24,6 +24,7 @@ atl-alerts = "ai_trading_lab.alerts.cli:main"
 atl-notify = "ai_trading_lab.reporting.cli:main"
 atl-experiment = "ai_trading_lab.experiments.cli:main"
 atl-live = "ai_trading_lab.live.cli:main"
+atl-review = "ai_trading_lab.review.cli:main"
 
 [dependency-groups]
 dev = [

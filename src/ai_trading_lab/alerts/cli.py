@@ -27,8 +27,10 @@ from ai_trading_lab.live.journal import ErrorJournal
 from ai_trading_lab.notifications.models import Notification
 from ai_trading_lab.notifications.store import NotificationStore
 from ai_trading_lab.notifications.telegram import TelegramAdapter
+from ai_trading_lab.review.service import ReviewService
 
 INTERVAL_SECONDS = 300
+REVIEW_TIMEOUT_SECONDS = 60  # a stalled query must not stop the alerts
 HEALTH_FILE = Path("/tmp/alerts.ok")  # noqa: S108 - the container's own tmpfs
 
 
@@ -93,6 +95,24 @@ async def find_chat(settings: Settings, transport: httpx2.AsyncBaseTransport | N
     return 0
 
 
+async def daily_review(
+    reviews: ReviewService, runner: AlertRunner, journal: ErrorJournal, now: datetime
+) -> None:
+    """The nightly review. Contained: a failure here is journaled and never stops the watcher."""
+    try:
+        async with asyncio.timeout(REVIEW_TIMEOUT_SECONDS):
+            report = await reviews.run_due(now, runner.deliver_text if runner.sending else None)
+    except Exception as exc:  # noqa: BLE001
+        log({"review": "failed", "error": type(exc).__name__})
+        try:
+            await journal.record_exception("review", exc, at=now)
+        except Exception:  # noqa: BLE001
+            pass
+        return
+    if report["created"] or report["sent"] is not None:
+        log({"review": report, "at": now.isoformat()})
+
+
 async def run(arguments: argparse.Namespace) -> int:
     settings = Settings()
     if arguments.command == "find-chat":
@@ -125,6 +145,7 @@ async def run(arguments: argparse.Namespace) -> int:
         journal = ErrorJournal(engine)
         runner = AlertRunner(AlertState(engine), outbox, adapter)
         watch = DatabaseWatch()
+        reviews = ReviewService(engine, settings)
         if not runner.sending:
             log({"alerts": "telegram_not_configured", "sending": False})
         stop = asyncio.Event()
@@ -140,6 +161,7 @@ async def run(arguments: argparse.Namespace) -> int:
                         log({"alerts": counts, "at": now.isoformat()})
                     await watch.up(adapter, now)
                 await asyncio.to_thread(HEALTH_FILE.touch)
+                await daily_review(reviews, runner, journal, now)
             except Exception as exc:  # noqa: BLE001 - nothing may kill the watcher
                 log({"alerts": "check_failed", "error": type(exc).__name__})
                 if isinstance(exc, SQLAlchemyError | OSError | TimeoutError):

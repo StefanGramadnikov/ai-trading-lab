@@ -57,6 +57,7 @@ COMPONENTS = (
     "worker",
     "database",
     "dashboard",
+    "review",
 )
 
 MAX_MESSAGE = 500

@@ -12,6 +12,7 @@ from ai_trading_lab.experiments.store import experiments
 from ai_trading_lab.live.journal import error_groups
 from ai_trading_lab.live.store import live_strategies
 from ai_trading_lab.notifications.store import notifications
+from ai_trading_lab.review.store import daily_reviews
 from ai_trading_lab.runtime.journal import sessions
 
 metadata = ai_runs.metadata
@@ -24,6 +25,7 @@ assert (
     is live_strategies.metadata
     is error_groups.metadata
     is alert_state.metadata
+    is daily_reviews.metadata
 )
 
 

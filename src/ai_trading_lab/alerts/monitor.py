@@ -226,6 +226,10 @@ class AlertRunner:
             return False
         return bool(result["state"] == "delivered")
 
+    async def deliver_text(self, event: Notification) -> bool:
+        """Send one prepared message through the outbox (used by the daily review)."""
+        return await self._deliver(event, event.occurred_at_utc)
+
     async def tick(self, overview: dict[str, Any], now: datetime) -> dict[str, int]:
         """One check. Returns counts for the log line; a Telegram or database problem with one
         message never stops the rest."""

@@ -270,6 +270,68 @@ def test_malformed_candles_are_rejected_not_repaired(
         parse_candles(capture, server_time_utc=datetime(2026, 1, 1, tzinfo=UTC))
 
 
+def _empty_row(offset: int, price: str = "67003.0") -> list[Any]:
+    """A window with no trades, as Kraken really sends it: previous close, VWAP 0, no volume."""
+    return [SERVER + offset, price, price, price, price, "0.0", "0.00000000", 0]
+
+
+def _capture(rows: list[list[Any]]) -> Capture:
+    return Capture(
+        source=Source.KRAKEN,
+        method="GET",
+        path="/0/public/OHLC",
+        params={"pair": "XBTUSD", "interval": "15"},
+        body=json.dumps({"error": [], "result": {"XXBTZUSD": rows, "last": 1}}),
+        data_mode=DataMode.FIXTURE,
+        received_at_utc=RECEIVED,
+    )
+
+
+def test_a_candle_with_no_trades_is_valid_and_its_vwap_is_the_close() -> None:
+    rows = candles()
+    rows[1] = _empty_row(-1800)
+    parsed = parse_candles(_capture(rows), server_time_utc=datetime(2026, 1, 1, tzinfo=UTC))
+    assert len(parsed) == 3
+    empty = parsed[1]
+    assert empty.volume == 0 and empty.trades == 0
+    assert empty.vwap == empty.close == Decimal("67003.0")
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda row: row.__setitem__(6, "0.5"),  # zero VWAP but traded volume
+        lambda row: row.__setitem__(7, 3),  # zero VWAP but trades counted
+        lambda row: row.__setitem__(4, "66999.0"),  # empty candle whose prices disagree
+    ],
+)
+def test_a_zero_vwap_is_only_accepted_on_a_genuinely_empty_candle(
+    mutate: Callable[[list[Any]], None],
+) -> None:
+    rows = candles()
+    row = _empty_row(-1800)
+    mutate(row)
+    rows[1] = row
+    with pytest.raises(ValueError):
+        parse_candles(_capture(rows), server_time_utc=datetime(2026, 1, 1, tzinfo=UTC))
+
+
+@pytest.mark.asyncio
+async def test_empty_candles_in_the_window_do_not_fail_the_collection() -> None:
+    def quiet(_: str, params: dict[str, str]) -> object:
+        rows = candles()
+        rows[0] = _empty_row(-2700)
+        rows[2] = _empty_row(-900)
+        return {"error": [], "result": {KEYS[params["pair"]]: rows, "last": SERVER - 900}}
+
+    batch = await collect(Synthetic({"/0/public/OHLC": quiet}), ("XBTUSD",))
+    assert not batch.failures
+    observation = batch.observations[0]
+    assert "candles_unavailable" not in observation.issues
+    last: Any = observation.facts["last_closed_candle"]
+    assert last["trades"] == 0 and last["vwap"] == last["close"]
+
+
 @pytest.mark.asyncio
 async def test_unordered_or_crossed_book_is_a_failure_never_sorted() -> None:
     def bad_book(_: str, params: dict[str, str]) -> object:

@@ -302,7 +302,8 @@ def test_a_candle_with_no_trades_is_valid_and_its_vwap_is_the_close() -> None:
     [
         lambda row: row.__setitem__(6, "0.5"),  # zero VWAP but traded volume
         lambda row: row.__setitem__(7, 3),  # zero VWAP but trades counted
-        lambda row: row.__setitem__(4, "66999.0"),  # empty candle whose prices disagree
+        lambda row: row.__setitem__(4, "66999.0"),  # close below low
+        lambda row: row.__setitem__(2, "67010.0"),  # in range but not flat
     ],
 )
 def test_a_zero_vwap_is_only_accepted_on_a_genuinely_empty_candle(

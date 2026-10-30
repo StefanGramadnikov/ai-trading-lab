@@ -241,6 +241,8 @@ def parse_candles(
         # close stands in. Any other zero VWAP (with volume or trades) is still rejected.
         empty = volume == 0 and trades == 0 and _is_zero(row[5])
         values = [_decimal(row[index]) for index in range(1, 5)]
+        if empty and len(set(values)) != 1:
+            raise ValueError("an empty candle must be flat")
         values.append(values[3] if empty else _decimal(row[5]))
         open_, high, low, close, vwap = values
         if not (low <= open_ <= high and low <= close <= high and low <= vwap <= high):

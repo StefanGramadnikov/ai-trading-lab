@@ -1772,3 +1772,7 @@ inside the alerts watcher. Deterministic and spend-free; rule-based suggestions 
 
 Adds the `report` package (pure series maths and verdict, a read-only service, Markdown renderer) and `atl-report`. Common-window, after-cost, paired comparison with
 the AI bill netted separately; verdict EXTEND by default, GO/STOP from proposed thresholds (DEC-049, not approved). Independent review findings fixed: the risk stop now comes before the data-quality gate, returns are compared in percent of each starting equity, coverage uses the worst strategy, stale/truncated data extends the run, the AI bill window matches the trade window, an abandoned row of the same kind no longer clamps the window, `--usd-eur nan` rejected, the weak daily-edge guard is real. Built on main after slice 9 (PR #23) was merged. Not deployed; not run against the server's data.
+
+## 2026-10-30 — Slices 9 and 10 deployed
+
+Commit 689aedd deployed after a backup (`atl-20261030T075246Z.dump`). `migrate` exited 0 and the database is at `0017_daily_review`; `db`, `live`, `alerts` and `dashboard` are healthy and no new errors. The review job stored the review for 2026-10-29 on startup (101/96 cycles, no errors). First real `atl-report`: verdict EXTEND (0.7 days of paired time; the AI has too few closed trades), 97% loop coverage, AI cost about USD 0.022 over 9 calls; rules and AI flat at EUR 100.00, buy and hold EUR 94.46. DEC-048 and DEC-049 still await the owner's confirmation.

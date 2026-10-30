@@ -201,6 +201,14 @@ def _levels(
     return tuple(levels), newest
 
 
+def _is_zero(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and _PLAIN_DECIMAL.fullmatch(value) is not None
+        and Decimal(value) == 0
+    )
+
+
 def parse_candles(
     capture: Capture, *, server_time_utc: datetime, expected_key: str | None = None
 ) -> tuple[Candle, ...]:
@@ -226,8 +234,16 @@ def parse_candles(
         if opened <= previous:
             raise ValueError("candles must be strictly increasing")
         previous = opened
-        values = [_decimal(row[index]) for index in range(1, 6)]
         volume = _decimal(row[6], positive=False)
+        trades = _int(row[7])
+        # Kraken fills a 15-minute window with no trades with the previous close and a VWAP of
+        # zero. That is a real, empty candle, not a malformed one: its VWAP is undefined, so the
+        # close stands in. Any other zero VWAP (with volume or trades) is still rejected.
+        empty = volume == 0 and trades == 0 and _is_zero(row[5])
+        values = [_decimal(row[index]) for index in range(1, 5)]
+        if empty and len(set(values)) != 1:
+            raise ValueError("an empty candle must be flat")
+        values.append(values[3] if empty else _decimal(row[5]))
         open_, high, low, close, vwap = values
         if not (low <= open_ <= high and low <= close <= high and low <= vwap <= high):
             raise ValueError("inconsistent candle")
@@ -246,7 +262,7 @@ def parse_candles(
                 close=close,
                 vwap=vwap,
                 volume=volume,
-                trades=_int(row[7]),
+                trades=trades,
             )
         )
     return tuple(candles)
